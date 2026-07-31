@@ -1,0 +1,35 @@
+# kings-game
+
+A small grand-strategy sandbox in Rust: a hand-drawn island of three realms,
+a 360-day calendar, and a chronicle that writes itself one simulated day at a
+time. Bevy draws it, [hecs](https://docs.rs/hecs) simulates it.
+
+## Running
+
+```sh
+make play              # release build — the one you actually play
+make run               # debug build with dynamic linking
+make play SEED=1066    # a specific campaign
+make check             # fmt + clippy + tests
+```
+
+Needs a Rust toolchain (edition 2024) and X11 dev libraries. Bevy is built
+without wayland, audio, or 3d.
+
+## Controls
+
+| Key | |
+|---|---|
+| `space` | pause / unpause |
+| `+` / `-` | simulation speed |
+| `q`, `esc` | quit |
+
+## Modding
+
+The map is plain [RON](https://docs.rs/ron) in `assets/map.ron` — borders are
+polylines, edit and restart. Point `KINGS_MAP` at your own file to use it
+instead.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

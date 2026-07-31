@@ -1,0 +1,45 @@
+//! The flex layout holding the two text panels.
+
+use super::{GAP, chronicle, legend, status};
+use bevy::prelude::*;
+
+pub(crate) const RIGHT_BAR: f32 = 0.3;
+
+/// The two text panels.
+pub fn startup(mut commands: Commands) {
+    // The old terminal layout, as a flex tree: a row holding the map and the
+    // chronicle, with the status bar underneath.
+    let panel = Color::srgba(0.0, 0.0, 0.0, 0.6);
+    commands
+        .spawn(Node {
+            width: percent(100),
+            height: percent(100),
+            flex_direction: FlexDirection::Column,
+            ..default()
+        })
+        .with_children(|root| {
+            root.spawn(Node {
+                width: percent(100),
+                flex_grow: 1.0,
+                flex_direction: FlexDirection::Row,
+                justify_content: JustifyContent::End,
+                ..default()
+            })
+            .with_children(|row| {
+                // Legend on top taking what the chronicle leaves, chronicle
+                // pinned to 30%, a gap between so they read as two panels.
+                row.spawn(Node {
+                    width: percent(RIGHT_BAR * 100.0),
+                    height: percent(100),
+                    flex_direction: FlexDirection::Column,
+                    row_gap: px(GAP),
+                    ..default()
+                })
+                .with_children(|col| {
+                    legend::spawn(col, panel);
+                    chronicle::spawn(col, panel);
+                });
+            });
+            status::spawn(root, panel);
+        });
+}

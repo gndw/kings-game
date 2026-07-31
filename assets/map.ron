@@ -1,0 +1,57 @@
+// Map data — edit freely, loaded on next start. Override the path with KINGS_MAP.
+// `border` is the rectangular map edge; every land in `lands` sits inside it.
+// Each land is a polyline: consecutive points are joined by a line.
+//
+// One long island running south-west to north-east: a thin hooked tail in the west,
+// a wider belly in the middle, a broad lobed head in the north-east. Two inland
+// borders cut it into three; each is shared point-for-point by its neighbours.
+(
+    // the edge of the world; the camera never pans past it
+    border: (x0: 0, y0: 40, x1: 860, y1: 540),
+    lands: [
+        // west: the thin tail out to the western tip
+        (id: "land-1", name: "oldtown", holding: (180, 135), borders: [
+            (320, 185), (280, 170), (230, 150), (180, 155), (130, 145),
+            (80, 140), (40, 110),
+            (80, 80), (130, 95), (180, 115), (230, 125), (280, 130), (320, 140),
+            (318, 155), (322, 170), (320, 185),
+        ], buildings: ["building-mill", "building-watchtower"]),
+        // centre: the belly, between both borders
+        (id: "land-2", name: "lannisport", holding: (480, 240), borders: [
+            (320, 185), (360, 215), (390, 250), (420, 275), (450, 300),
+            (470, 330), (500, 350), (540, 375), (570, 400), (600, 420), (640, 445),
+            (628, 400), (645, 350), (660, 300),
+            (630, 290), (600, 265), (580, 240), (560, 215), (540, 190),
+            (510, 170), (480, 150), (450, 140), (420, 120), (390, 135),
+            (360, 150), (320, 140),
+            (318, 155), (322, 170), (320, 185),
+        ], buildings: [
+            "building-market", "building-guildhall", "building-brewery",
+            "building-barracks", "building-training-yard",
+        ]),
+        // north-east: the head and its coastal lobes
+        (id: "land-3", name: "gulltown", holding: (720, 420), borders: [
+            (640, 445), (670, 465), (700, 480), (740, 470), (770, 485),
+            (800, 460), (810, 430), (790, 405), (760, 395), (730, 375),
+            (700, 350), (690, 320), (660, 300),
+            (645, 350), (628, 400), (640, 445),
+        ], buildings: [
+            "building-tannery", "building-quarry", "building-barracks",
+        ]),
+    ],
+    // What a holding can raise. Military ones cost upkeep and add levy; civil
+    // ones earn the gold that pays for them. One gold field each, never both.
+    buildings: [
+        // military — quarters and drills the levy, earns nothing
+        (id: "building-barracks",      name: "barracks",       gold_upkeep: 5, levy: 50),
+        (id: "building-training-yard", name: "training yard",   gold_upkeep: 3, levy: 30),
+        (id: "building-watchtower",    name: "watchtower",      gold_upkeep: 1, levy: 10),
+        // civil — no troops, but the coin that pays for them
+        (id: "building-tannery",       name: "tannery",         gold_profit:  5),
+        (id: "building-mill",          name: "grain mill",      gold_profit:  6),
+        (id: "building-brewery",       name: "brewery",         gold_profit:  7),
+        (id: "building-quarry",        name: "stone quarry",    gold_profit:  8),
+        (id: "building-market",        name: "market square",   gold_profit: 10),
+        (id: "building-guildhall",     name: "guildhall",       gold_profit: 12),
+    ],
+)

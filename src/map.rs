@@ -1,0 +1,169 @@
+//! Map geometry loaded from a RON data file at startup so it can be modded
+//! without a rebuild (see `assets/map.ron`). The camera and drawing live in
+//! `crate::ui::map`.
+
+use anyhow::{Context, Result, bail};
+use rand::seq::IndexedRandom;
+use serde::Deserialize;
+use std::path::Path;
+
+/// The whole map: a rectangular `border` — the edge of the world — and the
+/// `lands` inside it.
+#[derive(Debug, Deserialize)]
+pub struct Map {
+    pub border: Rect,
+    pub lands: Vec<Shape>,
+    /// Buildings a holding can raise. Optional so older map files still load.
+    #[serde(default)]
+    pub buildings: Vec<Building>,
+}
+
+impl Map {
+    /// Get random land id, or None if there are no lands.
+    pub fn random_land_id(&self) -> Option<String> {
+        self.lands.choose(&mut rand::rng()).map(|s| s.id.clone())
+    }
+
+    /// The land to move the selection to when stepping from `from` along `dir`
+    /// (a unit-ish direction). Picks the nearest holding that lies in that
+    /// direction, penalising sideways offset so "up" prefers straight up.
+    ///
+    /// ponytail: distance heuristic over holdings, no adjacency graph. Add real
+    /// borders-touch adjacency in map.ron if the picks feel wrong on odd shapes.
+    pub fn step(&self, from: &str, dir: (f64, f64)) -> Option<String> {
+        let origin = self.lands.iter().find(|s| s.id == from)?.holding;
+        self.lands
+            .iter()
+            .filter(|s| s.id != from)
+            .filter_map(|s| {
+                let (dx, dy) = (s.holding.0 - origin.0, s.holding.1 - origin.1);
+                let along = dx * dir.0 + dy * dir.1;
+                // Perpendicular component: how far off-axis the candidate sits.
+                let perp = (dx * dir.1 - dy * dir.0).abs();
+                (along > perp).then(|| (along + perp * 2.0, s.id.clone()))
+            })
+            .min_by(|a, b| a.0.total_cmp(&b.0))
+            .map(|(_, id)| id)
+    }
+}
+
+/// Map edge, `(x0, y0)` bottom-left to `(x1, y1)` top-right.
+#[derive(Debug, Deserialize)]
+pub struct Rect {
+    pub x0: f64,
+    pub y0: f64,
+    pub x1: f64,
+    pub y1: f64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Shape {
+    pub id: String,
+    pub name: String,
+    pub borders: Vec<(f64, f64)>,
+    /// Seat of power, somewhere inside `borders`. Drawn as a circle.
+    pub holding: (f64, f64),
+    /// Ids into `Map::buildings` — what already stands in this land.
+    #[serde(default)]
+    pub buildings: Vec<String>,
+}
+
+/// Something built in a holding. Civil buildings earn `gold_profit`; military
+/// ones cost `gold_upkeep` and add `levy` troops. A building sets one gold field
+/// or the other, never both — the other stays 0.
+#[derive(Debug, Deserialize)]
+pub struct Building {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub gold_profit: u32,
+    #[serde(default)]
+    pub gold_upkeep: u32,
+    #[serde(default)]
+    pub levy: u32,
+}
+
+pub fn load(path: &Path) -> Result<Map> {
+    let text = std::fs::read_to_string(path)
+        .with_context(|| format!("reading map {}", path.display()))?;
+    parse(&text).with_context(|| format!("parsing map {}", path.display()))
+}
+
+pub fn parse(text: &str) -> Result<Map> {
+    let map: Map = ron::from_str(text)?;
+    let b = &map.border;
+    if b.x1 <= b.x0 || b.y1 <= b.y0 {
+        bail!("map border must have x1 > x0 and y1 > y0");
+    }
+    for s in &map.lands {
+        if s.borders.len() < 2 {
+            bail!("land `{}` needs at least 2 border points", s.id);
+        }
+        for b in &s.buildings {
+            if !map.buildings.iter().any(|d| &d.id == b) {
+                bail!("land `{}` references unknown building `{}`", s.id, b);
+            }
+        }
+    }
+    Ok(map)
+}
+
+/// `(x_min, x_max, y_min, y_max)` of the map edge, for the canvas bounds.
+pub fn bounds(map: &Map) -> (f64, f64, f64, f64) {
+    let b = &map.border;
+    (b.x0, b.x1, b.y0, b.y1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_and_bounds() {
+        let map = parse(
+            r#"(
+                // a comment
+                border: (x0: -1, y0: 0, x1: 5, y1: 9),
+                lands: [
+                    (id: "wessex", name: "Wessex", holding: (2, 3), borders: [(1, 2), (3, 4), (1, 2)]),
+                    (id: "mercia", name: "Mercia", holding: (2, 4), borders: [(-1, 0), (5, 9)]),
+                ],
+            )"#,
+        )
+        .unwrap();
+        assert_eq!(map.lands.len(), 2);
+        assert_eq!(map.lands[0].id, "wessex");
+        assert_eq!(map.lands[0].borders, vec![(1.0, 2.0), (3.0, 4.0), (1.0, 2.0)]);
+        assert_eq!(bounds(&map), (-1.0, 5.0, 0.0, 9.0));
+        assert!(["wessex", "mercia"].contains(&map.random_land_id().unwrap().as_str()));
+        assert!(parse(r#"(border: (x0: 5, y0: 0, x1: 5, y1: 9), lands: [])"#).is_err());
+        assert!(
+            parse(r#"(border: (x0: 0, y0: 0, x1: 1, y1: 1), lands: [(id: "l", name: "L", holding: (1, 2), borders: [(1, 2)])])"#)
+                .is_err()
+        );
+        assert!(parse("(border: 3)").is_err());
+    }
+
+    #[test]
+    fn steps_between_lands() {
+        let map = parse(
+            r#"(
+                border: (x0: 0, y0: 0, x1: 10, y1: 10),
+                lands: [
+                    (id: "mid", name: "mid", holding: (5, 5), borders: [(5, 5), (5, 5)]),
+                    (id: "east", name: "east", holding: (8, 5), borders: [(8, 5), (8, 5)]),
+                    (id: "far_east", name: "far_east", holding: (9, 5), borders: [(9, 5), (9, 5)]),
+                    (id: "north", name: "north", holding: (5, 9), borders: [(5, 9), (5, 9)]),
+                ],
+            )"#,
+        )
+        .unwrap();
+        assert_eq!(map.step("mid", (1.0, 0.0)).as_deref(), Some("east"));
+        assert_eq!(map.step("east", (1.0, 0.0)).as_deref(), Some("far_east"));
+        assert_eq!(map.step("mid", (0.0, 1.0)).as_deref(), Some("north"));
+        assert_eq!(map.step("north", (0.0, 1.0)), None);
+        // Nothing west of mid, and an unknown land can't step.
+        assert_eq!(map.step("mid", (-1.0, 0.0)), None);
+        assert_eq!(map.step("nowhere", (1.0, 0.0)), None);
+    }
+}

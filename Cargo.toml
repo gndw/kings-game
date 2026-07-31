@@ -1,0 +1,32 @@
+[package]
+name = "kings-game"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.104"
+# ponytail: the default feature set pulls in wayland (needs libwayland-dev) plus
+# 3d and audio we don't render. This is `2d` + `ui` with x11 only.
+bevy = { version = "0.19", default-features = false, features = [
+    "std",
+    "multi_threaded",
+    "x11",
+    "default_font",
+    "bevy_winit",
+    "default_app",
+    "2d_bevy_render",
+    "ui_api",
+    "ui_bevy_render",
+] }
+hecs = "0.11.1"
+rand = "0.10.2"
+ron = "0.12.2"
+serde = { version = "1.0.229", features = ["derive"] }
+
+# Bevy is unusably slow at opt-level 0; its own crates get full optimisation
+# since we never step through them.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3

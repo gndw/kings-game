@@ -16,6 +16,12 @@ pub struct Map {
     /// Buildings a holding can raise. Optional so older map files still load.
     #[serde(default)]
     pub buildings: Vec<Building>,
+    #[serde(default)]
+    pub houses: Vec<House>,
+    #[serde(default)]
+    pub characters: Vec<Character>,
+    #[serde(default)]
+    pub kingdoms: Vec<Kingdom>,
 }
 
 impl Map {
@@ -65,7 +71,7 @@ pub struct Shape {
     pub holding: (f64, f64),
     /// Ids into `Map::buildings` — what already stands in this land.
     #[serde(default)]
-    pub buildings: Vec<String>,
+    pub building_ids: Vec<String>,
 }
 
 /// Something built in a holding. Civil buildings earn `gold_profit`; military
@@ -81,6 +87,47 @@ pub struct Building {
     pub gold_upkeep: u32,
     #[serde(default)]
     pub levy: u32,
+}
+
+/// A family. Characters belong to one; kingdoms are ruled through them.
+#[derive(Debug, Deserialize)]
+pub struct House {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Character {
+    pub id: String,
+    pub name: String,
+    pub house_id: String,
+    pub age: u32,
+}
+
+/// A realm: a ruler, a capital, and the lands it holds.
+#[derive(Debug, Deserialize)]
+pub struct Kingdom {
+    pub id: String,
+    pub leader_character_id: String,
+    pub seat_land_id: String,
+    pub land_ids: Vec<String>,
+}
+
+impl Map {
+    /// The kingdom holding `land_id`, if any.
+    pub fn kingdom_of(&self, land_id: &str) -> Option<&Kingdom> {
+        self.kingdoms
+            .iter()
+            .find(|k| k.land_ids.iter().any(|l| l == land_id))
+    }
+
+    pub fn character(&self, id: &str) -> Option<&Character> {
+        self.characters.iter().find(|c| c.id == id)
+    }
+
+    pub fn house(&self, id: &str) -> Option<&House> {
+        self.houses.iter().find(|h| h.id == id)
+    }
 }
 
 pub fn load(path: &Path) -> Result<Map> {
@@ -99,10 +146,34 @@ pub fn parse(text: &str) -> Result<Map> {
         if s.borders.len() < 2 {
             bail!("land `{}` needs at least 2 border points", s.id);
         }
-        for b in &s.buildings {
+        for b in &s.building_ids {
             if !map.buildings.iter().any(|d| &d.id == b) {
                 bail!("land `{}` references unknown building `{}`", s.id, b);
             }
+        }
+    }
+    for c in &map.characters {
+        if !map.houses.iter().any(|h| h.id == c.house_id) {
+            bail!("character `{}` references unknown house `{}`", c.id, c.house_id);
+        }
+    }
+    for k in &map.kingdoms {
+        if map.character(&k.leader_character_id).is_none() {
+            bail!(
+                "kingdom `{}` references unknown character `{}`",
+                k.id, k.leader_character_id
+            );
+        }
+        for l in &k.land_ids {
+            if !map.lands.iter().any(|s| &s.id == l) {
+                bail!("kingdom `{}` references unknown land `{}`", k.id, l);
+            }
+        }
+        if !k.land_ids.contains(&k.seat_land_id) {
+            bail!(
+                "kingdom `{}` seat `{}` is not among its lands",
+                k.id, k.seat_land_id
+            );
         }
     }
     Ok(map)
@@ -142,6 +213,28 @@ mod tests {
                 .is_err()
         );
         assert!(parse("(border: 3)").is_err());
+    }
+
+    #[test]
+    fn parses_kingdoms() {
+        let text = |seat: &str| {
+            format!(
+                r#"(
+                border: (x0: 0, y0: 0, x1: 10, y1: 10),
+                lands: [(id: "l1", name: "L1", holding: (1, 1), borders: [(1, 1), (2, 2)])],
+                houses: [(id: "h1", name: "H1")],
+                characters: [(id: "c1", name: "C1", house_id: "h1", age: 40)],
+                kingdoms: [(id: "k1", leader_character_id: "c1", seat_land_id: "{seat}", land_ids: ["l1"])],
+            )"#
+            )
+        };
+        let map = parse(&text("l1")).unwrap();
+        assert_eq!(map.kingdom_of("l1").unwrap().id, "k1");
+        assert!(map.kingdom_of("nowhere").is_none());
+        assert_eq!(map.character("c1").unwrap().age, 40);
+        assert_eq!(map.house("h1").unwrap().name, "H1");
+        // a seat outside the kingdom's own lands is a broken map
+        assert!(parse(&text("l2")).is_err());
     }
 
     #[test]

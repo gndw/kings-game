@@ -38,8 +38,21 @@ pub fn update(game: Res<Game>, mut legend: Single<&mut Text, With<Legend>>) {
     legend.0 = match sel {
         Some(s) => {
             let mut out = format!("id:{}\nname:{}", s.id, s.name);
+            if let Some(k) = game.map.kingdom_of(&s.id) {
+                out.push_str(&format!("\nkingdom:{}", k.id));
+                if k.seat_land_id == s.id {
+                    out.push_str(" (seat)");
+                }
+                if let Some(c) = game.map.character(&k.leader_character_id) {
+                    let house = game
+                        .map
+                        .house(&c.house_id)
+                        .map_or(c.house_id.as_str(), |h| h.name.as_str());
+                    out.push_str(&format!("\nruler:{} of {} ({})", c.name, house, c.age));
+                }
+            }
             let (mut gold, mut levy) = (0i64, 0u64);
-            for b in s.buildings.iter().filter_map(|id| {
+            for b in s.building_ids.iter().filter_map(|id| {
                 game.map.buildings.iter().find(|b| &b.id == id)
             }) {
                 gold += b.gold_profit as i64 - b.gold_upkeep as i64;
@@ -57,7 +70,7 @@ pub fn update(game: Res<Game>, mut legend: Single<&mut Text, With<Legend>>) {
                     out.push_str(&format!(" {} levy", b.levy));
                 }
             }
-            if !s.buildings.is_empty() {
+            if !s.building_ids.is_empty() {
                 out.push_str(&format!("\ntotal: {gold:+}g {levy} levy"));
             }
             out

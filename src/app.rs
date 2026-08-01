@@ -68,8 +68,8 @@ pub fn input(
     }
     if keys.just_pressed(KeyCode::F9) {
         match crate::save::quickload() {
-            Ok(save) => {
-                game.ctx = save.restore();
+            Ok(ctx) => {
+                game.ctx = ctx;
             }
             Err(e) => game.ctx.chronicles.push(format!(
                 "{} — load failed: {e}.",

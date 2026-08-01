@@ -38,6 +38,20 @@ without wayland, audio, or 3d.
 | `F9` | quickload |
 | `q`, `esc` | quit |
 
+## Saves
+
+Saves are plain RON files in `saves/`. F5 quicksaves, F9 quickloads.
+Load at startup with `--load <path>`.
+
+The save stores **game state only** — building/house/character templates
+are reloaded from `map.ron` on every load. New content added to the map
+file between sessions is picked up automatically:
+
+- New buildings become available as templates (not auto-placed)
+- New characters enter the world at their definition age
+- Tweaked stats (gold, levy) take effect immediately
+- Removed content is dropped cleanly
+
 ## Modding
 
 The map is plain [RON](https://docs.rs/ron) in `assets/map.ron` — borders are

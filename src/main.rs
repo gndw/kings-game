@@ -37,14 +37,18 @@ fn parse_args() -> Cli {
 fn main() -> Result<()> {
     let cli = parse_args();
 
+    // Definitions are always loaded from the map file, even when loading a
+    // save — they provide building/house/character templates that the save
+    // doesn't store.
+    let map_path =
+        std::env::var("KINGS_MAP").unwrap_or_else(|_| "assets/map.ron".into());
+    let def_map = kings_game::map::load(Path::new(&map_path))?;
+    let defs = kings_game::save::Definitions::from_map(&def_map);
+
     let ctx = if let Some(ref path) = cli.load {
-        kings_game::save::Save::load(Path::new(path))?.restore()
+        kings_game::save::Save::load(Path::new(path))?.restore(&defs)
     } else {
-        // KINGS_MAP lets modders point at their own file.
-        let map_path =
-            std::env::var("KINGS_MAP").unwrap_or_else(|_| "assets/map.ron".into());
-        let map = kings_game::map::load(Path::new(&map_path))?;
-        Ctx::new_game(cli.seed, map, cli.player_character_id)
+        Ctx::new_game(cli.seed, def_map, cli.player_character_id)
     };
 
     let game = Game::new(ctx);

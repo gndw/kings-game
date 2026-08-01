@@ -1,0 +1,220 @@
+//! The script surface: every `ctx.thing` a mod may read or call, and nothing
+//! else. One file, so what scripts can do is one file to read.
+//!
+//! Keep [`ScriptCtx`] and the README's two tables in step with this list.
+
+use super::ScriptCtx;
+use rhai::{Array, Dynamic, Engine, ImmutableString};
+
+/// A Rhai array of id strings — what every list the scripts read looks like.
+fn ids<'a>(it: impl Iterator<Item = &'a str>) -> Array {
+    it.map(|id| Dynamic::from(ImmutableString::from(id)))
+        .collect()
+}
+
+pub(super) fn script_ctx(engine: &mut Engine) {
+    engine
+        .register_type_with_name::<ScriptCtx>("Ctx")
+        .register_get("year", |c: &mut ScriptCtx| c.year)
+        .register_get("month", |c: &mut ScriptCtx| c.month)
+        .register_get("day", |c: &mut ScriptCtx| c.day)
+        .register_get("tick", |c: &mut ScriptCtx| c.tick)
+        .register_get("land", |c: &mut ScriptCtx| c.land.clone())
+        .register_get("player", |c: &mut ScriptCtx| c.player.clone())
+        .register_get("characters", |c: &mut ScriptCtx| {
+            ids(c.roster.ids.iter().map(String::as_str))
+        })
+        // Per-character reads. An unknown id reads as all zeroes rather
+        // than erroring — a script looping the roster can't hit one.
+        .register_fn("gold", |c: &mut ScriptCtx, id: ImmutableString| {
+            c.roster.get(&id).gold
+        })
+        .register_fn("levy", |c: &mut ScriptCtx, id: ImmutableString| {
+            c.roster.get(&id).levy as i64
+        })
+        // The world's shape. Whether a character rules anything, and what
+        // their holdings add up to, is a script's sum to do — see
+        // `mods/base/character_levy.rhai`.
+        .register_get("kingdoms", |c: &mut ScriptCtx| {
+            ids(c.realms.kingdoms.iter().map(|k| k.id.as_str()))
+        })
+        .register_fn("kingdom_leader", |c: &mut ScriptCtx, id: ImmutableString| {
+            c.realms
+                .kingdom(&id)
+                .map(|k| k.leader.clone())
+                .unwrap_or_default()
+        })
+        .register_fn("kingdom_lands", |c: &mut ScriptCtx, id: ImmutableString| {
+            match c.realms.kingdom(&id) {
+                Some(k) => ids(k.land_ids.iter().map(String::as_str)),
+                None => Array::new(),
+            }
+        })
+        .register_fn("land_buildings", |c: &mut ScriptCtx, id: ImmutableString| {
+            match c.realms.buildings.get(id.as_str()) {
+                Some(b) => ids(b.iter().map(String::as_str)),
+                None => Array::new(),
+            }
+        })
+        .register_fn("building_levy", |c: &mut ScriptCtx, id: ImmutableString| {
+            c.realms.building(&id).levy as i64
+        })
+        .register_fn(
+            "building_gold_profit",
+            |c: &mut ScriptCtx, id: ImmutableString| c.realms.building(&id).gold_profit as i64,
+        )
+        .register_fn(
+            "building_gold_upkeep",
+            |c: &mut ScriptCtx, id: ImmutableString| c.realms.building(&id).gold_upkeep as i64,
+        )
+        .register_fn("rand", |c: &mut ScriptCtx| c.rand())
+        .register_fn(
+            "add_gold",
+            |c: &mut ScriptCtx, id: ImmutableString, n: i64| c.add_gold(&id, n),
+        )
+        .register_fn(
+            "set_levy",
+            |c: &mut ScriptCtx, id: ImmutableString, n: i64| c.set_levy(&id, n),
+        )
+        .register_fn("chronicle", |c: &mut ScriptCtx, line: ImmutableString| {
+            c.chronicle(&line)
+        });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::load;
+    use super::super::testkit::*;
+    use crate::ctx::Ctx;
+
+    /// Two rulers and a landless character.
+    ///
+    /// - `char-tywin` (the player) holds `l1`: 50 levy, 6 profit, 5 upkeep.
+    /// - `char-jon` holds `l2`: 0 levy, 10 profit, and starts on 100 gold.
+    /// - `char-lysa` leads nothing at all.
+    const ECON: &str = r#"(
+        border: (x0: 0, y0: 0, x1: 10, y1: 10),
+        buildings: [
+            (id: "b-barracks", name: "barracks", gold_upkeep: 5, levy: 50),
+            (id: "b-mill", name: "mill", gold_profit: 6),
+            (id: "b-market", name: "market", gold_profit: 10),
+        ],
+        lands: [
+            (id: "l1", name: "L1", holding: (1, 1), borders: [(1, 1), (2, 2)],
+             building_ids: ["b-barracks", "b-mill"]),
+            (id: "l2", name: "L2", holding: (5, 5), borders: [(5, 5), (6, 6)],
+             building_ids: ["b-market"]),
+        ],
+        houses: [(id: "h1", name: "H1")],
+        characters: [
+            (id: "char-tywin", name: "tywin", house_id: "h1", age: 57),
+            (id: "char-jon",   name: "jon",   house_id: "h1", age: 66, gold: 100),
+            (id: "char-lysa",  name: "lysa",  house_id: "h1", age: 32),
+        ],
+        kingdoms: [
+            (id: "k1", leader_character_id: "char-tywin", seat_land_id: "l1", land_ids: ["l1"]),
+            (id: "k2", leader_character_id: "char-jon",   seat_land_id: "l2", land_ids: ["l2"]),
+        ],
+    )"#;
+
+    /// A character's `(gold, levy)`.
+    fn purse(ctx: &Ctx, id: &str) -> (i64, u64) {
+        let c = ctx.content.character(id).unwrap();
+        (c.gold, c.levy)
+    }
+
+    /// The base scripts do their own sums off this surface, so this covers both:
+    /// break a registration and the economy stops adding up.
+    #[test]
+    fn the_shipped_scripts_run_every_rulers_economy() {
+        let dir = mods_dir(
+            "economy",
+            &[
+                ("base/data.ron", ECON),
+                // The real base scripts, not copies of them — so this fails if
+                // either file and this surface ever drift apart.
+                (
+                    "base/character_levy.rhai",
+                    include_str!("../../mods/base/character_levy.rhai"),
+                ),
+                (
+                    "base/character_gold.rhai",
+                    include_str!("../../mods/base/character_gold.rhai"),
+                ),
+            ],
+        );
+        let mods = load(&dir).unwrap();
+        let mut ctx = Ctx::new_game(1, mods.content);
+        let mut scripts = mods.scripts;
+
+        // Starting gold comes from the data; nothing has run yet.
+        assert_eq!(purse(&ctx, "char-tywin"), (0, 0));
+        assert_eq!(purse(&ctx, "char-jon"), (100, 0));
+
+        day(&mut ctx, &mut scripts);
+        assert_eq!(purse(&ctx, "char-tywin").1, 50, "levy set on the first day");
+        assert_eq!(purse(&ctx, "char-jon").1, 0, "a realm with no barracks");
+        assert_eq!(purse(&ctx, "char-tywin").0, 0, "no taxes until the 1st");
+
+        // Day 1 of month 2 is tick 30 on the default 30-day calendar.
+        for _ in 1..30 {
+            day(&mut ctx, &mut scripts);
+        }
+        assert_eq!((ctx.date.month, ctx.date.day), (2, 1));
+        assert_eq!(
+            purse(&ctx, "char-tywin"),
+            (6, 50),
+            "profit only — upkeep is not deducted"
+        );
+        assert_eq!(
+            purse(&ctx, "char-jon"),
+            (110, 0),
+            "every ruler collects, not just the player"
+        );
+        assert_eq!(
+            purse(&ctx, "char-lysa"),
+            (0, 0),
+            "leading no kingdom earns and raises nothing"
+        );
+
+        // Only the player's taxes are worth chronicling.
+        assert_eq!(
+            ctx.chronicles
+                .iter()
+                .filter(|l| l.contains("gold in taxes"))
+                .count(),
+            1
+        );
+        assert!(ctx.chronicles.iter().any(|l| l.contains("6 gold in taxes")));
+
+        // A second month, a second payment, and the levies hold steady.
+        for _ in 0..30 {
+            day(&mut ctx, &mut scripts);
+        }
+        assert_eq!(purse(&ctx, "char-tywin"), (12, 50));
+        assert_eq!(purse(&ctx, "char-jon"), (120, 0));
+    }
+
+    #[test]
+    fn script_randomness_replays_from_the_seed() {
+        let dir = mods_dir(
+            "rand",
+            &[
+                ("base/world.ron", WORLD),
+                (
+                    "base/mod.rhai",
+                    r#"fn on_day(ctx) { if ctx.rand() < 0.5 { ctx.chronicle("heads " + ctx.tick); } }"#,
+                ),
+            ],
+        );
+        let (a, draws_a) = play(&dir, 50);
+        let (b, draws_b) = play(&dir, 50);
+        assert_eq!(a, b);
+        assert_eq!(draws_a, draws_b);
+        assert_eq!(
+            draws_a, 50,
+            "every script draw goes through SimRng's counter"
+        );
+        assert!(!a.is_empty() && a.len() < 50);
+    }
+}

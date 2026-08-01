@@ -77,9 +77,9 @@ fn on_month(ctx) {
 ```
 
 As with the data files, the filename is documentation — each `*.rhai` compiles
-on its own, so split a mod however reads best. The base game gives each script
-the name of the hook it defines (`on_day.rhai`, `on_month.rhai`); one file with
-both hooks works exactly the same.
+on its own, so split a mod however reads best. The base game names each script
+after what it does (`character_levy.rhai`, `character_gold.rhai`); one file with both
+hooks works exactly the same.
 
 What `ctx` can read:
 
@@ -90,7 +90,10 @@ What `ctx` can read:
 | `player` | the player's character id |
 | `characters` | every character id, in data order |
 | `gold(id)` `levy(id)` | that character's resources, as of the start of the tick |
-| `gold_profit(id)` `gold_upkeep(id)` `levy_total(id)` | what their holdings add up to — all zero unless they lead a kingdom |
+| `kingdoms` | every kingdom id, in data order |
+| `kingdom_leader(kid)` | the character ruling it, or `""` |
+| `kingdom_lands(kid)` `land_buildings(lid)` | what a realm holds, and what stands in a land |
+| `building_levy(bid)` `building_gold_profit(bid)` `building_gold_upkeep(bid)` | what one building is worth |
 
 What it can do:
 
@@ -102,9 +105,10 @@ What it can do:
 | `set_levy(id, n)` | set a character's raised troops |
 
 Gold and levy belong to characters, not to the player — the player is just an
-id, and every ruler runs on the same rules. A character who leads no kingdom has
-no holdings, so their totals are zero and they collect nothing; there is no
-separate check for it anywhere.
+id, and every ruler runs on the same rules. Who counts as a ruler is not a rule
+the engine knows: the base scripts walk `kingdoms`, keep the ones whose leader
+is the character in hand, and sum the buildings. Lead no kingdom and the sum is
+zero. Change that loop and you change the rule.
 
 Starting values live in the data, so a mod can hand someone a treasury:
 
@@ -118,7 +122,7 @@ seeded RNG, so a campaign still replays exactly from its seed.
 
 Writes are collected and applied after every mod's hooks have run, so the
 readable values don't shift under you mid-hook. The economy is itself just a
-script — `mods/base/on_day.rhai` sets levies and `mods/base/on_month.rhai`
+script — `mods/base/character_levy.rhai` sets levies and `mods/base/character_gold.rhai`
 collects taxes on the first. Replace them by shipping a folder sorted after
 `base`, or delete them and nobody earns anything.
 

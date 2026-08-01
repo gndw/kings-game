@@ -63,8 +63,11 @@ impl Ctx {
         self.content.character(&self.player_character_id)
     }
 
-    /// What a character's holdings add up to. All zeroes unless they lead a
-    /// kingdom — which is what confines gold and levy to rulers.
+    /// What a character's holdings add up to, for the UI to show. All zeroes
+    /// unless they lead a kingdom.
+    ///
+    /// Not what the sim runs on — the base scripts do their own sums, so this
+    /// agrees with them only as long as nobody mods the rule.
     pub fn yield_for(&self, character_id: &str) -> Yield {
         self.content
             .kingdom_led_by(character_id)

@@ -7,7 +7,7 @@ use std::collections::HashMap;
 
 /// Everything scripts may read about one character this tick.
 #[derive(Clone, Copy, Default)]
-pub(super) struct CharView {
+pub(super) struct CharacterView {
     pub(super) gold: i64,
     pub(super) levy: u64,
 }
@@ -23,18 +23,19 @@ pub(super) struct KingdomView {
 /// belongs to whom, what stands in each land, and what one of each building is
 /// worth.
 #[derive(Default)]
-pub(super) struct Realms {
+pub(super) struct RealmView {
     /// In data order, so scripts iterate deterministically.
     pub(super) kingdoms: Vec<KingdomView>,
     /// Land id -> the buildings standing in it.
     pub(super) buildings: HashMap<String, Vec<String>>,
     /// Building id -> what it yields on its own.
     worth: HashMap<String, Yield>,
+    pub(super) characters: CharacterMap,
 }
 
-impl Realms {
+impl RealmView {
     pub(super) fn build(content: &Content) -> Self {
-        Realms {
+        RealmView {
             kingdoms: content
                 .kingdoms
                 .iter()
@@ -63,6 +64,7 @@ impl Realms {
                     )
                 })
                 .collect(),
+            characters: CharacterMap::build(content),
         }
     }
 
@@ -83,29 +85,29 @@ impl Realms {
 /// ponytail: rebuilt every tick rather than kept in sync. A few dozen
 /// characters is nothing next to a frame; revisit if a mod ships thousands.
 #[derive(Default)]
-pub(super) struct Roster {
+pub(super) struct CharacterMap {
     /// Character ids in map order, so scripts iterate deterministically.
     pub(super) ids: Vec<String>,
-    by_id: HashMap<String, CharView>,
+    by_id: HashMap<String, CharacterView>,
 }
 
-impl Roster {
+impl CharacterMap {
     pub(super) fn build(content: &Content) -> Self {
-        let mut roster = Roster::default();
+        let mut characters = CharacterMap::default();
         for c in &content.characters {
-            roster.ids.push(c.id.clone());
-            roster.by_id.insert(
+            characters.ids.push(c.id.clone());
+            characters.by_id.insert(
                 c.id.clone(),
-                CharView {
+                CharacterView {
                     gold: c.gold,
                     levy: c.levy,
                 },
             );
         }
-        roster
+        characters
     }
 
-    pub(super) fn get(&self, id: &str) -> CharView {
+    pub(super) fn get(&self, id: &str) -> CharacterView {
         self.by_id.get(id).copied().unwrap_or_default()
     }
 }

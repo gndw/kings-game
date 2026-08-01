@@ -23,15 +23,15 @@ pub(super) fn script_ctx(engine: &mut Engine) {
         .register_get("land", |c: &mut ScriptCtx| c.land.clone())
         .register_get("player", |c: &mut ScriptCtx| c.player.clone())
         .register_get("characters", |c: &mut ScriptCtx| {
-            ids(c.roster.ids.iter().map(String::as_str))
+            ids(c.realms.characters.ids.iter().map(String::as_str))
         })
         // Per-character reads. An unknown id reads as all zeroes rather
-        // than erroring — a script looping the roster can't hit one.
+        // than erroring — a script looping the characters can't hit one.
         .register_fn("gold", |c: &mut ScriptCtx, id: ImmutableString| {
-            c.roster.get(&id).gold
+            c.realms.characters.get(&id).gold
         })
         .register_fn("levy", |c: &mut ScriptCtx, id: ImmutableString| {
-            c.roster.get(&id).levy as i64
+            c.realms.characters.get(&id).levy as i64
         })
         // The world's shape. Whether a character rules anything, and what
         // their holdings add up to, is a script's sum to do — see

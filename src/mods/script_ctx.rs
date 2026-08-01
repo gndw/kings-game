@@ -1,7 +1,7 @@
 //! The value every hook is handed. What it exposes to Rhai is [`super::register`].
 
 use super::effects::Effect;
-use super::view::{Realms, Roster};
+use super::view::RealmView;
 use crate::ctx::Ctx;
 use crate::rng::SimRng;
 use rand::RngExt;
@@ -27,15 +27,14 @@ pub struct ScriptCtx {
     /// The character the player is playing as, for scripts that want to treat
     /// them differently — chronicle their taxes and no one else's, say.
     pub(super) player: String,
-    pub(super) roster: Arc<Roster>,
-    pub(super) realms: Arc<Realms>,
+    pub(super) realms: Arc<RealmView>,
     pub(super) rng: Arc<Mutex<SimRng>>,
     pub(super) out: Arc<Mutex<Vec<Effect>>>,
 }
 
 impl ScriptCtx {
     /// This tick's snapshot. Built once per tick and cloned per mod per hook —
-    /// the roster and the realms sit behind `Arc`, so that's a refcount bump.
+    /// the realms sit behind an `Arc`, so that's a refcount bump.
     pub(super) fn build(ctx: &Ctx, out: Arc<Mutex<Vec<Effect>>>) -> Self {
         ScriptCtx {
             year: i64::from(ctx.date.year),
@@ -44,8 +43,7 @@ impl ScriptCtx {
             tick: ctx.tick_count as i64,
             land: ctx.selected_region.clone().unwrap_or_default(),
             player: ctx.player_character_id.clone(),
-            roster: Arc::new(Roster::build(&ctx.content)),
-            realms: Arc::new(Realms::build(&ctx.content)),
+            realms: Arc::new(RealmView::build(&ctx.content)),
             rng: ctx.rng.clone(),
             out,
         }

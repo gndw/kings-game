@@ -1,5 +1,6 @@
-//! The script surface: every `ctx.thing` a mod may read or call, and nothing
-//! else. One file, so what scripts can do is one file to read.
+//! The script surface: every `ctx.thing` a mod may read, and nothing else. The
+//! calls that *write* are registered by [`super::effects`], next to the effects
+//! they queue.
 //!
 //! Keep [`ScriptCtx`] and the README's two tables in step with this list.
 
@@ -67,18 +68,8 @@ pub(super) fn script_ctx(engine: &mut Engine) {
             "building_gold_upkeep",
             |c: &mut ScriptCtx, id: ImmutableString| c.realms.building(&id).gold_upkeep as i64,
         )
-        .register_fn("rand", |c: &mut ScriptCtx| c.rand())
-        .register_fn(
-            "add_gold",
-            |c: &mut ScriptCtx, id: ImmutableString, n: i64| c.add_gold(&id, n),
-        )
-        .register_fn(
-            "set_levy",
-            |c: &mut ScriptCtx, id: ImmutableString, n: i64| c.set_levy(&id, n),
-        )
-        .register_fn("chronicle", |c: &mut ScriptCtx, line: ImmutableString| {
-            c.chronicle(&line)
-        });
+        .register_fn("rand", |c: &mut ScriptCtx| c.rand());
+    super::effects::register(engine);
 }
 
 #[cfg(test)]
@@ -203,7 +194,7 @@ mod tests {
                 ("base/world.ron", WORLD),
                 (
                     "base/mod.rhai",
-                    r#"fn on_day(ctx) { if ctx.rand() < 0.5 { ctx.chronicle("heads " + ctx.tick); } }"#,
+                    r#"fn on_day(ctx) { if ctx.rand() < 0.5 { ctx.add_chronicle("heads " + ctx.tick); } }"#,
                 ),
             ],
         );

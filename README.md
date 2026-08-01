@@ -71,7 +71,7 @@ A mod folder may also hold any number of `*.rhai` files
 // mods/plague/on_month.rhai
 fn on_month(ctx) {
     if ctx.month == 6 && ctx.rand() < 0.05 {
-        ctx.chronicle("A sickness takes the holdings.");
+        ctx.add_chronicle("A sickness takes the holdings.");
     }
 }
 ```
@@ -100,9 +100,9 @@ What it can do:
 | | |
 |---|---|
 | `rand()` | uniform in `[0, 1)`, from the seeded RNG |
-| `chronicle(line)` | write a line to the chronicle |
-| `add_gold(id, n)` | add to (or, negative, take from) a treasury |
-| `set_levy(id, n)` | set a character's raised troops |
+| `add_chronicle(line)` | write a line to the chronicle |
+| `add_character_gold(id, n)` | add to (or, negative, take from) a treasury |
+| `set_character_levy(id, n)` | set a character's raised troops |
 
 Gold and levy belong to characters, not to the player — the player is just an
 id, and every ruler runs on the same rules. Who counts as a ruler is not a rule

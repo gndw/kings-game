@@ -57,24 +57,8 @@ impl ScriptCtx {
         self.rng.lock().unwrap().random::<f64>()
     }
 
-    fn push(&mut self, effect: Effect) {
+    /// Queue an effect for after the hooks have run. See [`super::effects`].
+    pub(super) fn push(&mut self, effect: Effect) {
         self.out.lock().unwrap().push(effect);
-    }
-
-    pub(super) fn chronicle(&mut self, line: &str) {
-        self.push(Effect::Chronicle(line.to_string()));
-    }
-
-    pub(super) fn add_gold(&mut self, character_id: &str, amount: i64) {
-        self.push(Effect::AddGold(character_id.to_string(), amount));
-    }
-
-    /// Negative levy is meaningless, so it floors at zero rather than wrapping
-    /// the `u64` on the way in.
-    pub(super) fn set_levy(&mut self, character_id: &str, troops: i64) {
-        self.push(Effect::SetLevy(
-            character_id.to_string(),
-            troops.max(0) as u64,
-        ));
     }
 }

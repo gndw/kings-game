@@ -11,7 +11,7 @@
 
 fn on_day(ctx) {
     for id in ctx.characters {
-        ctx.set_levy(id, realm_levy(ctx, id));
+        ctx.set_character_levy(id, realm_levy(ctx, id));
     }
 }
 

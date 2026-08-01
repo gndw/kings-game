@@ -65,11 +65,11 @@ mod tests {
                 ("base/world.ron", WORLD),
                 (
                     "base/on_day.rhai",
-                    r#"fn on_day(ctx) { ctx.chronicle("day " + ctx.day); }"#,
+                    r#"fn on_day(ctx) { ctx.add_chronicle("day " + ctx.day); }"#,
                 ),
                 (
                     "base/on_month.rhai",
-                    r#"fn on_month(ctx) { ctx.chronicle("month " + ctx.month); }"#,
+                    r#"fn on_month(ctx) { ctx.add_chronicle("month " + ctx.month); }"#,
                 ),
             ],
         );

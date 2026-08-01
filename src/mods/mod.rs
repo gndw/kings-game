@@ -155,7 +155,7 @@ impl Scripts {
         self.out
             .lock()
             .unwrap()
-            .push(Effect::Chronicle(format!("mod `{name}` failed: {msg}")));
+            .push(Effect::AddChronicle(format!("mod `{name}` failed: {msg}")));
     }
 
     /// Run this tick's hooks, then fold whatever the scripts wrote into the
@@ -356,7 +356,7 @@ mod tests {
                 ("b-throws/mod.rhai", r#"fn on_day(ctx) { throw "nope"; }"#),
                 (
                     "c-good/mod.rhai",
-                    r#"fn on_day(ctx) { ctx.chronicle("still here"); }"#,
+                    r#"fn on_day(ctx) { ctx.add_chronicle("still here"); }"#,
                 ),
             ],
         );

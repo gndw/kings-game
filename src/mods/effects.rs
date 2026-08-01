@@ -1,15 +1,40 @@
 //! What scripts asked for, and the only place it lands on the world.
 
+use super::script_ctx::ScriptCtx;
 use crate::ctx::Ctx;
+use rhai::{Engine, ImmutableString};
 use std::sync::Mutex;
 
 /// Something a script asked the simulation to do. Collected while the hooks
 /// run and applied afterwards, in order, so a script never holds a borrow on
 /// `Ctx`. The `String` is the character the effect lands on.
 pub(super) enum Effect {
-    Chronicle(String),
-    AddGold(String, i64),
-    SetLevy(String, u64),
+    AddChronicle(String),
+    AddCharacterGold(String, i64),
+    SetCharacterLevy(String, u64),
+}
+
+/// The writing half of the script surface. Called by [`super::register`], which
+/// registers everything a script may read.
+pub(super) fn register(engine: &mut Engine) {
+    engine
+        .register_fn(
+            "add_character_gold",
+            |c: &mut ScriptCtx, id: ImmutableString, n: i64| {
+                c.push(Effect::AddCharacterGold(id.to_string(), n))
+            },
+        )
+        // Negative levy is meaningless, so it floors at zero rather than
+        // wrapping the `u64` on the way in.
+        .register_fn(
+            "set_character_levy",
+            |c: &mut ScriptCtx, id: ImmutableString, n: i64| {
+                c.push(Effect::SetCharacterLevy(id.to_string(), n.max(0) as u64))
+            },
+        )
+        .register_fn("add_chronicle", |c: &mut ScriptCtx, line: ImmutableString| {
+            c.push(Effect::AddChronicle(line.to_string()))
+        });
 }
 
 /// Empty the queue into `ctx`, in the order the scripts filled it.
@@ -19,13 +44,13 @@ pub(super) enum Effect {
 pub(super) fn drain(out: &Mutex<Vec<Effect>>, ctx: &mut Ctx) {
     for effect in out.lock().unwrap().drain(..) {
         match effect {
-            Effect::Chronicle(line) => ctx.chronicles.push(line),
-            Effect::AddGold(id, n) => {
+            Effect::AddChronicle(line) => ctx.chronicles.push(line),
+            Effect::AddCharacterGold(id, n) => {
                 if let Some(c) = ctx.content.character_mut(&id) {
                     c.gold = c.gold.saturating_add(n);
                 }
             }
-            Effect::SetLevy(id, n) => {
+            Effect::SetCharacterLevy(id, n) => {
                 if let Some(c) = ctx.content.character_mut(&id) {
                     c.levy = n;
                 }

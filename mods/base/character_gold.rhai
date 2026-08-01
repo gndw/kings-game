@@ -12,11 +12,11 @@ fn on_month(ctx) {
     for id in ctx.characters {
         let income = realm_income(ctx, id);
         if income <= 0 { continue; }
-        ctx.add_gold(id, income);
+        ctx.add_character_gold(id, income);
         // Only the player's own finances are worth a chronicle line;
         // everyone else's would drown it.
         if id == ctx.player {
-            ctx.chronicle("The realm renders " + income + " gold in taxes.");
+            ctx.add_chronicle("The realm renders " + income + " gold in taxes.");
         }
     }
 }

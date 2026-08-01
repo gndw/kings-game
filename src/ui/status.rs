@@ -43,5 +43,6 @@ pub fn update(
     let (ref mut text, ref mut text_colour) = *status;
     text.0 = state.to_string();
     text_colour.0 = colour.into();
-    status_rest.0 = format!("  {}  {} days/s", game.ctx.date, game.speed);
+    // Gold and levy live in the resource bar along the top.
+    status_rest.0 = format!("  {}  {} days/s", game.ctx.date, game.speed());
 }

@@ -1,0 +1,8 @@
+// The edge of the world; the camera never pans past it.
+//
+// Every `*.ron` in a mod folder is the same optional-everything file, so the
+// split across world/lands/buildings/... is documentation, not schema. A mod
+// can override just this by shipping a folder with one file exactly like it.
+(
+    border: (x0: 0, y0: 40, x1: 860, y1: 540),
+)

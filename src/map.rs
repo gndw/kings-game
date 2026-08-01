@@ -1,20 +1,68 @@
-//! Map geometry loaded from a RON data file at startup so it can be modded
-//! without a rebuild (see `assets/map.ron`). The camera and drawing live in
-//! `crate::ui::map`.
+//! Map geometry loaded from RON data files at startup so it can be modded
+//! without a rebuild (see `mods/base/`). `crate::mods` does the loading and
+//! merging; the camera and drawing live in `crate::ui::map`.
 
-use anyhow::{Context, Result, bail};
+use crate::date::Calendar;
+use anyhow::{Result, bail};
 use rand::seq::IndexedRandom;
 use serde::Deserialize;
-use std::path::Path;
 
-/// The whole map: a rectangular `border` — the edge of the world — and the
-/// `lands` inside it.
-// Default so tests that only care about the clock can build a Ctx with an empty map.
-#[derive(Debug, Default, Deserialize)]
+/// The whole map after every mod file has been merged in: a rectangular
+/// `border` — the edge of the world — and the `lands` inside it.
+// Default so tests that only care about the clock can build a Ctx with an empty
+// map, and so merging can start from nothing.
+#[derive(Debug)]
 pub struct Map {
-    pub border: Rect,
-    pub lands: Vec<Shape>,
-    /// Buildings a holding can raise. Optional so older map files still load.
+    pub border: Border,
+    /// How long a month and a year are. Not geometry, but it arrives the same
+    /// way every other mod section does.
+    pub calendar: Calendar,
+    /// The simulated-days-per-real-second settings `+` and `-` step through,
+    /// slowest first. The game starts on the first one.
+    pub speeds: Vec<u32>,
+    pub lands: Vec<Land>,
+    /// Buildings a holding can raise.
+    pub buildings: Vec<Building>,
+    pub houses: Vec<House>,
+    pub characters: Vec<Character>,
+    pub kingdoms: Vec<Kingdom>,
+}
+
+/// Hand-written rather than derived because an empty `speeds` list is not a
+/// usable game — a derived `Default` would hand out one silently.
+impl Default for Map {
+    fn default() -> Self {
+        Map {
+            border: Border::default(),
+            calendar: Calendar::default(),
+            speeds: vec![8, 16, 32, 64],
+            lands: Vec::new(),
+            buildings: Vec::new(),
+            houses: Vec::new(),
+            characters: Vec::new(),
+            kingdoms: Vec::new(),
+        }
+    }
+}
+
+/// One data file on disk. Every section is optional, so a mod ships only what
+/// it changes — and the base game can split itself across `lands.ron`,
+/// `buildings.ron` and friends without the loader knowing the difference.
+///
+/// `deny_unknown_fields` so a modder's typo is an error instead of a section
+/// that silently does nothing.
+#[derive(Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MapFile {
+    #[serde(default)]
+    pub border: Option<Border>,
+    #[serde(default)]
+    pub calendar: Option<Calendar>,
+    /// Replaced wholesale, not merged — a speed has no id to match on.
+    #[serde(default)]
+    pub speeds: Option<Vec<u32>>,
+    #[serde(default)]
+    pub lands: Vec<Land>,
     #[serde(default)]
     pub buildings: Vec<Building>,
     #[serde(default)]
@@ -25,7 +73,37 @@ pub struct Map {
     pub kingdoms: Vec<Kingdom>,
 }
 
+/// ponytail: linear scan per entry, so merging is O(n²) in list length. With a
+/// few hundred lands that's nothing; index by id if a mod set ever gets big.
+fn merge_by_id<T>(dst: &mut Vec<T>, src: Vec<T>, id: impl for<'a> Fn(&'a T) -> &'a str) {
+    for item in src {
+        match dst.iter().position(|d| id(d) == id(&item)) {
+            Some(i) => dst[i] = item,
+            None => dst.push(item),
+        }
+    }
+}
+
 impl Map {
+    /// Fold one file in. An entry whose `id` already exists replaces the
+    /// earlier one, anything else appends — that is the whole override rule.
+    pub fn merge(&mut self, file: MapFile) {
+        if let Some(border) = file.border {
+            self.border = border;
+        }
+        if let Some(calendar) = file.calendar {
+            self.calendar = calendar;
+        }
+        if let Some(speeds) = file.speeds {
+            self.speeds = speeds;
+        }
+        merge_by_id(&mut self.lands, file.lands, |s| &s.id);
+        merge_by_id(&mut self.buildings, file.buildings, |b| &b.id);
+        merge_by_id(&mut self.houses, file.houses, |h| &h.id);
+        merge_by_id(&mut self.characters, file.characters, |c| &c.id);
+        merge_by_id(&mut self.kingdoms, file.kingdoms, |k| &k.id);
+    }
+
     /// Get random land id, or None if there are no lands.
     pub fn random_land_id(&self) -> Option<String> {
         self.lands.choose(&mut rand::rng()).map(|s| s.id.clone())
@@ -36,7 +114,7 @@ impl Map {
     /// direction, penalising sideways offset so "up" prefers straight up.
     ///
     /// ponytail: distance heuristic over holdings, no adjacency graph. Add real
-    /// borders-touch adjacency in map.ron if the picks feel wrong on odd shapes.
+    /// borders-touch adjacency in lands.ron if the picks feel wrong on odd shapes.
     pub fn step(&self, from: &str, dir: (f64, f64)) -> Option<String> {
         let origin = self.lands.iter().find(|s| s.id == from)?.holding;
         self.lands
@@ -54,19 +132,22 @@ impl Map {
     }
 }
 
-/// Map edge, `(x0, y0)` bottom-left to `(x1, y1)` top-right.
+/// Map edge, `(x0, y0)` bottom-left to `(x1, y1)` top-right. `world.ron`.
 #[derive(Debug, Default, Deserialize)]
-pub struct Rect {
+pub struct Border {
     pub x0: f64,
     pub y0: f64,
     pub x1: f64,
     pub y1: f64,
 }
 
+/// One land, an entry in `lands.ron`.
 #[derive(Debug, Deserialize)]
-pub struct Shape {
+pub struct Land {
     pub id: String,
     pub name: String,
+    /// This land's own outline, a polyline of `(x, y)` points. Not to be
+    /// confused with `Map::border`, the edge of the world.
     pub borders: Vec<(f64, f64)>,
     /// Seat of power, somewhere inside `borders`. Drawn as a circle.
     pub holding: (f64, f64),
@@ -103,6 +184,24 @@ pub struct Character {
     pub name: String,
     pub house_id: String,
     pub age: u32,
+    /// Treasury. Signed, so a script may spend past zero. Starts at whatever
+    /// the data says, then the sim owns it.
+    #[serde(default)]
+    pub gold: i64,
+    /// Troops currently raised. Only a character who leads a kingdom has
+    /// holdings to raise them from.
+    #[serde(default)]
+    pub levy: u64,
+}
+
+/// What a realm's holdings yield — troops raised, coin earned, coin owed. The
+/// raw sums; see [`Map::kingdom_yield`]. All zeroes for a character who leads
+/// no kingdom, which is what keeps gold and levy to rulers.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct Yield {
+    pub levy: u64,
+    pub gold_profit: u64,
+    pub gold_upkeep: u64,
 }
 
 /// A realm: a ruler, a capital, and the lands it holds.
@@ -122,8 +221,43 @@ impl Map {
             .find(|k| k.land_ids.iter().any(|l| l == land_id))
     }
 
+    /// The kingdom `character_id` rules, if any.
+    pub fn kingdom_led_by(&self, character_id: &str) -> Option<&Kingdom> {
+        self.kingdoms
+            .iter()
+            .find(|k| k.leader_character_id == character_id)
+    }
+
+    pub fn building(&self, id: &str) -> Option<&Building> {
+        self.buildings.iter().find(|b| b.id == id)
+    }
+
+    /// What everything a kingdom holds adds up to. The raw sums only — whether
+    /// income is profit or profit-minus-upkeep is a mod script's call, not
+    /// this function's.
+    pub fn kingdom_yield(&self, kingdom: &Kingdom) -> Yield {
+        let mut total = Yield::default();
+        for land in self
+            .lands
+            .iter()
+            .filter(|l| kingdom.land_ids.contains(&l.id))
+        {
+            for b in land.building_ids.iter().filter_map(|id| self.building(id)) {
+                total.levy += u64::from(b.levy);
+                total.gold_profit += u64::from(b.gold_profit);
+                total.gold_upkeep += u64::from(b.gold_upkeep);
+            }
+        }
+        total
+    }
+
     pub fn character(&self, id: &str) -> Option<&Character> {
         self.characters.iter().find(|c| c.id == id)
+    }
+
+    /// For the sim to write a character's gold and levy back.
+    pub fn character_mut(&mut self, id: &str) -> Option<&mut Character> {
+        self.characters.iter_mut().find(|c| c.id == id)
     }
 
     pub fn house(&self, id: &str) -> Option<&House> {
@@ -131,17 +265,37 @@ impl Map {
     }
 }
 
-pub fn load(path: &Path) -> Result<Map> {
-    let text = std::fs::read_to_string(path)
-        .with_context(|| format!("reading map {}", path.display()))?;
-    parse(&text).with_context(|| format!("parsing map {}", path.display()))
+/// One data file. No cross-reference checking — a mod may legitimately point at
+/// a building some other mod declares, so that waits for [`validate`].
+pub fn parse_file(text: &str) -> Result<MapFile> {
+    // IMPLICIT_SOME so an optional section is written `border: (...)` rather
+    // than `border: Some((...))` — modders shouldn't have to know which
+    // sections happen to be `Option` on the Rust side.
+    let opts =
+        ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
+    Ok(opts.from_str(text)?)
 }
 
+/// A whole map from a single file, for tests and one-file mods. The game merges
+/// many instead, via `crate::mods::load`.
 pub fn parse(text: &str) -> Result<Map> {
-    let map: Map = ron::from_str(text)?;
+    let mut map = Map::default();
+    map.merge(parse_file(text)?);
+    validate(&map)?;
+    Ok(map)
+}
+
+/// Check the map hangs together. Runs on the *merged* map, never on one file.
+pub fn validate(map: &Map) -> Result<()> {
     let b = &map.border;
     if b.x1 <= b.x0 || b.y1 <= b.y0 {
         bail!("map border must have x1 > x0 and y1 > y0");
+    }
+    map.calendar.validate()?;
+    match map.speeds.as_slice() {
+        [] => bail!("speeds needs at least one entry"),
+        s if s.contains(&0) => bail!("a speed of 0 days/second would stop the clock"),
+        _ => {}
     }
     for s in &map.lands {
         if s.borders.len() < 2 {
@@ -155,14 +309,19 @@ pub fn parse(text: &str) -> Result<Map> {
     }
     for c in &map.characters {
         if !map.houses.iter().any(|h| h.id == c.house_id) {
-            bail!("character `{}` references unknown house `{}`", c.id, c.house_id);
+            bail!(
+                "character `{}` references unknown house `{}`",
+                c.id,
+                c.house_id
+            );
         }
     }
     for k in &map.kingdoms {
         if map.character(&k.leader_character_id).is_none() {
             bail!(
                 "kingdom `{}` references unknown character `{}`",
-                k.id, k.leader_character_id
+                k.id,
+                k.leader_character_id
             );
         }
         for l in &k.land_ids {
@@ -173,11 +332,12 @@ pub fn parse(text: &str) -> Result<Map> {
         if !k.land_ids.contains(&k.seat_land_id) {
             bail!(
                 "kingdom `{}` seat `{}` is not among its lands",
-                k.id, k.seat_land_id
+                k.id,
+                k.seat_land_id
             );
         }
     }
-    Ok(map)
+    Ok(())
 }
 
 /// `(x_min, x_max, y_min, y_max)` of the map edge, for the canvas bounds.
@@ -205,7 +365,10 @@ mod tests {
         .unwrap();
         assert_eq!(map.lands.len(), 2);
         assert_eq!(map.lands[0].id, "wessex");
-        assert_eq!(map.lands[0].borders, vec![(1.0, 2.0), (3.0, 4.0), (1.0, 2.0)]);
+        assert_eq!(
+            map.lands[0].borders,
+            vec![(1.0, 2.0), (3.0, 4.0), (1.0, 2.0)]
+        );
         assert_eq!(bounds(&map), (-1.0, 5.0, 0.0, 9.0));
         assert!(["wessex", "mercia"].contains(&map.random_land_id().unwrap().as_str()));
         assert!(parse(r#"(border: (x0: 5, y0: 0, x1: 5, y1: 9), lands: [])"#).is_err());
@@ -232,6 +395,8 @@ mod tests {
         let map = parse(&text("l1")).unwrap();
         assert_eq!(map.kingdom_of("l1").unwrap().id, "k1");
         assert!(map.kingdom_of("nowhere").is_none());
+        assert_eq!(map.kingdom_led_by("c1").unwrap().seat_land_id, "l1");
+        assert!(map.kingdom_led_by("nobody").is_none());
         assert_eq!(map.character("c1").unwrap().age, 40);
         assert_eq!(map.house("h1").unwrap().name, "H1");
         // a seat outside the kingdom's own lands is a broken map

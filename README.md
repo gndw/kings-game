@@ -21,14 +21,108 @@ without wayland, audio, or 3d.
 | Key | |
 |---|---|
 | `space` | pause / unpause |
-| `+` / `-` | simulation speed |
+| `+` / `-` | step through the speeds in `calendar.ron` |
 | `q`, `esc` | quit |
 
 ## Modding
 
-The map is plain [RON](https://docs.rs/ron) in `assets/map.ron` — borders are
-polylines, edit and restart. Point `KINGS_MAP` at your own file to use it
-instead.
+A mod is a folder under `mods/`. Folders load in sorted name order, so a later
+one wins; point `KINGS_MODS` somewhere else to use a different set entirely.
+
+### Data
+
+Every `*.ron` file in a mod folder is [RON](https://docs.rs/ron) with the same
+optional-everything shape, so the filename is documentation and nothing more —
+the base game splits itself across `world.ron`, `calendar.ron`, `lands.ron`,
+`buildings.ron`, `houses.ron`, `characters.ron` and `kingdoms.ron` purely for
+readability.
+
+The calendar and the clock speeds are data too. Every month is the same length
+and there are no leap days, so a year is just the two numbers multiplied.
+`speeds` is simulated days per real second — `+` and `-` step through the list,
+slowest first, and the game starts on the first entry:
+
+```ron
+// mods/slow-and-short/calendar.ron
+(
+    calendar: (days_per_month: 10, months_per_year: 5),
+    speeds: [1, 2, 4],
+)
+```
+
+Entries merge **by `id`**: same id replaces, new id appends. So a mod that
+rebalances one building is three lines, and never has to fork the map:
+
+```ron
+// mods/rich-mills/buildings.ron
+(buildings: [(id: "building-mill", name: "grain mill", gold_profit: 20)])
+```
+
+Cross-references are checked after everything has merged, so your mod may point
+at a land or building another mod declares. An unknown section name is an error
+rather than a silent no-op — a typo tells you about itself.
+
+### Scripts
+
+A mod folder may also hold a `mod.rhai` ([Rhai](https://rhai.rs)). Define
+`on_day`, `on_month`, or neither:
+
+```rhai
+// mods/plague/mod.rhai
+fn on_month(ctx) {
+    if ctx.month == 6 && ctx.rand() < 0.05 {
+        ctx.chronicle("A sickness takes the holdings.");
+    }
+}
+```
+
+What `ctx` can read:
+
+| | |
+|---|---|
+| `year` `month` `day` `tick` | the clock |
+| `land` | the selected land's id, or `""` |
+| `player` | the player's character id |
+| `characters` | every character id, in data order |
+| `gold(id)` `levy(id)` | that character's resources, as of the start of the tick |
+| `gold_profit(id)` `gold_upkeep(id)` `levy_total(id)` | what their holdings add up to — all zero unless they lead a kingdom |
+
+What it can do:
+
+| | |
+|---|---|
+| `rand()` | uniform in `[0, 1)`, from the seeded RNG |
+| `chronicle(line)` | write a line to the chronicle |
+| `add_gold(id, n)` | add to (or, negative, take from) a treasury |
+| `set_levy(id, n)` | set a character's raised troops |
+
+Gold and levy belong to characters, not to the player — the player is just an
+id, and every ruler runs on the same rules. A character who leads no kingdom has
+no holdings, so their totals are zero and they collect nothing; there is no
+separate check for it anywhere.
+
+Starting values live in the data, so a mod can hand someone a treasury:
+
+```ron
+// mods/rich-arryn/characters.ron
+(characters: [(id: "char-jon", name: "jon", house_id: "house-arryn", age: 66, gold: 500)])
+```
+
+Use `rand()` rather than rolling your own randomness — it draws from the game's
+seeded RNG, so a campaign still replays exactly from its seed.
+
+Writes are collected and applied after every mod's hooks have run, so the
+readable values don't shift under you mid-hook. The economy is itself just a
+script — `mods/base/mod.rhai` sets levies daily and collects taxes on the first
+of the month. Replace it by shipping a folder sorted after `base`, or delete it
+and nobody earns anything.
+
+A script that fails to compile or throws is reported in the chronicle and then
+disabled for the session. It never takes the game down with it.
+
+The script surface is deliberately small: right now the simulation is a
+calendar and a chronicle, so that is all there is to read and write. It grows
+as the game does.
 
 ## License
 

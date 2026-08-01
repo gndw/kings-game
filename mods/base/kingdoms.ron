@@ -1,0 +1,11 @@
+// Who holds what. The seat is the capital and must also appear in `land_ids`.
+(
+    kingdoms: [
+        (id: "kingdom-west",   leader_character_id: "char-leyton", seat_land_id: "land-2",
+         land_ids: ["land-1", "land-2"]),
+        (id: "kingdom-centre", leader_character_id: "char-tywin",  seat_land_id: "land-3",
+         land_ids: ["land-3", "land-4"]),
+        (id: "kingdom-east",   leader_character_id: "char-jon",    seat_land_id: "land-5",
+         land_ids: ["land-5", "land-6"]),
+    ],
+)

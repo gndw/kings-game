@@ -1,0 +1,15 @@
+// How long a month and a year are, and how fast the clock may run.
+//
+// Every month is the same length and there are no leap days, so a year is
+// simply days_per_month * months_per_year — 360 days here. Both must be at
+// least 1.
+//
+// `speeds` is simulated days per real second. `+` and `-` step through the
+// list, slowest first, and the game starts on the first entry. Add or remove
+// entries freely; no zeroes.
+//
+// A mod that wants ten-day months ships a folder with just this file in it.
+(
+    calendar: (days_per_month: 30, months_per_year: 12),
+    speeds: [8, 16, 32, 64],
+)

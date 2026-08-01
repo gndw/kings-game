@@ -1,0 +1,12 @@
+// Every `house_id` must name a house in houses.ron — checked after all mods
+// have merged, so another mod may supply the house.
+(
+    characters: [
+        (id: "char-leyton",  name: "leyton",  house_id: "house-hightower", age: 61),
+        (id: "char-alerie",  name: "alerie",  house_id: "house-hightower", age: 34),
+        (id: "char-tywin",   name: "tywin",   house_id: "house-lannister", age: 57),
+        (id: "char-jaime",   name: "jaime",   house_id: "house-lannister", age: 29),
+        (id: "char-jon",     name: "jon",     house_id: "house-arryn",     age: 66),
+        (id: "char-lysa",    name: "lysa",    house_id: "house-arryn",     age: 32),
+    ],
+)

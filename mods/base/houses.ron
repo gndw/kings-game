@@ -1,0 +1,8 @@
+// The families. Characters belong to one; kingdoms are ruled through them.
+(
+    houses: [
+        (id: "house-hightower", name: "hightower"),
+        (id: "house-lannister", name: "lannister"),
+        (id: "house-arryn",     name: "arryn"),
+    ],
+)

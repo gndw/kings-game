@@ -1,15 +1,19 @@
 //! The two things the core still promises: the clock advances correctly and the
 //! same seed replays the same draws.
 
-use kings_game::ecs::{Ctx, DAYS_PER_YEAR, Date};
+use kings_game::ctx::Ctx;
+use kings_game::date::Date;
+use kings_game::map::Map;
 use kings_game::rng::SimRng;
 use rand::RngExt;
 
 #[test]
 fn a_year_of_ticks_lands_on_the_same_day_next_year() {
-    let mut ctx = Ctx::new_game(1, Default::default());
+    // An empty map, so the calendar is the default 30-day, 12-month one.
+    let mut ctx = Ctx::new_game(1, Map::default());
+    let days = ctx.map.calendar.days_per_year();
     let start = ctx.date;
-    for _ in 0..DAYS_PER_YEAR {
+    for _ in 0..days {
         ctx.tick();
     }
     assert_eq!(
@@ -19,7 +23,7 @@ fn a_year_of_ticks_lands_on_the_same_day_next_year() {
             ..start
         }
     );
-    assert_eq!(ctx.tick_count, u64::from(DAYS_PER_YEAR));
+    assert_eq!(ctx.tick_count, u64::from(days));
 }
 
 #[test]

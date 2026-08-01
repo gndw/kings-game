@@ -1,8 +1,8 @@
 //! The camera framed on the map and the gizmo drawing of it. The map geometry
 //! itself lives in `crate::map`.
 
-use super::startup::RIGHT_BAR;
 use super::flag;
+use super::startup::RIGHT_BAR;
 use crate::app::Game;
 use crate::map::bounds;
 use bevy::camera::ScalingMode;
@@ -66,21 +66,33 @@ pub fn update_draw(mut gizmos: Gizmos, game: Res<Game>, time: Res<Time>) {
         .lands
         .iter()
         .filter(|s| Some(s.id.as_str()) != sel)
-        .chain(game.ctx.map.lands.iter().filter(|s| Some(s.id.as_str()) == sel));
-    for shape in order {
-        let is_sel = Some(shape.id.as_str()) == sel;
+        .chain(
+            game.ctx
+                .map
+                .lands
+                .iter()
+                .filter(|s| Some(s.id.as_str()) == sel),
+        );
+    for land in order {
+        let is_sel = Some(land.id.as_str()) == sel;
         let (outline, holder) = if is_sel {
             (css::YELLOW, css::YELLOW)
         } else {
             (css::WHITE, Srgba::rgb(0.59, 0.29, 0.0))
         };
         gizmos.linestrip_2d(
-            shape.borders.iter().map(|&(x, y)| Vec2::new(x as f32, y as f32)),
+            land.borders
+                .iter()
+                .map(|&(x, y)| Vec2::new(x as f32, y as f32)),
             outline,
         );
-        let holding = Vec2::new(shape.holding.0 as f32, shape.holding.1 as f32);
+        let holding = Vec2::new(land.holding.0 as f32, land.holding.1 as f32);
         gizmos
-            .circle_2d(Isometry2d::from_translation(holding), HOLDING_RADIUS, holder)
+            .circle_2d(
+                Isometry2d::from_translation(holding),
+                HOLDING_RADIUS,
+                holder,
+            )
             .resolution(24);
         if is_sel {
             flag::draw(&mut gizmos, holding, time.elapsed_secs());

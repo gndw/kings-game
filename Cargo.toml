@@ -20,6 +20,8 @@ bevy = { version = "0.19", default-features = false, features = [
 ] }
 hecs = "0.11.1"
 rand = "0.10.2"
+# `sync` because the compiled mod scripts live on `Game`, a Bevy Resource.
+rhai = { version = "1.25.1", features = ["sync"] }
 ron = "0.12.2"
 serde = { version = "1.0.229", features = ["derive"] }
 

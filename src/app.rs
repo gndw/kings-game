@@ -4,6 +4,8 @@
 use crate::ecs::Ctx;
 use bevy::prelude::*;
 
+// ponytail: F5/F9 are the universal quicksave/quickload keys — same as Half-Life, Skyrim, every emulator. Muscle memory is UI.
+
 #[derive(Resource)]
 pub struct Game {
     pub ctx: Ctx,
@@ -50,6 +52,30 @@ pub fn input(
     }
     if keys.just_pressed(KeyCode::Minus) {
         game.speed = (game.speed / 2).max(1);
+    }
+    if keys.just_pressed(KeyCode::F5) {
+        match crate::save::quicksave(&game.ctx) {
+            Ok(path) => game.ctx.chronicles.push(format!(
+                "{} — game saved to {}.",
+                game.ctx.date,
+                path.display()
+            )),
+            Err(e) => game.ctx.chronicles.push(format!(
+                "{} — save failed: {e}.",
+                game.ctx.date
+            )),
+        }
+    }
+    if keys.just_pressed(KeyCode::F9) {
+        match crate::save::quickload() {
+            Ok(save) => {
+                game.ctx = save.restore();
+            }
+            Err(e) => game.ctx.chronicles.push(format!(
+                "{} — load failed: {e}.",
+                game.ctx.date
+            )),
+        }
     }
     fixed.set_timestep_hz(f64::from(game.speed));
 }

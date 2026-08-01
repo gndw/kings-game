@@ -10,7 +10,7 @@ use std::path::Path;
 /// The whole map: a rectangular `border` — the edge of the world — and the
 /// `lands` inside it.
 // Default so tests that only care about the clock can build a Ctx with an empty map.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Map {
     pub border: Rect,
     pub lands: Vec<Shape>,
@@ -55,7 +55,7 @@ impl Map {
 }
 
 /// Map edge, `(x0, y0)` bottom-left to `(x1, y1)` top-right.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Rect {
     pub x0: f64,
     pub y0: f64,
@@ -63,7 +63,7 @@ pub struct Rect {
     pub y1: f64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Shape {
     pub id: String,
     pub name: String,
@@ -78,7 +78,7 @@ pub struct Shape {
 /// Something built in a holding. Civil buildings earn `gold_profit`; military
 /// ones cost `gold_upkeep` and add `levy` troops. A building sets one gold field
 /// or the other, never both — the other stays 0.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Building {
     pub id: String,
     pub name: String,
@@ -91,13 +91,13 @@ pub struct Building {
 }
 
 /// A family. Characters belong to one; kingdoms are ruled through them.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct House {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Character {
     pub id: String,
     pub name: String,
@@ -106,7 +106,7 @@ pub struct Character {
 }
 
 /// A realm: a ruler, a capital, and the lands it holds.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Kingdom {
     pub id: String,
     pub leader_character_id: String,

@@ -13,6 +13,18 @@ make play SEED=1066    # a specific campaign
 make check             # fmt + clippy + tests
 ```
 
+Load a savefile at startup:
+
+```sh
+cargo run --release -- --load saves/quicksave.save.ron
+```
+
+Pick your character on a new game:
+
+```sh
+cargo run --release -- --player-character-id char-tywin
+```
+
 Needs a Rust toolchain (edition 2024) and X11 dev libraries. Bevy is built
 without wayland, audio, or 3d.
 
@@ -22,6 +34,8 @@ without wayland, audio, or 3d.
 |---|---|
 | `space` | pause / unpause |
 | `+` / `-` | simulation speed |
+| `F5` | quicksave |
+| `F9` | quickload |
 | `q`, `esc` | quit |
 
 ## Modding

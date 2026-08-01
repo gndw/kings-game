@@ -3,6 +3,7 @@
 use crate::map::Map;
 use crate::rng::SimRng;
 use hecs::World;
+use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
 /// ponytail: 30-day months, 360-day years. Real calendars buy nothing here and
@@ -10,7 +11,7 @@ use std::sync::{Arc, Mutex};
 pub const DAYS_PER_MONTH: u32 = 30;
 pub const DAYS_PER_YEAR: u32 = 360;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Date {
     pub year: i32,
     pub month: u8,
@@ -50,12 +51,21 @@ pub struct Ctx {
     pub rng: Arc<Mutex<SimRng>>,
     pub chronicles: Vec<String>,
     pub selected_region: Option<String>,
+    pub player_character_id: Option<String>,
 }
 
 impl Ctx {
-    pub fn new_game(seed: u64, map: Map) -> Self {
+    pub fn new_game(seed: u64, map: Map, player_character_id: Option<String>) -> Self {
+        // Default to the first kingdom's ruler if not specified.
+        let player_character_id = player_character_id.or_else(|| {
+            map.kingdoms
+                .first()
+                .and_then(|k| map.character(&k.leader_character_id))
+                .map(|c| c.id.clone())
+        });
         let mut ctx = Ctx {
             selected_region: map.random_land_id(),
+            player_character_id,
             map,
             world: World::new(),
             date: Date {

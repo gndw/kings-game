@@ -107,7 +107,7 @@ What it can do:
 | `add_chronicle(line)` | write a line to the chronicle |
 | `add_character_gold(id, n)` | add to (or, negative, take from) a treasury |
 | `set_character_levy(id, n)` | set a character's raised troops |
-| `set_character_gold_yield(id, n)` | set a character's gold profit per month |
+| `set_character_gold_yield(id, n)` | set a character's gold per month |
 
 Gold and levy belong to characters, not to the player — the player is just an
 id, and every ruler runs on the same rules. Who counts as a ruler is not a rule

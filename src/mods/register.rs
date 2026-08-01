@@ -80,8 +80,11 @@ mod tests {
 
     /// Two rulers and a landless character.
     ///
-    /// - `char-tywin` (the player) holds `l1`: 50 levy, 6 profit, 5 upkeep.
-    /// - `char-jon` holds `l2`: 0 levy, 10 profit, and starts on 100 gold.
+    /// - `char-tywin` (the player) holds `l1`: 50 levy, 6 profit, 5 upkeep — so
+    ///   a net yield of 1, which is what makes the upkeep subtraction visible.
+    /// - `char-jon` holds `l2`: 0 levy, 10 profit, no upkeep, starts on 100 gold.
+    /// - `char-hoster` holds `l3`: a barracks and nothing to pay for it, so his
+    ///   realm runs at -5 a month and he goes into debt.
     /// - `char-lysa` leads nothing at all.
     const ECON: &str = r#"(
         border: (x0: 0, y0: 0, x1: 10, y1: 10),
@@ -95,16 +98,20 @@ mod tests {
              building_ids: ["b-barracks", "b-mill"]),
             (id: "l2", name: "L2", holding: (5, 5), borders: [(5, 5), (6, 6)],
              building_ids: ["b-market"]),
+            (id: "l3", name: "L3", holding: (8, 8), borders: [(8, 8), (9, 9)],
+             building_ids: ["b-barracks"]),
         ],
         houses: [(id: "h1", name: "H1")],
         characters: [
-            (id: "char-tywin", name: "tywin", house_id: "h1", age: 57),
-            (id: "char-jon",   name: "jon",   house_id: "h1", age: 66, gold: 100),
-            (id: "char-lysa",  name: "lysa",  house_id: "h1", age: 32),
+            (id: "char-tywin",  name: "tywin",  house_id: "h1", age: 57),
+            (id: "char-jon",    name: "jon",    house_id: "h1", age: 66, gold: 100),
+            (id: "char-hoster", name: "hoster", house_id: "h1", age: 48, gold: 3),
+            (id: "char-lysa",   name: "lysa",   house_id: "h1", age: 32),
         ],
         kingdoms: [
-            (id: "k1", leader_character_id: "char-tywin", seat_land_id: "l1", land_ids: ["l1"]),
-            (id: "k2", leader_character_id: "char-jon",   seat_land_id: "l2", land_ids: ["l2"]),
+            (id: "k1", leader_character_id: "char-tywin",  seat_land_id: "l1", land_ids: ["l1"]),
+            (id: "k2", leader_character_id: "char-jon",    seat_land_id: "l2", land_ids: ["l2"]),
+            (id: "k3", leader_character_id: "char-hoster", seat_land_id: "l3", land_ids: ["l3"]),
         ],
     )"#;
 
@@ -114,8 +121,8 @@ mod tests {
         (c.gold, c.levy)
     }
 
-    /// Their gold profit per month.
-    fn gold_yield(ctx: &Ctx, id: &str) -> u64 {
+    /// What their holdings net per month, profit less upkeep. Signed.
+    fn gold_yield(ctx: &Ctx, id: &str) -> i64 {
         ctx.content.character(id).unwrap().gold_yield
     }
 
@@ -151,8 +158,10 @@ mod tests {
         // screen shows the levy and the income, and the treasuries are untouched.
         scripts.run_startup(&mut ctx);
         assert_eq!(purse(&ctx, "char-tywin"), (0, 50));
-        assert_eq!(gold_yield(&ctx, "char-tywin"), 6);
+        assert_eq!(gold_yield(&ctx, "char-tywin"), 1, "6 profit less 5 upkeep");
         assert_eq!(purse(&ctx, "char-jon"), (100, 0), "no barracks, no taxes yet");
+        assert_eq!(gold_yield(&ctx, "char-jon"), 10, "nothing to keep up");
+        assert_eq!(gold_yield(&ctx, "char-hoster"), -5, "upkeep and no earnings");
         assert_eq!(gold_yield(&ctx, "char-lysa"), 0, "landless earns nothing");
 
         day(&mut ctx, &mut scripts);
@@ -167,8 +176,8 @@ mod tests {
         assert_eq!((ctx.date.month, ctx.date.day), (2, 1));
         assert_eq!(
             purse(&ctx, "char-tywin"),
-            (6, 50),
-            "profit only — upkeep is not deducted"
+            (1, 50),
+            "the barracks eats 5 of the mill's 6"
         );
         assert_eq!(
             purse(&ctx, "char-jon"),
@@ -176,12 +185,18 @@ mod tests {
             "every ruler collects, not just the player"
         );
         assert_eq!(
+            purse(&ctx, "char-hoster"),
+            (-2, 50),
+            "3 gold less 5 of upkeep — a treasury goes past zero, not to it"
+        );
+        assert_eq!(
             purse(&ctx, "char-lysa"),
             (0, 0),
             "leading no kingdom earns and raises nothing"
         );
 
-        // Only the player's taxes are worth chronicling.
+        // Only the player's finances are worth chronicling — hoster's deficit
+        // is real but goes unreported.
         assert_eq!(
             ctx.chronicles
                 .iter()
@@ -189,14 +204,16 @@ mod tests {
                 .count(),
             1
         );
-        assert!(ctx.chronicles.iter().any(|l| l.contains("6 gold in taxes")));
+        assert!(ctx.chronicles.iter().any(|l| l.contains("1 gold in taxes")));
+        assert!(!ctx.chronicles.iter().any(|l| l.contains("gold short")));
 
         // A second month, a second payment, and the levies hold steady.
         for _ in 0..30 {
             day(&mut ctx, &mut scripts);
         }
-        assert_eq!(purse(&ctx, "char-tywin"), (12, 50));
+        assert_eq!(purse(&ctx, "char-tywin"), (2, 50));
         assert_eq!(purse(&ctx, "char-jon"), (120, 0));
+        assert_eq!(purse(&ctx, "char-hoster"), (-7, 50), "debt keeps deepening");
     }
 
     #[test]

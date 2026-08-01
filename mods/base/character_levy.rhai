@@ -5,23 +5,27 @@
 // building they gain or lose. Recomputed daily rather than on change: there is
 // no "on change" yet, and a few dozen sums a day costs nothing.
 //
-// The rule that only rulers raise troops lives right here in `realm_levy`: a
+// The rule that only rulers raise troops lives right here in `get_realm_levy`: a
 // character who leads no kingdom matches no realm, so their sum stays zero. A
 // mod wanting landless retinues rewrites this loop and nothing else.
 
 // Same sum before the first day, so a new game opens on the levy its rulers
 // actually hold rather than on zero.
 fn on_startup(ctx) {
-    on_day(ctx);
+    calculate_character_levy(ctx);
 }
 
 fn on_day(ctx) {
+    calculate_character_levy(ctx);
+}
+
+fn calculate_character_levy(ctx) {
     for id in ctx.characters {
-        ctx.set_character_levy(id, realm_levy(ctx, id));
+        ctx.set_character_levy(id, get_realm_levy(ctx, id));
     }
 }
 
-fn realm_levy(ctx, who) {
+fn get_realm_levy(ctx, who) {
     let total = 0;
     for kingdom in ctx.kingdoms {
         if ctx.kingdom_leader(kingdom) != who { continue; }

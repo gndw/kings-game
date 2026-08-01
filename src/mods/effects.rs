@@ -12,7 +12,7 @@ pub(super) enum Effect {
     AddChronicle(String),
     AddCharacterGold(String, i64),
     SetCharacterLevy(String, u64),
-    SetCharacterGoldYield(String, u64),
+    SetCharacterGoldYield(String, i64),
 }
 
 /// The writing half of the script surface. Called by [`super::register`], which
@@ -26,8 +26,8 @@ pub(super) fn register(engine: &mut Engine) {
             },
         )
         // Negative levy is meaningless, so it floors at zero rather than
-        // wrapping the `u64` on the way in. Same for the gold yield: a realm
-        // that owes more than it earns renders nothing, not a huge number.
+        // wrapping the `u64` on the way in. A negative gold yield is not —
+        // that's a realm whose garrisons cost more than its holdings earn.
         .register_fn(
             "set_character_levy",
             |c: &mut ScriptCtx, id: ImmutableString, n: i64| {
@@ -37,10 +37,7 @@ pub(super) fn register(engine: &mut Engine) {
         .register_fn(
             "set_character_gold_yield",
             |c: &mut ScriptCtx, id: ImmutableString, n: i64| {
-                c.push(Effect::SetCharacterGoldYield(
-                    id.to_string(),
-                    n.max(0) as u64,
-                ))
+                c.push(Effect::SetCharacterGoldYield(id.to_string(), n))
             },
         )
         .register_fn("add_chronicle", |c: &mut ScriptCtx, line: ImmutableString| {

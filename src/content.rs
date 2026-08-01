@@ -199,10 +199,12 @@ pub struct Character {
     /// holdings to raise them from.
     #[serde(default)]
     pub levy: u64,
-    /// Gold profit per month: what their holdings render at the next payout.
-    /// Written by the same script that pays it, so the two can't disagree.
+    /// Gold per month: what their holdings render at the next payout, profit
+    /// less upkeep. Signed, like `gold` — a realm that garrisons more than it
+    /// earns runs at a loss. Written by the same script that pays it, so the
+    /// two can't disagree.
     #[serde(default)]
-    pub gold_yield: u64,
+    pub gold_yield: i64,
 }
 
 /// What a realm's holdings yield — troops raised, coin earned, coin owed. All

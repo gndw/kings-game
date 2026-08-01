@@ -37,10 +37,11 @@ pub fn update(game: Res<Game>, mut bar: Single<&mut Text, With<ResourceBar>>) {
         .content
         .house(&player.house_id)
         .map_or(player.house_id.as_str(), |h| h.name.as_str());
-    // The monthly profit the gold script last published — it owns the rule, so
+    // The monthly income the gold script last published — it owns the rule, so
     // a mod that changes how income is figured changes this number with it.
+    // Signed both places: a realm can run at a loss and a ruler can be in debt.
     bar.0 = format!(
-        "{} of {}     {} gold (+{}/mo)     {} levy",
+        "{} of {}     {} gold ({:+}/mo)     {} levy",
         player.name, house, player.gold, player.gold_yield, player.levy
     );
 }

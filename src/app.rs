@@ -2,24 +2,20 @@
 //! the simulation (pause, speed).
 
 use crate::ecs::Ctx;
-use crate::map::Map;
 use bevy::prelude::*;
 
 #[derive(Resource)]
 pub struct Game {
     pub ctx: Ctx,
-    pub map: Map,
     pub paused: bool,
     /// Simulated days per real second.
     pub speed: u32,
 }
 
 impl Game {
-    pub fn new(mut ctx: Ctx, map: Map) -> Self {
-        ctx.selected_region = map.random_land_id();
+    pub fn new(ctx: Ctx) -> Self {
         Game {
             ctx,
-            map,
             paused: true,
             speed: 8,
         }

@@ -13,7 +13,7 @@ const HOLDING_RADIUS: f32 = 4.0;
 
 /// Camera framed on the whole map.
 pub fn startup(mut commands: Commands, game: Res<Game>) {
-    let (x0, x1, y0, y1) = bounds(&game.map);
+    let (x0, x1, y0, y1) = bounds(&game.ctx.map);
     commands.spawn((
         Camera2d,
         // AutoMin keeps the whole map visible whatever the window shape, so the
@@ -32,22 +32,6 @@ pub fn startup(mut commands: Commands, game: Res<Game>) {
     ));
 }
 
-/// Zoom. `scale` is a multiplier on the visible span, so smaller is zoomed in.
-pub fn update_camera(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut projection: Single<&mut Projection, With<Camera2d>>,
-) {
-    let Projection::Orthographic(ortho) = &mut **projection else {
-        return;
-    };
-    if keys.just_pressed(KeyCode::BracketRight) {
-        ortho.scale = (ortho.scale / 1.25).max(1.0 / 16.0);
-    }
-    if keys.just_pressed(KeyCode::BracketLeft) {
-        ortho.scale = (ortho.scale * 1.25).min(1.0);
-    }
-}
-
 /// Arrow keys move the selection to the neighbouring land in that direction.
 pub fn update_input(keys: Res<ButtonInput<KeyCode>>, mut game: ResMut<Game>) {
     for (key, dir) in [
@@ -58,7 +42,7 @@ pub fn update_input(keys: Res<ButtonInput<KeyCode>>, mut game: ResMut<Game>) {
     ] {
         if keys.just_pressed(key)
             && let Some(sel) = game.ctx.selected_region.clone()
-            && let Some(next) = game.map.step(&sel, dir)
+            && let Some(next) = game.ctx.map.step(&sel, dir)
         {
             game.ctx.selected_region = Some(next);
         }
@@ -67,7 +51,7 @@ pub fn update_input(keys: Res<ButtonInput<KeyCode>>, mut game: ResMut<Game>) {
 
 /// World border, land outlines, holdings, and the selected land's flag.
 pub fn update_draw(mut gizmos: Gizmos, game: Res<Game>, time: Res<Time>) {
-    let b = &game.map.border;
+    let b = &game.ctx.map.border;
     gizmos.rect_2d(
         Isometry2d::from_xy(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32),
         Vec2::new((b.x1 - b.x0) as f32, (b.y1 - b.y0) as f32),
@@ -77,11 +61,12 @@ pub fn update_draw(mut gizmos: Gizmos, game: Res<Game>, time: Res<Time>) {
     let sel = game.ctx.selected_region.as_deref();
     // Selected land last, so it draws over its neighbours.
     let order = game
+        .ctx
         .map
         .lands
         .iter()
         .filter(|s| Some(s.id.as_str()) != sel)
-        .chain(game.map.lands.iter().filter(|s| Some(s.id.as_str()) == sel));
+        .chain(game.ctx.map.lands.iter().filter(|s| Some(s.id.as_str()) == sel));
     for shape in order {
         let is_sel = Some(shape.id.as_str()) == sel;
         let (outline, holder) = if is_sel {

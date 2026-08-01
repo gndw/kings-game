@@ -1,5 +1,6 @@
 //! The simulation context: the hecs world plus everything that isn't an entity.
 
+use crate::map::Map;
 use crate::rng::SimRng;
 use hecs::World;
 use std::sync::{Arc, Mutex};
@@ -42,6 +43,7 @@ impl std::fmt::Display for Date {
 
 pub struct Ctx {
     pub world: World,
+    pub map: Map,
     pub date: Date,
     pub seed: u64,
     pub tick_count: u64,
@@ -51,8 +53,10 @@ pub struct Ctx {
 }
 
 impl Ctx {
-    pub fn new_game(seed: u64) -> Self {
+    pub fn new_game(seed: u64, map: Map) -> Self {
         let mut ctx = Ctx {
+            selected_region: map.random_land_id(),
+            map,
             world: World::new(),
             date: Date {
                 year: 1066,
@@ -63,7 +67,6 @@ impl Ctx {
             tick_count: 0,
             rng: Arc::new(Mutex::new(SimRng::new(seed))),
             chronicles: Vec::new(),
-            selected_region: None,
         };
         ctx.chronicles
             .push(format!("{} — the chronicle begins.", ctx.date));

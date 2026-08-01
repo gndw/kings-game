@@ -16,7 +16,7 @@ fn wave(phase: f32, t: f32) -> f32 {
 }
 
 /// A small pennant on a pole, planted at world point `at`.
-// ponytail: fixed world size like the holding circle; scale with zoom if it looks off.
+// ponytail: fixed world size like the holding circle; the camera never zooms.
 pub fn draw(gizmos: &mut Gizmos, at: Vec2, phase: f32) {
     gizmos.line_2d(at, at + Vec2::Y * POLE, css::WHITE);
     // triangular pennant: full height at the pole, tapering to a point at the fly

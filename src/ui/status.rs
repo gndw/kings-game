@@ -1,4 +1,4 @@
-//! The status bar along the bottom: run state, date, speed, zoom, keys.
+//! The status bar along the bottom: run state, date, speed, keys.
 
 use super::FONT;
 use super::chronicle::Chronicle;
@@ -34,12 +34,7 @@ pub fn update(
     game: Res<Game>,
     mut status: Single<(&mut Text, &mut TextColor), (With<Status>, Without<Chronicle>)>,
     mut status_rest: Single<&mut TextSpan, With<Status>>,
-    cam: Single<&Projection, With<Camera2d>>,
 ) {
-    let zoom = match cam.into_inner() {
-        Projection::Orthographic(o) => 1.0 / o.scale,
-        _ => 1.0,
-    };
     let (state, colour) = if game.paused {
         ("[PAUSED]", css::RED)
     } else {
@@ -48,8 +43,5 @@ pub fn update(
     let (ref mut text, ref mut text_colour) = *status;
     text.0 = state.to_string();
     text_colour.0 = colour.into();
-    status_rest.0 = format!(
-        "  {}  {} days/s  {zoom:.1}x",
-        game.ctx.date, game.speed,
-    );
+    status_rest.0 = format!("  {}  {} days/s", game.ctx.date, game.speed);
 }

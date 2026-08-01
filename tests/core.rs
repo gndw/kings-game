@@ -7,7 +7,7 @@ use rand::RngExt;
 
 #[test]
 fn a_year_of_ticks_lands_on_the_same_day_next_year() {
-    let mut ctx = Ctx::new_game(1);
+    let mut ctx = Ctx::new_game(1, Default::default());
     let start = ctx.date;
     for _ in 0..DAYS_PER_YEAR {
         ctx.tick();

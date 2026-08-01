@@ -11,11 +11,10 @@ fn main() -> Result<()> {
         .and_then(|s| s.parse().ok())
         .unwrap_or(0xC0FFEE);
 
-    let ctx = Ctx::new_game(seed);
     // KINGS_MAP lets modders point at their own file.
     let map_path = std::env::var("KINGS_MAP").unwrap_or_else(|_| "assets/map.ron".into());
     let map = kings_game::map::load(Path::new(&map_path))?;
-    let game = Game::new(ctx, map);
+    let game = Game::new(Ctx::new_game(seed, map));
     let hz = f64::from(game.speed);
 
     App::new()
@@ -36,7 +35,6 @@ fn main() -> Result<()> {
             Update,
             (
                 input,
-                ui::map::update_camera,
                 ui::map::update_input,
                 ui::map::update_draw,
                 ui::legend::update,

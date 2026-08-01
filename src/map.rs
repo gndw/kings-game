@@ -9,7 +9,8 @@ use std::path::Path;
 
 /// The whole map: a rectangular `border` — the edge of the world — and the
 /// `lands` inside it.
-#[derive(Debug, Deserialize)]
+// Default so tests that only care about the clock can build a Ctx with an empty map.
+#[derive(Debug, Default, Deserialize)]
 pub struct Map {
     pub border: Rect,
     pub lands: Vec<Shape>,
@@ -54,7 +55,7 @@ impl Map {
 }
 
 /// Map edge, `(x0, y0)` bottom-left to `(x1, y1)` top-right.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Default, Deserialize)]
 pub struct Rect {
     pub x0: f64,
     pub y0: f64,

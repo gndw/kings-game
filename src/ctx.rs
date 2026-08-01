@@ -1,8 +1,8 @@
 //! The simulation context: the hecs world plus everything that isn't an entity.
 //! The calendar it runs on lives in `crate::date`.
 
+use crate::content::{Character, Content, Yield};
 use crate::date::Date;
-use crate::map::{Character, Map, Yield};
 use crate::rng::SimRng;
 use hecs::World;
 use std::sync::{Arc, Mutex};
@@ -13,13 +13,15 @@ const PLAYER_CHARACTER_ID: &str = "char-tywin";
 
 pub struct Ctx {
     pub world: World,
-    pub map: Map,
+    /// Everything the mods loaded: geometry, calendar, and the characters the
+    /// sim writes gold and levy back into.
+    pub content: Content,
     pub date: Date,
     pub seed: u64,
     pub tick_count: u64,
     pub rng: Arc<Mutex<SimRng>>,
     pub chronicles: Vec<String>,
-    /// Whoever the player is playing as. Ids into `Map::characters`.
+    /// Whoever the player is playing as. Ids into `Content::characters`.
     ///
     /// Gold and levy are not kept here: every character has their own, on
     /// `Character`, and the player is only distinguished by this id.
@@ -28,18 +30,18 @@ pub struct Ctx {
 }
 
 impl Ctx {
-    pub fn new_game(seed: u64, map: Map) -> Self {
+    pub fn new_game(seed: u64, content: Content) -> Self {
         let player_character_id = PLAYER_CHARACTER_ID.to_string();
         let mut ctx = Ctx {
             // Open on the player's own capital. Falls back to any land at all
-            // for a map that doesn't happen to contain them — the empty map
-            // the clock tests use, or a mod that dropped the character.
-            selected_region: map
+            // for content that doesn't happen to contain them — the empty
+            // default the clock tests use, or a mod that dropped the character.
+            selected_region: content
                 .kingdom_led_by(&player_character_id)
                 .map(|k| k.seat_land_id.clone())
-                .or_else(|| map.random_land_id()),
+                .or_else(|| content.random_land_id()),
             player_character_id,
-            map,
+            content,
             world: World::new(),
             date: Date {
                 year: 1066,
@@ -58,29 +60,29 @@ impl Ctx {
 
     /// The character the player is, if the map still contains them.
     pub fn player_character(&self) -> Option<&Character> {
-        self.map.character(&self.player_character_id)
+        self.content.character(&self.player_character_id)
     }
 
     /// What a character's holdings add up to. All zeroes unless they lead a
     /// kingdom — which is what confines gold and levy to rulers.
     pub fn yield_for(&self, character_id: &str) -> Yield {
-        self.map
+        self.content
             .kingdom_led_by(character_id)
-            .map(|k| self.map.kingdom_yield(k))
+            .map(|k| self.content.kingdom_yield(k))
             .unwrap_or_default()
     }
 
     /// One simulated day. Systems hook in here.
     pub fn tick(&mut self) {
         self.tick_count += 1;
-        self.date.advance(&self.map.calendar);
+        self.date.advance(&self.content.calendar);
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::map::parse;
+    use crate::content::parse;
 
     #[test]
     fn a_new_game_opens_on_the_players_capital() {
@@ -122,6 +124,10 @@ mod tests {
             Some("only")
         );
         // ...and an empty map has nothing to select at all.
-        assert!(Ctx::new_game(1, Map::default()).selected_region.is_none());
+        assert!(
+            Ctx::new_game(1, Content::default())
+                .selected_region
+                .is_none()
+        );
     }
 }

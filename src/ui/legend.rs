@@ -34,28 +34,30 @@ pub fn update(game: Res<Game>, mut legend: Single<&mut Text, With<Legend>>) {
         .ctx
         .selected_region
         .as_deref()
-        .and_then(|id| game.ctx.map.lands.iter().find(|s| s.id == id));
+        .and_then(|id| game.ctx.content.lands.iter().find(|s| s.id == id));
     legend.0 = match sel {
         Some(s) => {
             let mut out = format!("id:{}\nname:{}", s.id, s.name);
-            if let Some(k) = game.ctx.map.kingdom_of(&s.id) {
+            if let Some(k) = game.ctx.content.kingdom_of(&s.id) {
                 out.push_str(&format!("\nkingdom:{}", k.id));
                 if k.seat_land_id == s.id {
                     out.push_str(" (seat)");
                 }
-                if let Some(c) = game.ctx.map.character(&k.leader_character_id) {
+                if let Some(c) = game.ctx.content.character(&k.leader_character_id) {
                     let house = game
                         .ctx
-                        .map
+                        .content
                         .house(&c.house_id)
                         .map_or(c.house_id.as_str(), |h| h.name.as_str());
                     out.push_str(&format!("\nruler:{} of {} ({})", c.name, house, c.age));
                 }
             }
             let (mut gold, mut levy) = (0i64, 0u64);
-            for b in s.building_ids.iter().filter_map(|id| {
-                game.ctx.map.buildings.iter().find(|b| &b.id == id)
-            }) {
+            for b in s
+                .building_ids
+                .iter()
+                .filter_map(|id| game.ctx.content.buildings.iter().find(|b| &b.id == id))
+            {
                 gold += b.gold_profit as i64 - b.gold_upkeep as i64;
                 levy += b.levy as u64;
                 // ponytail: only the non-zero numbers, so a line reads

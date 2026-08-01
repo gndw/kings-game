@@ -12,7 +12,7 @@ pub struct Game {
     /// simulation state — which is what tests and any future save file want.
     pub scripts: Scripts,
     pub paused: bool,
-    /// Which of `ctx.map.speeds` is selected — an index, because the rates
+    /// Which of `ctx.content.speeds` is selected — an index, because the rates
     /// themselves are mod data.
     pub speed_idx: usize,
 }
@@ -28,10 +28,10 @@ impl Game {
     }
 
     /// Simulated days per real second. Falls back to 1 rather than panicking on
-    /// an empty list; `map::validate` rejects that before a game ever starts.
+    /// an empty list; `content::validate` rejects that before a game ever starts.
     pub fn speed(&self) -> u32 {
         self.ctx
-            .map
+            .content
             .speeds
             .get(self.speed_idx)
             .copied()
@@ -66,7 +66,7 @@ pub fn input(
     }
     // Step through the mod's speed list rather than doubling: the steps are
     // whatever the data says, and the ends just clamp.
-    let last = game.ctx.map.speeds.len().saturating_sub(1);
+    let last = game.ctx.content.speeds.len().saturating_sub(1);
     if keys.just_pressed(KeyCode::Equal) || keys.just_pressed(KeyCode::NumpadAdd) {
         game.speed_idx = (game.speed_idx + 1).min(last);
     }

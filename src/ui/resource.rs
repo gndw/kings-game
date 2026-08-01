@@ -34,7 +34,7 @@ pub fn update(game: Res<Game>, mut bar: Single<&mut Text, With<ResourceBar>>) {
     };
     let house = game
         .ctx
-        .map
+        .content
         .house(&player.house_id)
         .map_or(player.house_id.as_str(), |h| h.name.as_str());
     // Profit, not profit-minus-upkeep, because that is what the base script

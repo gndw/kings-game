@@ -1,12 +1,14 @@
-//! Mods. Each folder under the mods directory contributes data files and an
-//! optional `mod.rhai`; folders load in sorted name order and later ones win.
+//! Mods. Each folder under the mods directory contributes data files and any
+//! number of scripts; folders load in sorted name order and later ones win.
 //!
-//! Every `*.ron` in a folder is a [`MapFile`], whatever it's called — the loader
-//! doesn't know that `buildings.ron` holds buildings. That's what lets the base
-//! game split its data by section for free, and lets a mod ship one file or six.
+//! Every `*.ron` in a folder is a [`ContentFile`], whatever it's called — the
+//! loader doesn't know that `buildings.ron` holds buildings. Every `*.rhai` is
+//! a script, whatever it's called, and each gets its own `AST`. So a mod splits
+//! itself across files however reads best (the base game names each script
+//! after the hook it defines) and the loader neither knows nor cares.
 
+use crate::content::{self, Content, Yield};
 use crate::ctx::Ctx;
-use crate::map::{self, Map, Yield};
 use crate::rng::SimRng;
 use anyhow::{Context, Result};
 use rand::RngExt;
@@ -30,14 +32,14 @@ const MAX_EXPR_DEPTH: usize = 64;
 const MAX_FN_EXPR_DEPTH: usize = 32;
 
 pub struct Mods {
-    pub map: Map,
+    pub content: Content,
     pub scripts: Scripts,
 }
 
 /// Load every mod in `dir`. Bad *data* is fatal — there's no sensible game
-/// without a map. Bad *scripts* are not; see [`Scripts::add`].
+/// without content. Bad *scripts* are not; see [`Scripts::add`].
 pub fn load(dir: &Path) -> Result<Mods> {
-    let mut map = Map::default();
+    let mut content = Content::default();
     let mut scripts = Scripts::new();
 
     for folder in sorted_entries(dir)? {
@@ -60,18 +62,23 @@ pub fn load(dir: &Path) -> Result<Mods> {
             match ext {
                 "ron" => {
                     let text = read()?;
-                    let parsed = map::parse_file(&text)
+                    let parsed = content::parse_file(&text)
                         .with_context(|| format!("parsing {}", file.display()))?;
-                    map.merge(parsed);
+                    content.merge(parsed);
                 }
-                "rhai" => scripts.add(&name, &read()?),
+                // Labelled `folder/file` so an error names the script that
+                // broke, not just the mod it came from.
+                "rhai" => {
+                    let stem = file.file_stem().unwrap_or_default().to_string_lossy();
+                    scripts.add(&format!("{name}/{stem}"), &read()?)
+                }
                 _ => {}
             }
         }
     }
 
-    map::validate(&map).context("the merged mod data is inconsistent")?;
-    Ok(Mods { map, scripts })
+    content::validate(&content).context("the merged mod data is inconsistent")?;
+    Ok(Mods { content, scripts })
 }
 
 /// Directory contents, sorted by path. Sorted because load order decides who
@@ -119,7 +126,7 @@ struct Roster {
 impl Roster {
     fn build(ctx: &Ctx) -> Self {
         let mut roster = Roster::default();
-        for c in &ctx.map.characters {
+        for c in &ctx.content.characters {
             roster.ids.push(c.id.clone());
             roster.by_id.insert(
                 c.id.clone(),
@@ -341,12 +348,12 @@ impl Scripts {
             match effect {
                 Effect::Chronicle(line) => ctx.chronicles.push(line),
                 Effect::AddGold(id, n) => {
-                    if let Some(c) = ctx.map.character_mut(&id) {
+                    if let Some(c) = ctx.content.character_mut(&id) {
                         c.gold = c.gold.saturating_add(n);
                     }
                 }
                 Effect::SetLevy(id, n) => {
-                    if let Some(c) = ctx.map.character_mut(&id) {
+                    if let Some(c) = ctx.content.character_mut(&id) {
                         c.levy = n;
                     }
                 }
@@ -394,7 +401,7 @@ mod tests {
                 ),
             ],
         );
-        let map = load(&dir).unwrap().map;
+        let map = load(&dir).unwrap().content;
         assert_eq!(
             map.lands.len(),
             2,
@@ -418,7 +425,7 @@ mod tests {
             ],
         ))
         .unwrap()
-        .map;
+        .content;
         let whole = load(&mods_dir(
             "whole",
             &[(
@@ -430,7 +437,7 @@ mod tests {
             )],
         ))
         .unwrap()
-        .map;
+        .content;
         assert_eq!(format!("{split:?}"), format!("{whole:?}"));
     }
 
@@ -439,7 +446,7 @@ mod tests {
         // No calendar.ron anywhere, so the default 30/12 stands.
         let plain = load(&mods_dir("cal-default", &[("base/world.ron", WORLD)]))
             .unwrap()
-            .map;
+            .content;
         assert_eq!(plain.calendar.days_per_year(), 360);
 
         // A mod that ships nothing but a calendar still overrides it.
@@ -454,10 +461,10 @@ mod tests {
             ],
         );
         let map = load(&dir).unwrap();
-        assert_eq!(map.map.calendar.days_per_year(), 50);
+        assert_eq!(map.content.calendar.days_per_year(), 50);
 
         // ...and the sim actually runs on it.
-        let mut ctx = Ctx::new_game(1, map.map);
+        let mut ctx = Ctx::new_game(1, map.content);
         for _ in 0..50 {
             ctx.tick();
         }
@@ -510,23 +517,27 @@ mod tests {
 
     /// A character's `(gold, levy)`.
     fn purse(ctx: &Ctx, id: &str) -> (i64, u64) {
-        let c = ctx.map.character(id).unwrap();
+        let c = ctx.content.character(id).unwrap();
         (c.gold, c.levy)
     }
 
     #[test]
     fn the_shipped_scripts_run_every_rulers_economy() {
-        // The real base script, not a copy of it — so this fails if that file
-        // and this surface ever drift apart.
         let dir = mods_dir(
             "economy",
             &[
                 ("base/data.ron", ECON),
-                ("base/mod.rhai", include_str!("../mods/base/mod.rhai")),
+                // The real base scripts, not copies of them — so this fails if
+                // either file and this surface ever drift apart.
+                ("base/on_day.rhai", include_str!("../mods/base/on_day.rhai")),
+                (
+                    "base/on_month.rhai",
+                    include_str!("../mods/base/on_month.rhai"),
+                ),
             ],
         );
         let mods = load(&dir).unwrap();
-        let mut ctx = Ctx::new_game(1, mods.map);
+        let mut ctx = Ctx::new_game(1, mods.content);
         let mut scripts = mods.scripts;
 
         // Starting gold comes from the data; nothing has run yet.
@@ -581,7 +592,7 @@ mod tests {
     fn a_mod_can_replace_the_speed_list() {
         let plain = load(&mods_dir("spd-default", &[("base/world.ron", WORLD)]))
             .unwrap()
-            .map;
+            .content;
         assert_eq!(plain.speeds, vec![8, 16, 32, 64]);
 
         // Replaced wholesale, not appended to.
@@ -593,7 +604,7 @@ mod tests {
             ],
         ))
         .unwrap()
-        .map;
+        .content;
         assert_eq!(map.speeds, vec![1, 2]);
 
         // An empty list leaves nothing to run at, and a zero would stop the
@@ -648,7 +659,7 @@ mod tests {
     /// minus the opening line `Ctx::new_game` writes.
     fn play(dir: &Path, days: u32) -> (Vec<String>, u64) {
         let mods = load(dir).unwrap();
-        let mut ctx = Ctx::new_game(7, mods.map);
+        let mut ctx = Ctx::new_game(7, mods.content);
         let mut scripts = mods.scripts;
         for _ in 0..days {
             ctx.tick();
@@ -659,17 +670,20 @@ mod tests {
     }
 
     #[test]
-    fn hooks_fire_daily_and_monthly() {
+    fn hooks_fire_daily_and_monthly_across_separate_files() {
+        // One hook per file, the way the base game ships them. Each file is a
+        // separate AST, so this also proves two scripts in one folder both run.
         let dir = mods_dir(
             "hooks",
             &[
                 ("base/world.ron", WORLD),
                 (
-                    "base/mod.rhai",
-                    r#"
-                    fn on_day(ctx) { ctx.chronicle("day " + ctx.day); }
-                    fn on_month(ctx) { ctx.chronicle("month " + ctx.month); }
-                    "#,
+                    "base/on_day.rhai",
+                    r#"fn on_day(ctx) { ctx.chronicle("day " + ctx.day); }"#,
+                ),
+                (
+                    "base/on_month.rhai",
+                    r#"fn on_month(ctx) { ctx.chronicle("month " + ctx.month); }"#,
                 ),
             ],
         );
@@ -696,11 +710,12 @@ mod tests {
             ],
         );
         let (lines, _) = play(&dir, 3);
-        assert!(lines.iter().any(|l| l.contains("`a-bad` failed")));
+        // Errors name the script, not just the mod it came from.
+        assert!(lines.iter().any(|l| l.contains("`a-bad/mod` failed")));
         assert_eq!(
             lines
                 .iter()
-                .filter(|l| l.contains("`b-throws` failed"))
+                .filter(|l| l.contains("`b-throws/mod` failed"))
                 .count(),
             1,
             "a throwing mod is dropped, not re-reported every day"

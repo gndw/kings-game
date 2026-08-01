@@ -64,17 +64,22 @@ rather than a silent no-op — a typo tells you about itself.
 
 ### Scripts
 
-A mod folder may also hold a `mod.rhai` ([Rhai](https://rhai.rs)). Define
-`on_day`, `on_month`, or neither:
+A mod folder may also hold any number of `*.rhai` files
+([Rhai](https://rhai.rs)). Define `on_day`, `on_month`, or neither:
 
 ```rhai
-// mods/plague/mod.rhai
+// mods/plague/on_month.rhai
 fn on_month(ctx) {
     if ctx.month == 6 && ctx.rand() < 0.05 {
         ctx.chronicle("A sickness takes the holdings.");
     }
 }
 ```
+
+As with the data files, the filename is documentation — each `*.rhai` compiles
+on its own, so split a mod however reads best. The base game gives each script
+the name of the hook it defines (`on_day.rhai`, `on_month.rhai`); one file with
+both hooks works exactly the same.
 
 What `ctx` can read:
 
@@ -113,9 +118,9 @@ seeded RNG, so a campaign still replays exactly from its seed.
 
 Writes are collected and applied after every mod's hooks have run, so the
 readable values don't shift under you mid-hook. The economy is itself just a
-script — `mods/base/mod.rhai` sets levies daily and collects taxes on the first
-of the month. Replace it by shipping a folder sorted after `base`, or delete it
-and nobody earns anything.
+script — `mods/base/on_day.rhai` sets levies and `mods/base/on_month.rhai`
+collects taxes on the first. Replace them by shipping a folder sorted after
+`base`, or delete them and nobody earns anything.
 
 A script that fails to compile or throws is reported in the chronicle and then
 disabled for the session. It never takes the game down with it.

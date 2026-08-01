@@ -1,18 +1,25 @@
-//! Map geometry loaded from RON data files at startup so it can be modded
-//! without a rebuild (see `mods/base/`). `crate::mods` does the loading and
-//! merging; the camera and drawing live in `crate::ui::map`.
+//! Everything the mods load: map geometry, the calendar, the clock speeds, and
+//! the houses, characters and kingdoms that populate it. All of it comes from
+//! RON data files at startup so it can be modded without a rebuild (see
+//! `mods/base/`).
+//!
+//! `crate::mods` does the loading and merging; the camera and drawing live in
+//! `crate::ui::map`.
 
 use crate::date::Calendar;
 use anyhow::{Result, bail};
 use rand::seq::IndexedRandom;
 use serde::Deserialize;
 
-/// The whole map after every mod file has been merged in: a rectangular
-/// `border` — the edge of the world — and the `lands` inside it.
-// Default so tests that only care about the clock can build a Ctx with an empty
-// map, and so merging can start from nothing.
+/// Everything, after every mod file has been merged in.
+///
+/// Named `Content` rather than `Map` because it long ago stopped being just
+/// geometry — it also carries the calendar, the speeds, and the characters
+/// whose gold and levy the sim writes back into.
+// Default so tests that only care about the clock can build a Ctx with empty
+// content, and so merging can start from nothing.
 #[derive(Debug)]
-pub struct Map {
+pub struct Content {
     pub border: Border,
     /// How long a month and a year are. Not geometry, but it arrives the same
     /// way every other mod section does.
@@ -30,9 +37,9 @@ pub struct Map {
 
 /// Hand-written rather than derived because an empty `speeds` list is not a
 /// usable game — a derived `Default` would hand out one silently.
-impl Default for Map {
+impl Default for Content {
     fn default() -> Self {
-        Map {
+        Content {
             border: Border::default(),
             calendar: Calendar::default(),
             speeds: vec![8, 16, 32, 64],
@@ -53,7 +60,7 @@ impl Default for Map {
 /// that silently does nothing.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct MapFile {
+pub struct ContentFile {
     #[serde(default)]
     pub border: Option<Border>,
     #[serde(default)]
@@ -84,10 +91,10 @@ fn merge_by_id<T>(dst: &mut Vec<T>, src: Vec<T>, id: impl for<'a> Fn(&'a T) -> &
     }
 }
 
-impl Map {
+impl Content {
     /// Fold one file in. An entry whose `id` already exists replaces the
     /// earlier one, anything else appends — that is the whole override rule.
-    pub fn merge(&mut self, file: MapFile) {
+    pub fn merge(&mut self, file: ContentFile) {
         if let Some(border) = file.border {
             self.border = border;
         }
@@ -132,7 +139,7 @@ impl Map {
     }
 }
 
-/// Map edge, `(x0, y0)` bottom-left to `(x1, y1)` top-right. `world.ron`.
+/// The edge of the world, `(x0, y0)` bottom-left to `(x1, y1)` top-right. `world.ron`.
 #[derive(Debug, Default, Deserialize)]
 pub struct Border {
     pub x0: f64,
@@ -147,11 +154,11 @@ pub struct Land {
     pub id: String,
     pub name: String,
     /// This land's own outline, a polyline of `(x, y)` points. Not to be
-    /// confused with `Map::border`, the edge of the world.
+    /// confused with `Content::border`, the edge of the world.
     pub borders: Vec<(f64, f64)>,
     /// Seat of power, somewhere inside `borders`. Drawn as a circle.
     pub holding: (f64, f64),
-    /// Ids into `Map::buildings` — what already stands in this land.
+    /// Ids into `Content::buildings` — what already stands in this land.
     #[serde(default)]
     pub building_ids: Vec<String>,
 }
@@ -195,7 +202,7 @@ pub struct Character {
 }
 
 /// What a realm's holdings yield — troops raised, coin earned, coin owed. The
-/// raw sums; see [`Map::kingdom_yield`]. All zeroes for a character who leads
+/// raw sums; see [`Content::kingdom_yield`]. All zeroes for a character who leads
 /// no kingdom, which is what keeps gold and levy to rulers.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Yield {
@@ -213,7 +220,7 @@ pub struct Kingdom {
     pub land_ids: Vec<String>,
 }
 
-impl Map {
+impl Content {
     /// The kingdom holding `land_id`, if any.
     pub fn kingdom_of(&self, land_id: &str) -> Option<&Kingdom> {
         self.kingdoms
@@ -267,7 +274,7 @@ impl Map {
 
 /// One data file. No cross-reference checking — a mod may legitimately point at
 /// a building some other mod declares, so that waits for [`validate`].
-pub fn parse_file(text: &str) -> Result<MapFile> {
+pub fn parse_file(text: &str) -> Result<ContentFile> {
     // IMPLICIT_SOME so an optional section is written `border: (...)` rather
     // than `border: Some((...))` — modders shouldn't have to know which
     // sections happen to be `Option` on the Rust side.
@@ -276,39 +283,40 @@ pub fn parse_file(text: &str) -> Result<MapFile> {
     Ok(opts.from_str(text)?)
 }
 
-/// A whole map from a single file, for tests and one-file mods. The game merges
+/// A whole Content from a single file, for tests and one-file mods. The game merges
 /// many instead, via `crate::mods::load`.
-pub fn parse(text: &str) -> Result<Map> {
-    let mut map = Map::default();
-    map.merge(parse_file(text)?);
-    validate(&map)?;
-    Ok(map)
+pub fn parse(text: &str) -> Result<Content> {
+    let mut content = Content::default();
+    content.merge(parse_file(text)?);
+    validate(&content)?;
+    Ok(content)
 }
 
-/// Check the map hangs together. Runs on the *merged* map, never on one file.
-pub fn validate(map: &Map) -> Result<()> {
-    let b = &map.border;
+/// Check the content hangs together. Runs on the *merged* result, never on
+/// one file.
+pub fn validate(content: &Content) -> Result<()> {
+    let b = &content.border;
     if b.x1 <= b.x0 || b.y1 <= b.y0 {
         bail!("map border must have x1 > x0 and y1 > y0");
     }
-    map.calendar.validate()?;
-    match map.speeds.as_slice() {
+    content.calendar.validate()?;
+    match content.speeds.as_slice() {
         [] => bail!("speeds needs at least one entry"),
         s if s.contains(&0) => bail!("a speed of 0 days/second would stop the clock"),
         _ => {}
     }
-    for s in &map.lands {
+    for s in &content.lands {
         if s.borders.len() < 2 {
             bail!("land `{}` needs at least 2 border points", s.id);
         }
         for b in &s.building_ids {
-            if !map.buildings.iter().any(|d| &d.id == b) {
+            if !content.buildings.iter().any(|d| &d.id == b) {
                 bail!("land `{}` references unknown building `{}`", s.id, b);
             }
         }
     }
-    for c in &map.characters {
-        if !map.houses.iter().any(|h| h.id == c.house_id) {
+    for c in &content.characters {
+        if !content.houses.iter().any(|h| h.id == c.house_id) {
             bail!(
                 "character `{}` references unknown house `{}`",
                 c.id,
@@ -316,8 +324,8 @@ pub fn validate(map: &Map) -> Result<()> {
             );
         }
     }
-    for k in &map.kingdoms {
-        if map.character(&k.leader_character_id).is_none() {
+    for k in &content.kingdoms {
+        if content.character(&k.leader_character_id).is_none() {
             bail!(
                 "kingdom `{}` references unknown character `{}`",
                 k.id,
@@ -325,7 +333,7 @@ pub fn validate(map: &Map) -> Result<()> {
             );
         }
         for l in &k.land_ids {
-            if !map.lands.iter().any(|s| &s.id == l) {
+            if !content.lands.iter().any(|s| &s.id == l) {
                 bail!("kingdom `{}` references unknown land `{}`", k.id, l);
             }
         }
@@ -341,8 +349,8 @@ pub fn validate(map: &Map) -> Result<()> {
 }
 
 /// `(x_min, x_max, y_min, y_max)` of the map edge, for the canvas bounds.
-pub fn bounds(map: &Map) -> (f64, f64, f64, f64) {
-    let b = &map.border;
+pub fn bounds(content: &Content) -> (f64, f64, f64, f64) {
+    let b = &content.border;
     (b.x0, b.x1, b.y0, b.y1)
 }
 
@@ -352,7 +360,7 @@ mod tests {
 
     #[test]
     fn parses_and_bounds() {
-        let map = parse(
+        let content = parse(
             r#"(
                 // a comment
                 border: (x0: -1, y0: 0, x1: 5, y1: 9),
@@ -363,14 +371,14 @@ mod tests {
             )"#,
         )
         .unwrap();
-        assert_eq!(map.lands.len(), 2);
-        assert_eq!(map.lands[0].id, "wessex");
+        assert_eq!(content.lands.len(), 2);
+        assert_eq!(content.lands[0].id, "wessex");
         assert_eq!(
-            map.lands[0].borders,
+            content.lands[0].borders,
             vec![(1.0, 2.0), (3.0, 4.0), (1.0, 2.0)]
         );
-        assert_eq!(bounds(&map), (-1.0, 5.0, 0.0, 9.0));
-        assert!(["wessex", "mercia"].contains(&map.random_land_id().unwrap().as_str()));
+        assert_eq!(bounds(&content), (-1.0, 5.0, 0.0, 9.0));
+        assert!(["wessex", "mercia"].contains(&content.random_land_id().unwrap().as_str()));
         assert!(parse(r#"(border: (x0: 5, y0: 0, x1: 5, y1: 9), lands: [])"#).is_err());
         assert!(
             parse(r#"(border: (x0: 0, y0: 0, x1: 1, y1: 1), lands: [(id: "l", name: "L", holding: (1, 2), borders: [(1, 2)])])"#)
@@ -392,20 +400,20 @@ mod tests {
             )"#
             )
         };
-        let map = parse(&text("l1")).unwrap();
-        assert_eq!(map.kingdom_of("l1").unwrap().id, "k1");
-        assert!(map.kingdom_of("nowhere").is_none());
-        assert_eq!(map.kingdom_led_by("c1").unwrap().seat_land_id, "l1");
-        assert!(map.kingdom_led_by("nobody").is_none());
-        assert_eq!(map.character("c1").unwrap().age, 40);
-        assert_eq!(map.house("h1").unwrap().name, "H1");
+        let content = parse(&text("l1")).unwrap();
+        assert_eq!(content.kingdom_of("l1").unwrap().id, "k1");
+        assert!(content.kingdom_of("nowhere").is_none());
+        assert_eq!(content.kingdom_led_by("c1").unwrap().seat_land_id, "l1");
+        assert!(content.kingdom_led_by("nobody").is_none());
+        assert_eq!(content.character("c1").unwrap().age, 40);
+        assert_eq!(content.house("h1").unwrap().name, "H1");
         // a seat outside the kingdom's own lands is a broken map
         assert!(parse(&text("l2")).is_err());
     }
 
     #[test]
     fn steps_between_lands() {
-        let map = parse(
+        let content = parse(
             r#"(
                 border: (x0: 0, y0: 0, x1: 10, y1: 10),
                 lands: [
@@ -417,12 +425,15 @@ mod tests {
             )"#,
         )
         .unwrap();
-        assert_eq!(map.step("mid", (1.0, 0.0)).as_deref(), Some("east"));
-        assert_eq!(map.step("east", (1.0, 0.0)).as_deref(), Some("far_east"));
-        assert_eq!(map.step("mid", (0.0, 1.0)).as_deref(), Some("north"));
-        assert_eq!(map.step("north", (0.0, 1.0)), None);
+        assert_eq!(content.step("mid", (1.0, 0.0)).as_deref(), Some("east"));
+        assert_eq!(
+            content.step("east", (1.0, 0.0)).as_deref(),
+            Some("far_east")
+        );
+        assert_eq!(content.step("mid", (0.0, 1.0)).as_deref(), Some("north"));
+        assert_eq!(content.step("north", (0.0, 1.0)), None);
         // Nothing west of mid, and an unknown land can't step.
-        assert_eq!(map.step("mid", (-1.0, 0.0)), None);
-        assert_eq!(map.step("nowhere", (1.0, 0.0)), None);
+        assert_eq!(content.step("mid", (-1.0, 0.0)), None);
+        assert_eq!(content.step("nowhere", (1.0, 0.0)), None);
     }
 }

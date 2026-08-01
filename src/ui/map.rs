@@ -1,10 +1,10 @@
 //! The camera framed on the map and the gizmo drawing of it. The map geometry
-//! itself lives in `crate::map`.
+//! itself lives in `crate::content`.
 
 use super::flag;
 use super::startup::RIGHT_BAR;
 use crate::app::Game;
-use crate::map::bounds;
+use crate::content::bounds;
 use bevy::camera::ScalingMode;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
@@ -13,7 +13,7 @@ const HOLDING_RADIUS: f32 = 4.0;
 
 /// Camera framed on the whole map.
 pub fn startup(mut commands: Commands, game: Res<Game>) {
-    let (x0, x1, y0, y1) = bounds(&game.ctx.map);
+    let (x0, x1, y0, y1) = bounds(&game.ctx.content);
     commands.spawn((
         Camera2d,
         // AutoMin keeps the whole map visible whatever the window shape, so the
@@ -42,7 +42,7 @@ pub fn update_input(keys: Res<ButtonInput<KeyCode>>, mut game: ResMut<Game>) {
     ] {
         if keys.just_pressed(key)
             && let Some(sel) = game.ctx.selected_region.clone()
-            && let Some(next) = game.ctx.map.step(&sel, dir)
+            && let Some(next) = game.ctx.content.step(&sel, dir)
         {
             game.ctx.selected_region = Some(next);
         }
@@ -51,7 +51,7 @@ pub fn update_input(keys: Res<ButtonInput<KeyCode>>, mut game: ResMut<Game>) {
 
 /// World border, land outlines, holdings, and the selected land's flag.
 pub fn update_draw(mut gizmos: Gizmos, game: Res<Game>, time: Res<Time>) {
-    let b = &game.ctx.map.border;
+    let b = &game.ctx.content.border;
     gizmos.rect_2d(
         Isometry2d::from_xy(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32),
         Vec2::new((b.x1 - b.x0) as f32, (b.y1 - b.y0) as f32),
@@ -62,13 +62,13 @@ pub fn update_draw(mut gizmos: Gizmos, game: Res<Game>, time: Res<Time>) {
     // Selected land last, so it draws over its neighbours.
     let order = game
         .ctx
-        .map
+        .content
         .lands
         .iter()
         .filter(|s| Some(s.id.as_str()) != sel)
         .chain(
             game.ctx
-                .map
+                .content
                 .lands
                 .iter()
                 .filter(|s| Some(s.id.as_str()) == sel),

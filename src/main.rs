@@ -14,7 +14,7 @@ fn main() -> Result<()> {
     // KINGS_MODS lets modders point at their own mods directory.
     let mods_dir = std::env::var("KINGS_MODS").unwrap_or_else(|_| "mods".into());
     let mods = kings_game::mods::load(Path::new(&mods_dir))?;
-    let game = Game::new(Ctx::new_game(seed, mods.map), mods.scripts);
+    let game = Game::new(Ctx::new_game(seed, mods.content), mods.scripts);
     let hz = f64::from(game.speed());
 
     App::new()

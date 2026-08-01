@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Result, bail};
 use bevy::prelude::*;
 use kings_game::app::{Game, input, tick};
 use kings_game::ctx::Ctx;
@@ -6,15 +6,39 @@ use kings_game::ui;
 use std::path::Path;
 
 fn main() -> Result<()> {
-    let seed = std::env::args()
-        .nth(1)
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(0xC0FFEE);
+    // ponytail: two options and one of them positional, so no arg-parsing
+    // crate. `--player-character-id=x` isn't accepted; add it if anyone asks.
+    let mut seed = None;
+    let mut player = None;
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--player-character-id" => match args.next() {
+                Some(id) => player = Some(id),
+                None => bail!("--player-character-id needs a character id"),
+            },
+            _ => seed = arg.parse().ok(),
+        }
+    }
+    let seed = seed.unwrap_or(0xC0FFEE);
+    // Required: nobody is the obvious character to be, and picking one for you
+    // would just be the old hardcoding somewhere less visible.
+    let Some(player) = player else {
+        bail!("usage: kings-game [seed] --player-character-id <id>");
+    };
 
     // KINGS_MODS lets modders point at their own mods directory.
     let mods_dir = std::env::var("KINGS_MODS").unwrap_or_else(|_| "mods".into());
     let mods = kings_game::mods::load(Path::new(&mods_dir))?;
-    let game = Game::new(Ctx::new_game(seed, mods.content, mods.state), mods.scripts);
+    // A typo'd id would otherwise start a game as nobody: no capital to open
+    // on and a blank resource bar. Say so instead.
+    if mods.content.character(&player).is_none() {
+        bail!("no character `{player}` in the loaded mods");
+    }
+    let game = Game::new(
+        Ctx::new_game(seed, mods.content, mods.state, &player),
+        mods.scripts,
+    );
     let hz = f64::from(game.speed());
 
     App::new()

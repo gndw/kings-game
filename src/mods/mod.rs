@@ -309,7 +309,7 @@ mod tests {
         assert_eq!(map.content.calendar.days_per_year(), 50);
 
         // ...and the sim actually runs on it.
-        let mut ctx = Ctx::new_game(1, map.content, map.state);
+        let mut ctx = Ctx::new_game(1, map.content, map.state, "char-tywin");
         for _ in 0..50 {
             ctx.tick();
         }

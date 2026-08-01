@@ -165,7 +165,7 @@ mod tests {
             ],
         );
         let mods = load(&dir).unwrap();
-        let mut ctx = Ctx::new_game(1, mods.content, mods.state);
+        let mut ctx = Ctx::new_game(1, mods.content, mods.state, "char-tywin");
         let mut scripts = mods.scripts;
 
         // Starting gold comes from the data; nothing has run yet.

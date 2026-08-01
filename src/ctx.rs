@@ -8,10 +8,6 @@ use crate::state::{CharacterState, State};
 use hecs::World;
 use std::sync::{Arc, Mutex};
 
-/// ponytail: hardcoded until there's a start screen to pick a character from.
-/// Move it into the mod data at that point, not before.
-const PLAYER_CHARACTER_ID: &str = "char-tywin";
-
 pub struct Ctx {
     pub world: World,
     /// Everything the mods define: geometry, calendar, the roster. Read-only.
@@ -33,8 +29,12 @@ pub struct Ctx {
 }
 
 impl Ctx {
-    pub fn new_game(seed: u64, content: Content, state: State) -> Self {
-        let player_character_id = PLAYER_CHARACTER_ID.to_string();
+    /// `player` is who to play as — `--player-character-id` on the command
+    /// line, with no default: there is no such thing as the obvious character
+    /// to be. It is only an id, though, and one the content doesn't have
+    /// simply leaves the player bar blank rather than failing here.
+    pub fn new_game(seed: u64, content: Content, state: State, player: &str) -> Self {
+        let player_character_id = player.to_string();
         let mut ctx = Ctx {
             // Open on the player's own capital. Falls back to any land at all
             // for content that doesn't happen to contain them — the empty
@@ -86,8 +86,9 @@ mod tests {
     use crate::content::parse;
     use crate::state::parse_file;
 
-    #[test]
-    fn a_new_game_opens_on_the_players_capital() {
+    /// Two rulers, whose kingdoms are listed the other way round from their
+    /// characters — picking the first of either would pass a weaker test.
+    fn two_realms() -> (Content, State) {
         let map = parse(
             r#"(
             border: (x0: 0, y0: 0, x1: 10, y1: 10),
@@ -103,8 +104,6 @@ mod tests {
         )"#,
         )
         .unwrap();
-        // The player's kingdom is listed second on purpose: picking the first
-        // one would pass a weaker test.
         let state = parse_file(
             r#"(kingdoms: [
                 (id: "k-other", leader_character_id: "other", seat_land_id: "l1", land_ids: ["l1"]),
@@ -112,11 +111,28 @@ mod tests {
             ])"#,
         )
         .unwrap();
-        let ctx = Ctx::new_game(1, map, state);
-        assert_eq!(ctx.player_character_id, PLAYER_CHARACTER_ID);
-        assert_eq!(ctx.selected_region.as_deref(), Some("l2"));
+        (map, state)
     }
 
+    /// Whoever `--player-character-id` names is who you are, and the game
+    /// opens on *their* capital — run the same world twice as two different
+    /// rulers and only the player changes.
+    #[test]
+    fn a_new_game_opens_on_the_players_capital() {
+        let (map, state) = two_realms();
+        let ctx = Ctx::new_game(1, map, state, "char-tywin");
+        assert_eq!(ctx.player_character_id, "char-tywin");
+        assert_eq!(ctx.selected_region.as_deref(), Some("l2"));
+
+        let (map, state) = two_realms();
+        let ctx = Ctx::new_game(1, map, state, "other");
+        assert_eq!(ctx.player_character_id, "other");
+        assert_eq!(ctx.selected_region.as_deref(), Some("l1"));
+    }
+
+    /// A player the content doesn't have is survivable, not fatal: `main`
+    /// refuses the id up front, but a mod that drops a character mid-campaign
+    /// must not take the map with it.
     #[test]
     fn a_map_without_the_player_still_selects_something() {
         let map = parse(
@@ -125,14 +141,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            Ctx::new_game(1, map, State::default())
+            Ctx::new_game(1, map, State::default(), "char-tywin")
                 .selected_region
                 .as_deref(),
             Some("only")
         );
         // ...and an empty map has nothing to select at all.
         assert!(
-            Ctx::new_game(1, Content::default(), State::default())
+            Ctx::new_game(1, Content::default(), State::default(), "char-tywin")
                 .selected_region
                 .is_none()
         );

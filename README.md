@@ -10,8 +10,13 @@ time. Bevy draws it, [hecs](https://docs.rs/hecs) simulates it.
 make play              # release build — the one you actually play
 make run               # debug build with dynamic linking
 make play SEED=1066    # a specific campaign
+make play PLAYER=char-jon   # play as someone else
 make check             # fmt + clippy + tests
 ```
+
+The binary takes the seed as its first argument and requires
+`--player-character-id <id>` — any character id the loaded mods declare. There
+is no default player; `make` supplies `char-tywin` unless you pass `PLAYER`.
 
 Needs a Rust toolchain (edition 2024) and X11 dev libraries. Bevy is built
 without wayland, audio, or 3d.

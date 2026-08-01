@@ -1,5 +1,7 @@
-// Runs on the first of every month — `on_month` only fires on day 1, so the
-// date check is already done.
+// Taxes are paid on the first of every month — `on_month` only fires on day 1,
+// so the date check is already done. The daily hook only publishes what the
+// next payout will be, for the UI to show; the sum is the same one either way,
+// so what the bar promises is what the month renders.
 //
 // Profit only, no upkeep: soldiers are free for now. A mod wanting realms that
 // can bankrupt themselves subtracts `ctx.building_gold_upkeep(building)` in the
@@ -7,6 +9,19 @@
 //
 // As in character_levy.rhai, the "only rulers earn" rule is the sum itself: a
 // character who leads no kingdom holds no buildings and so collects nothing.
+
+// Publish the profit before the first day, never the taxes: a new game opens
+// showing what the realm will render, not having already been paid for a month
+// nobody played.
+fn on_startup(ctx) {
+    on_day(ctx);
+}
+
+fn on_day(ctx) {
+    for id in ctx.characters {
+        ctx.set_character_gold_yield(id, realm_income(ctx, id));
+    }
+}
 
 fn on_month(ctx) {
     for id in ctx.characters {

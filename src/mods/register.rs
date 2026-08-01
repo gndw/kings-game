@@ -114,6 +114,11 @@ mod tests {
         (c.gold, c.levy)
     }
 
+    /// Their gold profit per month.
+    fn gold_yield(ctx: &Ctx, id: &str) -> u64 {
+        ctx.content.character(id).unwrap().gold_yield
+    }
+
     /// The base scripts do their own sums off this surface, so this covers both:
     /// break a registration and the economy stops adding up.
     #[test]
@@ -142,8 +147,16 @@ mod tests {
         assert_eq!(purse(&ctx, "char-tywin"), (0, 0));
         assert_eq!(purse(&ctx, "char-jon"), (100, 0));
 
+        // `on_startup` sums the holdings without paying anyone: the opening
+        // screen shows the levy and the income, and the treasuries are untouched.
+        scripts.run_startup(&mut ctx);
+        assert_eq!(purse(&ctx, "char-tywin"), (0, 50));
+        assert_eq!(gold_yield(&ctx, "char-tywin"), 6);
+        assert_eq!(purse(&ctx, "char-jon"), (100, 0), "no barracks, no taxes yet");
+        assert_eq!(gold_yield(&ctx, "char-lysa"), 0, "landless earns nothing");
+
         day(&mut ctx, &mut scripts);
-        assert_eq!(purse(&ctx, "char-tywin").1, 50, "levy set on the first day");
+        assert_eq!(purse(&ctx, "char-tywin").1, 50, "levy holds on the first day");
         assert_eq!(purse(&ctx, "char-jon").1, 0, "a realm with no barracks");
         assert_eq!(purse(&ctx, "char-tywin").0, 0, "no taxes until the 1st");
 

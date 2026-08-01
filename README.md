@@ -65,7 +65,11 @@ rather than a silent no-op — a typo tells you about itself.
 ### Scripts
 
 A mod folder may also hold any number of `*.rhai` files
-([Rhai](https://rhai.rs)). Define `on_day`, `on_month`, or neither:
+([Rhai](https://rhai.rs)). Define `on_startup`, `on_day`, `on_month`, any of
+them, or none. `on_startup` fires once before the first tick — that's where the
+base scripts publish a ruler's levy and monthly income, so a new game opens on
+real numbers instead of zeroes. `on_month` only ever fires on day 1, so it needs
+no date check of its own:
 
 ```rhai
 // mods/plague/on_month.rhai
@@ -103,6 +107,7 @@ What it can do:
 | `add_chronicle(line)` | write a line to the chronicle |
 | `add_character_gold(id, n)` | add to (or, negative, take from) a treasury |
 | `set_character_levy(id, n)` | set a character's raised troops |
+| `set_character_gold_yield(id, n)` | set a character's gold profit per month |
 
 Gold and levy belong to characters, not to the player — the player is just an
 id, and every ruler runs on the same rules. Who counts as a ruler is not a rule

@@ -1,7 +1,7 @@
 //! The simulation context: the hecs world plus everything that isn't an entity.
 //! The calendar it runs on lives in `crate::date`.
 
-use crate::content::{Character, Content, Yield};
+use crate::content::{Character, Content};
 use crate::date::Date;
 use crate::rng::SimRng;
 use hecs::World;
@@ -61,18 +61,6 @@ impl Ctx {
     /// The character the player is, if the map still contains them.
     pub fn player_character(&self) -> Option<&Character> {
         self.content.character(&self.player_character_id)
-    }
-
-    /// What a character's holdings add up to, for the UI to show. All zeroes
-    /// unless they lead a kingdom.
-    ///
-    /// Not what the sim runs on — the base scripts do their own sums, so this
-    /// agrees with them only as long as nobody mods the rule.
-    pub fn yield_for(&self, character_id: &str) -> Yield {
-        self.content
-            .kingdom_led_by(character_id)
-            .map(|k| self.content.kingdom_yield(k))
-            .unwrap_or_default()
     }
 
     /// One simulated day. Systems hook in here.

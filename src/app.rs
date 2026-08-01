@@ -18,13 +18,17 @@ pub struct Game {
 }
 
 impl Game {
+    /// Fires the mods' `on_startup` before handing the game back, so the first
+    /// frame draws a world the scripts have already had their say about.
     pub fn new(ctx: Ctx, scripts: Scripts) -> Self {
-        Game {
+        let mut game = Game {
             ctx,
             scripts,
             paused: true,
             speed_idx: 0,
-        }
+        };
+        game.scripts.run_startup(&mut game.ctx);
+        game
     }
 
     /// Simulated days per real second. Falls back to 1 rather than panicking on

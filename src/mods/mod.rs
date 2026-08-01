@@ -158,13 +158,26 @@ impl Scripts {
             .push(Effect::AddChronicle(format!("mod `{name}` failed: {msg}")));
     }
 
-    /// Run this tick's hooks, then fold whatever the scripts wrote into the
+    /// Run this tick's hooks.
+    pub fn run(&mut self, ctx: &mut Ctx) {
+        let due = hooks::due(&ctx.date);
+        self.call(ctx, &due);
+    }
+
+    /// Run `on_startup`, once, before the first tick. Whatever a script would
+    /// otherwise only get right on day 1 — a ruler's levy, their monthly
+    /// income — is already right on the opening screen.
+    pub fn run_startup(&mut self, ctx: &mut Ctx) {
+        self.call(ctx, &hooks::STARTUP);
+    }
+
+    /// Call `names` on every mod, then fold whatever the scripts wrote into the
     /// chronicle. A mod that throws is dropped for the rest of the session, so
     /// one bad script doesn't spam a line every single day.
-    pub fn run(&mut self, ctx: &mut Ctx) {
+    fn call(&mut self, ctx: &mut Ctx, names: &[&str]) {
         let sctx = ScriptCtx::build(ctx, self.out.clone());
 
-        let broken = hooks::call_due(&self.engine, &self.mods, &sctx, &ctx.date);
+        let broken = hooks::call(&self.engine, &self.mods, &sctx, names);
         for (_, name, msg) in &broken {
             self.fail(name, msg);
         }

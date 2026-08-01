@@ -37,12 +37,10 @@ pub fn update(game: Res<Game>, mut bar: Single<&mut Text, With<ResourceBar>>) {
         .content
         .house(&player.house_id)
         .map_or(player.house_id.as_str(), |h| h.name.as_str());
-    // Profit, not profit-minus-upkeep, because that is what the base script
-    // actually pays out each month. A mod that changes the rule should change
-    // this line too.
-    let income = game.ctx.yield_for(&player.id).gold_profit;
+    // The monthly profit the gold script last published — it owns the rule, so
+    // a mod that changes how income is figured changes this number with it.
     bar.0 = format!(
         "{} of {}     {} gold (+{}/mo)     {} levy",
-        player.name, house, player.gold, income, player.levy
+        player.name, house, player.gold, player.gold_yield, player.levy
     );
 }

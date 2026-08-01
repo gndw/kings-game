@@ -9,6 +9,12 @@
 // character who leads no kingdom matches no realm, so their sum stays zero. A
 // mod wanting landless retinues rewrites this loop and nothing else.
 
+// Same sum before the first day, so a new game opens on the levy its rulers
+// actually hold rather than on zero.
+fn on_startup(ctx) {
+    on_day(ctx);
+}
+
 fn on_day(ctx) {
     for id in ctx.characters {
         ctx.set_character_levy(id, realm_levy(ctx, id));

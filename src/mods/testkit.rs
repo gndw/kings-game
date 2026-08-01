@@ -35,6 +35,7 @@ pub(super) fn play(dir: &Path, days: u32) -> (Vec<String>, u64) {
     let mods = load(dir).unwrap();
     let mut ctx = Ctx::new_game(7, mods.content);
     let mut scripts = mods.scripts;
+    scripts.run_startup(&mut ctx);
     for _ in 0..days {
         day(&mut ctx, &mut scripts);
     }

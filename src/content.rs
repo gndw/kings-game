@@ -199,11 +199,15 @@ pub struct Character {
     /// holdings to raise them from.
     #[serde(default)]
     pub levy: u64,
+    /// Gold profit per month: what their holdings render at the next payout.
+    /// Written by the same script that pays it, so the two can't disagree.
+    #[serde(default)]
+    pub gold_yield: u64,
 }
 
-/// What a realm's holdings yield — troops raised, coin earned, coin owed. The
-/// raw sums; see [`Content::kingdom_yield`]. All zeroes for a character who leads
-/// no kingdom, which is what keeps gold and levy to rulers.
+/// What a realm's holdings yield — troops raised, coin earned, coin owed. All
+/// zeroes for a character who leads no kingdom, which is what keeps gold and
+/// levy to rulers.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct Yield {
     pub levy: u64,
@@ -237,25 +241,6 @@ impl Content {
 
     pub fn building(&self, id: &str) -> Option<&Building> {
         self.buildings.iter().find(|b| b.id == id)
-    }
-
-    /// What everything a kingdom holds adds up to. The raw sums only — whether
-    /// income is profit or profit-minus-upkeep is a mod script's call, not
-    /// this function's.
-    pub fn kingdom_yield(&self, kingdom: &Kingdom) -> Yield {
-        let mut total = Yield::default();
-        for land in self
-            .lands
-            .iter()
-            .filter(|l| kingdom.land_ids.contains(&l.id))
-        {
-            for b in land.building_ids.iter().filter_map(|id| self.building(id)) {
-                total.levy += u64::from(b.levy);
-                total.gold_profit += u64::from(b.gold_profit);
-                total.gold_upkeep += u64::from(b.gold_upkeep);
-            }
-        }
-        total
     }
 
     pub fn character(&self, id: &str) -> Option<&Character> {

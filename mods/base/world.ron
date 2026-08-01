@@ -3,6 +3,8 @@
 // Every `*.ron` in a mod folder is the same optional-everything file, so the
 // split across world/lands/buildings/... is documentation, not schema. A mod
 // can override just this by shipping a folder with one file exactly like it.
+// (`*.state.ron` is the exception — that's the mutable half; see
+// start.state.ron.)
 (
     border: (x0: 0, y0: 40, x1: 860, y1: 540),
 )

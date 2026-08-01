@@ -5,12 +5,13 @@ use kings_game::content::Content;
 use kings_game::ctx::Ctx;
 use kings_game::date::Date;
 use kings_game::rng::SimRng;
+use kings_game::state::State;
 use rand::RngExt;
 
 #[test]
 fn a_year_of_ticks_lands_on_the_same_day_next_year() {
     // An empty map, so the calendar is the default 30-day, 12-month one.
-    let mut ctx = Ctx::new_game(1, Content::default());
+    let mut ctx = Ctx::new_game(1, Content::default(), State::default());
     let days = ctx.content.calendar.days_per_year();
     let start = ctx.date;
     for _ in 0..days {

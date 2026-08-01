@@ -4,6 +4,7 @@
 use crate::content::{Character, Content};
 use crate::date::Date;
 use crate::rng::SimRng;
+use crate::state::{CharacterState, State};
 use hecs::World;
 use std::sync::{Arc, Mutex};
 
@@ -13,9 +14,11 @@ const PLAYER_CHARACTER_ID: &str = "char-tywin";
 
 pub struct Ctx {
     pub world: World,
-    /// Everything the mods loaded: geometry, calendar, and the characters the
-    /// sim writes gold and levy back into.
+    /// Everything the mods define: geometry, calendar, the roster. Read-only.
     pub content: Content,
+    /// Everything that changes and would go in a save file: realms, holdings,
+    /// and every character's gold and levy. Keyed by the ids in `content`.
+    pub state: State,
     pub date: Date,
     pub seed: u64,
     pub tick_count: u64,
@@ -30,18 +33,19 @@ pub struct Ctx {
 }
 
 impl Ctx {
-    pub fn new_game(seed: u64, content: Content) -> Self {
+    pub fn new_game(seed: u64, content: Content, state: State) -> Self {
         let player_character_id = PLAYER_CHARACTER_ID.to_string();
         let mut ctx = Ctx {
             // Open on the player's own capital. Falls back to any land at all
             // for content that doesn't happen to contain them — the empty
             // default the clock tests use, or a mod that dropped the character.
-            selected_region: content
+            selected_region: state
                 .kingdom_led_by(&player_character_id)
                 .map(|k| k.seat_land_id.clone())
                 .or_else(|| content.random_land_id()),
             player_character_id,
             content,
+            state,
             world: World::new(),
             date: Date {
                 year: 1066,
@@ -63,6 +67,12 @@ impl Ctx {
         self.content.character(&self.player_character_id)
     }
 
+    /// Their gold and levy. `reconcile` gives every defined character a state
+    /// entry, so this is only ever `None` for a character who isn't defined.
+    pub fn player_state(&self) -> Option<&CharacterState> {
+        self.state.character(&self.player_character_id)
+    }
+
     /// One simulated day. Systems hook in here.
     pub fn tick(&mut self) {
         self.tick_count += 1;
@@ -74,11 +84,10 @@ impl Ctx {
 mod tests {
     use super::*;
     use crate::content::parse;
+    use crate::state::parse_file;
 
     #[test]
     fn a_new_game_opens_on_the_players_capital() {
-        // The player's kingdom is listed second on purpose: picking the first
-        // one would pass a weaker test.
         let map = parse(
             r#"(
             border: (x0: 0, y0: 0, x1: 10, y1: 10),
@@ -88,17 +97,22 @@ mod tests {
             ],
             houses: [(id: "h1", name: "H1")],
             characters: [
-                (id: "other", name: "other", house_id: "h1", age: 40),
-                (id: "char-tywin", name: "tywin", house_id: "h1", age: 57),
-            ],
-            kingdoms: [
-                (id: "k-other", leader_character_id: "other", seat_land_id: "l1", land_ids: ["l1"]),
-                (id: "k-tywin", leader_character_id: "char-tywin", seat_land_id: "l2", land_ids: ["l2"]),
+                (id: "other", name: "other", house_id: "h1"),
+                (id: "char-tywin", name: "tywin", house_id: "h1"),
             ],
         )"#,
         )
         .unwrap();
-        let ctx = Ctx::new_game(1, map);
+        // The player's kingdom is listed second on purpose: picking the first
+        // one would pass a weaker test.
+        let state = parse_file(
+            r#"(kingdoms: [
+                (id: "k-other", leader_character_id: "other", seat_land_id: "l1", land_ids: ["l1"]),
+                (id: "k-tywin", leader_character_id: "char-tywin", seat_land_id: "l2", land_ids: ["l2"]),
+            ])"#,
+        )
+        .unwrap();
+        let ctx = Ctx::new_game(1, map, state);
         assert_eq!(ctx.player_character_id, PLAYER_CHARACTER_ID);
         assert_eq!(ctx.selected_region.as_deref(), Some("l2"));
     }
@@ -111,12 +125,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            Ctx::new_game(1, map).selected_region.as_deref(),
+            Ctx::new_game(1, map, State::default())
+                .selected_region
+                .as_deref(),
             Some("only")
         );
         // ...and an empty map has nothing to select at all.
         assert!(
-            Ctx::new_game(1, Content::default())
+            Ctx::new_game(1, Content::default(), State::default())
                 .selected_region
                 .is_none()
         );

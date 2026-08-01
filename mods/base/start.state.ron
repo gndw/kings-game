@@ -1,0 +1,58 @@
+// Where the world starts. Everything here changes in play — who rules what,
+// what stands in each land, what's in a treasury — so this is the half that a
+// save file will hold, and the half the sim writes back into.
+//
+// Any `*.state.ron` in a mod folder is one of these. The other `*.ron` files
+// are definitions: read-only data, only ever added to.
+//
+// Entries are an overlay keyed by id. Anything the content defines and this
+// file doesn't mention gets a default, and anything here that names content
+// nobody declares is dropped with a line in the chronicle. That's what lets an
+// old save load against a game that has grown since — new lands and new
+// characters simply start where their own mod says they do.
+(
+    kingdoms: [
+        (id: "kingdom-west",   leader_character_id: "char-leyton", seat_land_id: "land-2",
+         land_ids: ["land-1", "land-2"]),
+        (id: "kingdom-centre", leader_character_id: "char-tywin",  seat_land_id: "land-3",
+         land_ids: ["land-3", "land-4"]),
+        (id: "kingdom-east",   leader_character_id: "char-jon",    seat_land_id: "land-5",
+         land_ids: ["land-5", "land-6"]),
+    ],
+    lands: [
+        (id: "land-1", building_ids: [
+            "building-tannery", "building-wharf", "building-vineyard",
+            "building-watchtower",
+        ]),
+        (id: "land-2", building_ids: [
+            "building-mill", "building-smithy", "building-vineyard",
+            "building-archery-range",
+        ]),
+        (id: "land-3", building_ids: [
+            "building-guildhall", "building-market",
+            "building-barracks", "building-stables",
+        ]),
+        (id: "land-4", building_ids: [
+            "building-brewery", "building-smithy",
+            "building-barracks", "building-training-yard",
+        ]),
+        (id: "land-5", building_ids: [
+            "building-quarry", "building-tannery", "building-wharf",
+            "building-stables",
+        ]),
+        (id: "land-6", building_ids: [
+            "building-lumber-camp", "building-market",
+            "building-archery-range", "building-watchtower",
+        ]),
+    ],
+    // Levy and gold_yield are left out on purpose: the base scripts recompute
+    // both in `on_startup`, so writing them here would only ever be wrong.
+    characters: [
+        (id: "char-leyton", age: 61, gold: 42),
+        (id: "char-alerie", age: 34, gold: 8),
+        (id: "char-tywin",  age: 57, gold: 35),
+        (id: "char-jaime",  age: 29, gold: 13),
+        (id: "char-jon",    age: 66, gold: 27),
+        (id: "char-lysa",   age: 32, gold: 6),
+    ],
+)

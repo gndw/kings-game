@@ -38,7 +38,7 @@ pub fn update(game: Res<Game>, mut legend: Single<&mut Text, With<Legend>>) {
     legend.0 = match sel {
         Some(s) => {
             let mut out = format!("id:{}\nname:{}", s.id, s.name);
-            if let Some(k) = game.ctx.content.kingdom_of(&s.id) {
+            if let Some(k) = game.ctx.state.kingdom_of(&s.id) {
                 out.push_str(&format!("\nkingdom:{}", k.id));
                 if k.seat_land_id == s.id {
                     out.push_str(" (seat)");
@@ -49,15 +49,13 @@ pub fn update(game: Res<Game>, mut legend: Single<&mut Text, With<Legend>>) {
                         .content
                         .house(&c.house_id)
                         .map_or(c.house_id.as_str(), |h| h.name.as_str());
-                    out.push_str(&format!("\nruler:{} of {} ({})", c.name, house, c.age));
+                    let age = game.ctx.state.character(&c.id).map_or(0, |s| s.age);
+                    out.push_str(&format!("\nruler:{} of {} ({age})", c.name, house));
                 }
             }
+            let built = game.ctx.state.buildings_in(&s.id);
             let (mut gold, mut levy) = (0i64, 0u64);
-            for b in s
-                .building_ids
-                .iter()
-                .filter_map(|id| game.ctx.content.buildings.iter().find(|b| &b.id == id))
-            {
+            for b in built.iter().filter_map(|id| game.ctx.content.building(id)) {
                 gold += b.gold_profit as i64 - b.gold_upkeep as i64;
                 levy += b.levy as u64;
                 // ponytail: only the non-zero numbers, so a line reads
@@ -73,7 +71,7 @@ pub fn update(game: Res<Game>, mut legend: Single<&mut Text, With<Legend>>) {
                     out.push_str(&format!(" {} levy", b.levy));
                 }
             }
-            if !s.building_ids.is_empty() {
+            if !built.is_empty() {
                 out.push_str(&format!("\ntotal: {gold:+}g {levy} levy"));
             }
             out

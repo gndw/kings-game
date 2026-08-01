@@ -98,7 +98,7 @@ pub fn update_draw(mut gizmos: Gizmos, game: Res<Game>, time: Res<Time>) {
     let sel = game.ctx.selected_region.as_deref();
     let own: &[String] = game
         .ctx
-        .content
+        .state
         .kingdom_led_by(&game.ctx.player_character_id)
         .map_or(&[], |k| k.land_ids.as_slice());
     // Selected land last, so it draws over its neighbours.
@@ -123,7 +123,11 @@ pub fn update_draw(mut gizmos: Gizmos, game: Res<Game>, time: Res<Time>) {
             (css::WHITE, Srgba::rgb(0.59, 0.29, 0.0))
         };
         if own.contains(&land.id) {
-            fill(&mut gizmos, &land.borders, css::GREEN.with_alpha(0.1).into());
+            fill(
+                &mut gizmos,
+                &land.borders,
+                css::GREEN.with_alpha(0.1).into(),
+            );
         }
         gizmos.linestrip_2d(
             land.borders

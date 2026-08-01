@@ -43,7 +43,7 @@ impl ScriptCtx {
             tick: ctx.tick_count as i64,
             land: ctx.selected_region.clone().unwrap_or_default(),
             player: ctx.player_character_id.clone(),
-            realms: Arc::new(RealmView::build(&ctx.content)),
+            realms: Arc::new(RealmView::build(&ctx.content, &ctx.state)),
             rng: ctx.rng.clone(),
             out,
         }

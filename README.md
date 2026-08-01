@@ -34,8 +34,20 @@ one wins; point `KINGS_MODS` somewhere else to use a different set entirely.
 Every `*.ron` file in a mod folder is [RON](https://docs.rs/ron) with the same
 optional-everything shape, so the filename is documentation and nothing more —
 the base game splits itself across `world.ron`, `calendar.ron`, `lands.ron`,
-`buildings.ron`, `houses.ron`, `characters.ron` and `kingdoms.ron` purely for
-readability.
+`buildings.ron`, `houses.ron` and `characters.ron` purely for readability.
+
+Those files are **definitions**: read-only data the game only ever gains more
+of. What *changes* — who rules what, what stands in each land, every
+character's age and gold — is **state**, and lives in any `*.state.ron`
+(`mods/base/start.state.ron` is where the world starts). That's the split a
+save file runs along: a save is state, so it can be loaded against a game that
+has grown new lands, buildings and characters since it was written.
+
+State entries are an overlay keyed by id. Content the save never mentions
+starts wherever its own mod says; state naming content that no longer exists is
+dropped with a line in the chronicle rather than refused. Definitions are held
+to a stricter standard — a dangling reference there stops the game, because it
+means a mod is broken rather than merely old.
 
 The calendar and the clock speeds are data too. Every month is the same length
 and there are no leap days, so a year is just the two numbers multiplied.
@@ -115,11 +127,12 @@ the engine knows: the base scripts walk `kingdoms`, keep the ones whose leader
 is the character in hand, and sum the buildings. Lead no kingdom and the sum is
 zero. Change that loop and you change the rule.
 
-Starting values live in the data, so a mod can hand someone a treasury:
+Starting values are state, so a mod hands someone a treasury by overriding
+their entry — no need to redeclare who they are:
 
 ```ron
-// mods/rich-arryn/characters.ron
-(characters: [(id: "char-jon", name: "jon", house_id: "house-arryn", age: 66, gold: 500)])
+// mods/rich-arryn/start.state.ron
+(characters: [(id: "char-jon", age: 66, gold: 500)])
 ```
 
 Use `rand()` rather than rolling your own randomness — it draws from the game's

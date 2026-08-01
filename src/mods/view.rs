@@ -3,6 +3,7 @@
 //! can't shift under a hook as effects pile up.
 
 use crate::content::{Content, Yield};
+use crate::state::State;
 use std::collections::HashMap;
 
 /// Everything scripts may read about one character this tick.
@@ -34,9 +35,9 @@ pub(super) struct RealmView {
 }
 
 impl RealmView {
-    pub(super) fn build(content: &Content) -> Self {
+    pub(super) fn build(content: &Content, state: &State) -> Self {
         RealmView {
-            kingdoms: content
+            kingdoms: state
                 .kingdoms
                 .iter()
                 .map(|k| KingdomView {
@@ -45,7 +46,7 @@ impl RealmView {
                     land_ids: k.land_ids.clone(),
                 })
                 .collect(),
-            buildings: content
+            buildings: state
                 .lands
                 .iter()
                 .map(|l| (l.id.clone(), l.building_ids.clone()))
@@ -64,7 +65,7 @@ impl RealmView {
                     )
                 })
                 .collect(),
-            characters: CharacterMap::build(content),
+            characters: CharacterMap::build(state),
         }
     }
 
@@ -87,14 +88,15 @@ impl RealmView {
 #[derive(Default)]
 pub(super) struct CharacterMap {
     /// Character ids in map order, so scripts iterate deterministically.
+    /// `state::reconcile` puts state in content order, so that's map order.
     pub(super) ids: Vec<String>,
     by_id: HashMap<String, CharacterView>,
 }
 
 impl CharacterMap {
-    pub(super) fn build(content: &Content) -> Self {
+    pub(super) fn build(state: &State) -> Self {
         let mut characters = CharacterMap::default();
-        for c in &content.characters {
+        for c in &state.characters {
             characters.ids.push(c.id.clone());
             characters.by_id.insert(
                 c.id.clone(),

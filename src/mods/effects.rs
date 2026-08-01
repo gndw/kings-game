@@ -40,9 +40,12 @@ pub(super) fn register(engine: &mut Engine) {
                 c.push(Effect::SetCharacterGoldYield(id.to_string(), n))
             },
         )
-        .register_fn("add_chronicle", |c: &mut ScriptCtx, line: ImmutableString| {
-            c.push(Effect::AddChronicle(line.to_string()))
-        });
+        .register_fn(
+            "add_chronicle",
+            |c: &mut ScriptCtx, line: ImmutableString| {
+                c.push(Effect::AddChronicle(line.to_string()))
+            },
+        );
 }
 
 /// Empty the queue into `ctx`, in the order the scripts filled it.
@@ -54,17 +57,17 @@ pub(super) fn drain(out: &Mutex<Vec<Effect>>, ctx: &mut Ctx) {
         match effect {
             Effect::AddChronicle(line) => ctx.chronicles.push(line),
             Effect::AddCharacterGold(id, n) => {
-                if let Some(c) = ctx.content.character_mut(&id) {
+                if let Some(c) = ctx.state.character_mut(&id) {
                     c.gold = c.gold.saturating_add(n);
                 }
             }
             Effect::SetCharacterLevy(id, n) => {
-                if let Some(c) = ctx.content.character_mut(&id) {
+                if let Some(c) = ctx.state.character_mut(&id) {
                     c.levy = n;
                 }
             }
             Effect::SetCharacterGoldYield(id, n) => {
-                if let Some(c) = ctx.content.character_mut(&id) {
+                if let Some(c) = ctx.state.character_mut(&id) {
                     c.gold_yield = n;
                 }
             }

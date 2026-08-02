@@ -1,5 +1,5 @@
-//! Everything the mods *define*: map geometry, the calendar, the clock speeds,
-//! and the houses, characters and buildings that populate the world. All of it
+//! Everything the mods *define*: map geometry, the calendar, and the houses,
+//! characters and buildings that populate the world. All of it
 //! comes from RON data files at startup so it can be modded without a rebuild
 //! (see `mods/base/`).
 //!
@@ -18,17 +18,14 @@ use serde::Deserialize;
 /// Everything defined, after every mod file has been merged in.
 ///
 /// Named `Content` rather than `Map` because it long ago stopped being just
-/// geometry — it also carries the calendar, the speeds, and the roster of
-/// characters the sim's state hangs off.
+/// geometry — it also carries the calendar and the roster of characters the
+/// sim's state hangs off.
 #[derive(Debug)]
 pub struct Content {
     pub border: Border,
     /// How long a month and a year are. Not geometry, but it arrives the same
     /// way every other mod section does.
     pub calendar: Calendar,
-    /// The simulated-days-per-real-second settings `+` and `-` step through,
-    /// slowest first. The game starts on the first one.
-    pub speeds: Vec<u32>,
     /// ID-keyed for O(1) lookup; insertion-ordered for deterministic iteration.
     pub lands: IndexMap<String, Land>,
     pub buildings: IndexMap<String, Building>,
@@ -43,7 +40,6 @@ impl Default for Content {
         Content {
             border: Border::default(),
             calendar: Calendar::default(),
-            speeds: vec![8, 16, 32, 64],
             lands: IndexMap::new(),
             buildings: IndexMap::new(),
             houses: IndexMap::new(),
@@ -68,9 +64,6 @@ pub struct ContentFile {
     pub border: Option<Border>,
     #[serde(default)]
     pub calendar: Option<Calendar>,
-    /// Replaced wholesale, not merged — a speed has no id to match on.
-    #[serde(default)]
-    pub speeds: Option<Vec<u32>>,
     #[serde(default)]
     pub lands: Vec<Land>,
     #[serde(default)]
@@ -92,9 +85,6 @@ impl Content {
         }
         if let Some(calendar) = file.calendar {
             self.calendar = calendar;
-        }
-        if let Some(speeds) = file.speeds {
-            self.speeds = speeds;
         }
         for land in file.lands {
             self.lands.insert(land.id.clone(), land);
@@ -208,11 +198,6 @@ pub fn validate(content: &Content) -> Result<()> {
         bail!("map border must have x1 > x0 and y1 > y0");
     }
     content.calendar.validate()?;
-    match content.speeds.as_slice() {
-        [] => bail!("speeds needs at least one entry"),
-        s if s.contains(&0) => bail!("a speed of 0 days/second would stop the clock"),
-        _ => {}
-    }
     for (_, s) in &content.lands {
         if s.borders.len() < 2 {
             bail!("land `{}` needs at least 2 border points", s.id);

@@ -1,6 +1,6 @@
 use anyhow::{Result, bail};
 use bevy::prelude::*;
-use kings_game::app::{Game, input};
+use kings_game::app::{Game, input, speed};
 use kings_game::ctx::Ctx;
 use kings_game::resources::date::Date;
 use kings_game::ui;
@@ -37,14 +37,14 @@ fn main() -> Result<()> {
     if mods.content.character(&player).is_none() {
         bail!("no character `{player}` in the loaded mods");
     }
-    let calendar = mods.content.calendar;
+    let calendar = mods.content.calendar.clone();
     let game = Game::new(Ctx::new_game(
         seed,
         mods.content,
         mods.state,
         &player,
     ));
-    let hz = f64::from(game.speed());
+    let hz = f64::from(speed(&calendar.speeds, game.speed_idx));
 
     App::new()
         .add_plugins(

@@ -36,7 +36,7 @@ pub fn advance(date: &mut Date, calendar: &Calendar) {
 mod tests {
     use super::*;
 
-    fn run(cal: Calendar, days: u32) -> Date {
+    fn run(cal: &Calendar, days: u32) -> Date {
         let mut date = Date {
             year: 1,
             month: 1,
@@ -44,7 +44,7 @@ mod tests {
             tick_count: 0,
         };
         for _ in 0..days {
-            advance(&mut date, &cal);
+            advance(&mut date, cal);
         }
         date
     }
@@ -56,21 +56,24 @@ mod tests {
             Calendar {
                 days_per_month: 10,
                 months_per_year: 5,
+                ..Default::default()
             },
             // The degenerate-but-legal ends of the range.
             Calendar {
                 days_per_month: 1,
                 months_per_year: 1,
+                ..Default::default()
             },
             Calendar {
                 days_per_month: 255,
                 months_per_year: 1,
+                ..Default::default()
             },
         ] {
-            let start = run(cal, 0);
-            assert_eq!(run(cal, cal.days_per_year()), Date { year: 2, ..start });
+            let start = run(&cal, 0);
+            assert_eq!(run(&cal, cal.days_per_year()), Date { year: 2, ..start });
             // One day short is still the last day of the old year.
-            let eve = run(cal, cal.days_per_year() - 1);
+            let eve = run(&cal, cal.days_per_year() - 1);
             assert_eq!(eve.year, 1);
             assert_eq!(eve.month, cal.months_per_year);
             assert_eq!(eve.day, cal.days_per_month);

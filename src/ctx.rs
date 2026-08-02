@@ -4,7 +4,7 @@
 use crate::content::{Border, Content};
 use crate::resources::date::Date;
 use crate::ecs::{
-    self, BuildingData, Built, Character, CharacterData, CharacterState, Globals, House, HouseOf,
+    self, BuildingData, Built, Character, CharacterData, CharacterState, House, HouseOf,
     EntityIndex, Holds, KingdomData, Land, LandData, LedBy, PlayerSummary, Registry, Seat, StringId,
 };
 use crate::rng::SimRng;
@@ -17,8 +17,6 @@ pub struct Ctx {
     pub world: World,
     /// The edge of the world. Content, but not entity-shaped.
     pub border: Border,
-    /// Simulated days per real second. Content, but not entity-shaped.
-    pub speeds: Vec<u32>,
     pub seed: u64,
     pub rng: Arc<Mutex<SimRng>>,
     pub chronicles: Vec<String>,
@@ -44,7 +42,7 @@ impl Ctx {
         let rng = Arc::new(Mutex::new(SimRng::new(seed)));
         let mut world = World::new();
         world.insert_resource(Registry::new());
-        let Globals { border, speeds } = ecs::populate(&mut world, content, state);
+        let border = ecs::populate(&mut world, content, state);
         // Open on the player's own capital. Falls back to any land at all for
         // content that doesn't happen to contain them — the empty default the
         // clock tests use, or a mod that dropped the character.
@@ -53,7 +51,6 @@ impl Ctx {
         let mut ctx = Ctx {
             world,
             border,
-            speeds,
             seed,
             rng,
             chronicles: Vec::new(),

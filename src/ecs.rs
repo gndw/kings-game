@@ -218,18 +218,8 @@ pub struct PlayerSummary {
 // Building the world from content + state
 // ===========================================================================
 
-/// The non-entity globals peeled off [`Content`] before it is consumed: the
-/// world border and the clock speeds. The only pieces of content that are not
-/// entity-shaped. (The calendar is an ECS resource, seeded from `calendar.ron`
-/// in `main`.)
-#[derive(Debug)]
-pub struct Globals {
-    pub border: Border,
-    pub speeds: Vec<u32>,
-}
-
 /// Build the entity world from merged, reconciled content and state, and return
-/// the globals. Called once from
+/// the world border. Called once from
 /// [`Ctx::new_game`](crate::ctx::Ctx::new_game); afterwards content and state
 /// are gone.
 ///
@@ -239,7 +229,7 @@ pub struct Globals {
 /// that already exists. [`reconcile`](crate::state::reconcile) has already pruned
 /// every dangling reference, so the `filter_map`s here only guard against logic
 /// errors, not bad data.
-pub fn populate(world: &mut World, content: Content, mut state: State) -> Globals {
+pub fn populate(world: &mut World, content: Content, mut state: State) -> Border {
     let mut idx = EntityIndex::default();
 
     // Houses.
@@ -342,10 +332,7 @@ pub fn populate(world: &mut World, content: Content, mut state: State) -> Global
 
     world.insert_resource(idx);
 
-    Globals {
-        border: content.border,
-        speeds: content.speeds,
-    }
+    content.border
 }
 
 /// A random land's id, or `None` when there are no lands. Drawn from the seeded

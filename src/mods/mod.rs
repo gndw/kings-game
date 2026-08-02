@@ -201,23 +201,23 @@ mod tests {
         let plain = load(&mods_dir("spd-default", &[("base/world.ron", WORLD)]))
             .unwrap()
             .content;
-        assert_eq!(plain.speeds, vec![8, 16, 32, 64]);
+        assert_eq!(plain.calendar.speeds, vec![8, 16, 32, 64]);
 
         // Replaced wholesale, not appended to.
         let map = load(&mods_dir(
             "spd-slow",
             &[
                 ("base/world.ron", WORLD),
-                ("z-slow/calendar.ron", "(speeds: [1, 2])"),
+                ("z-slow/calendar.ron", "(calendar: (speeds: [1, 2]))"),
             ],
         ))
         .unwrap()
         .content;
-        assert_eq!(map.speeds, vec![1, 2]);
+        assert_eq!(map.calendar.speeds, vec![1, 2]);
 
         // An empty list leaves nothing to run at, and a zero would stop the
         // clock dead — both are refused at load rather than at the keyboard.
-        for bad in ["(speeds: [])", "(speeds: [8, 0])"] {
+        for bad in ["(calendar: (speeds: []))", "(calendar: (speeds: [8, 0]))"] {
             let dir = mods_dir("spd-bad", &[("base/world.ron", WORLD), ("base/s.ron", bad)]);
             assert!(load(&dir).is_err(), "{bad} must not be accepted");
         }

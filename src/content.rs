@@ -10,10 +10,9 @@
 //! `crate::mods` does the loading and merging; the camera and drawing live in
 //! `crate::ui::map`.
 
-use crate::date::Calendar;
+use crate::resources::calendar::Calendar;
 use anyhow::{Result, bail};
 use indexmap::IndexMap;
-use rand::seq::IteratorRandom;
 use serde::Deserialize;
 
 /// Everything defined, after every mod file has been merged in.
@@ -109,33 +108,6 @@ impl Content {
         for character in file.characters {
             self.characters.insert(character.id.clone(), character);
         }
-    }
-
-    /// Get random land id, or None if there are no lands.
-    pub fn random_land_id(&self) -> Option<String> {
-        self.lands.keys().choose(&mut rand::rng()).cloned()
-    }
-
-    /// The land to move the selection to when stepping from `from` along `dir`
-    /// (a unit-ish direction). Picks the nearest holding that lies in that
-    /// direction, penalising sideways offset so "up" prefers straight up.
-    ///
-    /// ponytail: distance heuristic over holdings, no adjacency graph. Add real
-    /// borders-touch adjacency in lands.ron if the picks feel wrong on odd shapes.
-    pub fn step(&self, from: &str, dir: (f64, f64)) -> Option<String> {
-        let origin = self.lands.get(from)?.holding;
-        self.lands
-            .iter()
-            .filter(|(id, _)| id.as_str() != from)
-            .filter_map(|(id, s)| {
-                let (dx, dy) = (s.holding.0 - origin.0, s.holding.1 - origin.1);
-                let along = dx * dir.0 + dy * dir.1;
-                // Perpendicular component: how far off-axis the candidate sits.
-                let perp = (dx * dir.1 - dy * dir.0).abs();
-                (along > perp).then(|| (along + perp * 2.0, id.clone()))
-            })
-            .min_by(|a, b| a.0.total_cmp(&b.0))
-            .map(|(_, id)| id)
     }
 }
 
@@ -259,9 +231,8 @@ pub fn validate(content: &Content) -> Result<()> {
 }
 
 /// `(x_min, x_max, y_min, y_max)` of the map edge, for the canvas bounds.
-pub fn bounds(content: &Content) -> (f64, f64, f64, f64) {
-    let b = &content.border;
-    (b.x0, b.x1, b.y0, b.y1)
+pub fn bounds(border: &Border) -> (f64, f64, f64, f64) {
+    (border.x0, border.x1, border.y0, border.y1)
 }
 
 #[cfg(test)]
@@ -287,8 +258,7 @@ mod tests {
             content.lands[0].borders,
             vec![(1.0, 2.0), (3.0, 4.0), (1.0, 2.0)]
         );
-        assert_eq!(bounds(&content), (-1.0, 5.0, 0.0, 9.0));
-        assert!(["wessex", "mercia"].contains(&content.random_land_id().unwrap().as_str()));
+        assert_eq!(bounds(&content.border), (-1.0, 5.0, 0.0, 9.0));
         assert!(parse(r#"(border: (x0: 5, y0: 0, x1: 5, y1: 9), lands: [])"#).is_err());
         assert!(
             parse(r#"(border: (x0: 0, y0: 0, x1: 1, y1: 1), lands: [(id: "l", name: "L", holding: (1, 2), borders: [(1, 2)])])"#)
@@ -319,29 +289,4 @@ mod tests {
         );
     }
 
-    #[test]
-    fn steps_between_lands() {
-        let content = parse(
-            r#"(
-                border: (x0: 0, y0: 0, x1: 10, y1: 10),
-                lands: [
-                    (id: "mid", name: "mid", holding: (5, 5), borders: [(5, 5), (5, 5)]),
-                    (id: "east", name: "east", holding: (8, 5), borders: [(8, 5), (8, 5)]),
-                    (id: "far_east", name: "far_east", holding: (9, 5), borders: [(9, 5), (9, 5)]),
-                    (id: "north", name: "north", holding: (5, 9), borders: [(5, 9), (5, 9)]),
-                ],
-            )"#,
-        )
-        .unwrap();
-        assert_eq!(content.step("mid", (1.0, 0.0)).as_deref(), Some("east"));
-        assert_eq!(
-            content.step("east", (1.0, 0.0)).as_deref(),
-            Some("far_east")
-        );
-        assert_eq!(content.step("mid", (0.0, 1.0)).as_deref(), Some("north"));
-        assert_eq!(content.step("north", (0.0, 1.0)), None);
-        // Nothing west of mid, and an unknown land can't step.
-        assert_eq!(content.step("mid", (-1.0, 0.0)), None);
-        assert_eq!(content.step("nowhere", (1.0, 0.0)), None);
-    }
 }

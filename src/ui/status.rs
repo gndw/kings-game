@@ -3,6 +3,7 @@
 use super::FONT;
 use super::chronicle::Chronicle;
 use crate::app::Game;
+use crate::resources::date::Date;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 
@@ -32,6 +33,7 @@ pub(super) fn spawn(root: &mut ChildSpawnerCommands, panel: Color) {
 #[allow(clippy::type_complexity)]
 pub fn update(
     game: Res<Game>,
+    date: Res<Date>,
     mut status: Single<(&mut Text, &mut TextColor), (With<Status>, Without<Chronicle>)>,
     mut status_rest: Single<&mut TextSpan, With<Status>>,
 ) {
@@ -44,5 +46,5 @@ pub fn update(
     text.0 = state.to_string();
     text_colour.0 = colour.into();
     // Gold and levy live in the resource bar along the top.
-    status_rest.0 = format!("  {}  {} days/s", game.ctx.date, game.speed());
+    status_rest.0 = format!("  {}  {} days/s", *date, game.speed());
 }

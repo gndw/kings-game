@@ -1,12 +1,7 @@
 //! Fixtures shared by the tests in this module's files. Test-only.
 
-use super::{Scripts, load};
-use crate::ctx::Ctx;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-/// Who [`play`] plays as. Most of these fixtures have no characters at all, so
-/// it only has to be *an* id.
-pub(super) const PLAYER: &str = "char-tywin";
 pub(super) const WORLD: &str = "(border: (x0: 0, y0: 0, x1: 10, y1: 10))";
 pub(super) const LAND_1: &str = r#"(lands: [(id: "land-1", name: "first", holding: (1, 1),
     borders: [(1, 1), (2, 2)])])"#;
@@ -26,24 +21,4 @@ pub(super) fn mods_dir(tag: &str, files: &[(&str, &str)]) -> PathBuf {
         std::fs::write(full, text).unwrap();
     }
     root
-}
-
-/// One simulated day and the hooks for it.
-pub(super) fn day(ctx: &mut Ctx, scripts: &mut Scripts) {
-    ctx.tick();
-    scripts.run(ctx);
-}
-
-/// Run `days` ticks over a mods dir and return the resulting chronicle, minus
-/// the opening line `Ctx::new_game` writes, plus the RNG's draw count.
-pub(super) fn play(dir: &Path, days: u32) -> (Vec<String>, u64) {
-    let mods = load(dir).unwrap();
-    let mut ctx = Ctx::new_game(7, mods.content, mods.state, PLAYER);
-    let mut scripts = mods.scripts;
-    scripts.run_startup(&mut ctx);
-    for _ in 0..days {
-        day(&mut ctx, &mut scripts);
-    }
-    let draws = ctx.rng.lock().unwrap().draws;
-    (ctx.chronicles.split_off(1), draws)
 }

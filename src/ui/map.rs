@@ -1,5 +1,5 @@
 //! The camera framed on the map and the gizmo drawing of it. The map geometry
-//! itself lives in `crate::content`.
+//! itself lives in the entity world; see `crate::ecs::Land`.
 
 use super::flag;
 use super::startup::RIGHT_BAR;
@@ -50,7 +50,7 @@ fn fill(gizmos: &mut Gizmos, poly: &[(f64, f64)], color: Color) {
 
 /// Camera framed on the whole map.
 pub fn startup(mut commands: Commands, game: Res<Game>) {
-    let (x0, x1, y0, y1) = bounds(&game.ctx.content);
+    let (x0, x1, y0, y1) = bounds(&game.ctx.border);
     commands.spawn((
         Camera2d,
         // AutoMin keeps the whole map visible whatever the window shape, so the
@@ -79,7 +79,7 @@ pub fn update_input(keys: Res<ButtonInput<KeyCode>>, mut game: ResMut<Game>) {
     ] {
         if keys.just_pressed(key)
             && let Some(sel) = game.ctx.selected_region.clone()
-            && let Some(next) = game.ctx.content.step(&sel, dir)
+            && let Some(next) = game.ctx.step(&sel, dir)
         {
             game.ctx.selected_region = Some(next);
         }
@@ -88,7 +88,7 @@ pub fn update_input(keys: Res<ButtonInput<KeyCode>>, mut game: ResMut<Game>) {
 
 /// World border, land outlines, holdings, and the selected land's flag.
 pub fn update_draw(mut gizmos: Gizmos, game: Res<Game>, time: Res<Time>) {
-    let b = &game.ctx.content.border;
+    let b = &game.ctx.border;
     gizmos.rect_2d(
         Isometry2d::from_xy(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32),
         Vec2::new((b.x1 - b.x0) as f32, (b.y1 - b.y0) as f32),
@@ -96,27 +96,15 @@ pub fn update_draw(mut gizmos: Gizmos, game: Res<Game>, time: Res<Time>) {
     );
 
     let sel = game.ctx.selected_region.as_deref();
-    let own: &[String] = game
-        .ctx
-        .state
-        .kingdom_led_by(&game.ctx.player_character_id)
-        .map_or(&[], |k| k.land_ids.as_slice());
+    let own = game.ctx.player_holds();
+    let lands = game.ctx.lands_ordered();
     // Selected land last, so it draws over its neighbours.
-    let order = game
-        .ctx
-        .content
-        .lands
+    let order = lands
         .iter()
-        .filter(|(id, _)| Some(id.as_str()) != sel)
-        .chain(
-            game.ctx
-                .content
-                .lands
-                .iter()
-                .filter(|(id, _)| Some(id.as_str()) == sel),
-        );
-    for (id, land) in order {
-        let is_sel = Some(id.as_str()) == sel;
+        .filter(|l| Some(l.id.as_str()) != sel)
+        .chain(lands.iter().filter(|l| Some(l.id.as_str()) == sel));
+    for land in order {
+        let is_sel = Some(land.id.as_str()) == sel;
         let (outline, holder) = if is_sel {
             (css::YELLOW, css::YELLOW)
         } else {

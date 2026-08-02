@@ -30,52 +30,47 @@ pub(super) fn spawn(col: &mut ChildSpawnerCommands, panel: Color) {
 }
 
 pub fn update(game: Res<Game>, mut legend: Single<&mut Text, With<Legend>>) {
-    let sel = game
-        .ctx
-        .selected_region
-        .as_deref()
-        .and_then(|id| game.ctx.content.lands.get(id));
-    legend.0 = match sel {
-        Some(s) => {
-            let mut out = format!("id:{}\nname:{}", s.id, s.name);
-            if let Some(k) = game.ctx.state.kingdom_of(&s.id) {
-                out.push_str(&format!("\nkingdom:{}", k.id));
-                if k.seat_land_id == s.id {
-                    out.push_str(" (seat)");
-                }
-                if let Some(c) = game.ctx.content.character(&k.leader_character_id) {
-                    let house = game
-                        .ctx
-                        .content
-                        .house(&c.house_id)
-                        .map_or(c.house_id.as_str(), |h| h.name.as_str());
-                    let age = game.ctx.state.character(&c.id).map_or(0, |s| s.age);
-                    out.push_str(&format!("\nruler:{} of {} ({age})", c.name, house));
-                }
-            }
-            let built = game.ctx.state.buildings_in(&s.id);
-            let (mut gold, mut levy) = (0i64, 0u64);
-            for b in built.iter().filter_map(|id| game.ctx.content.building(id)) {
-                gold += b.gold_profit as i64 - b.gold_upkeep as i64;
-                levy += b.levy as u64;
-                // ponytail: only the non-zero numbers, so a line reads
-                // "market square +10g" not "+10g -0g 0 levy".
-                out.push_str(&format!("\n- {}", b.name));
-                if b.gold_profit > 0 {
-                    out.push_str(&format!(" +{}g", b.gold_profit));
-                }
-                if b.gold_upkeep > 0 {
-                    out.push_str(&format!(" -{}g", b.gold_upkeep));
-                }
-                if b.levy > 0 {
-                    out.push_str(&format!(" {} levy", b.levy));
-                }
-            }
-            if !built.is_empty() {
-                out.push_str(&format!("\ntotal: {gold:+}g {levy} levy"));
-            }
-            out
-        }
-        None => String::new(),
+    // Nothing selected, or a selected id the world doesn't have: blank.
+    let Some(id) = game.ctx.selected_region.clone() else {
+        legend.0 = String::new();
+        return;
     };
+    let Some(name) = game.ctx.land_name(&id) else {
+        legend.0 = String::new();
+        return;
+    };
+
+    let mut out = format!("id:{id}\nname:{name}");
+    if let Some(k) = game.ctx.kingdom_of_land(&id) {
+        out.push_str(&format!("\nkingdom:{}", k.id));
+        if k.seat_land_id == id {
+            out.push_str(" (seat)");
+        }
+        if let Some(c) = game.ctx.character_brief(&k.leader_character_id) {
+            out.push_str(&format!("\nruler:{} of {} ({})", c.name, c.house_name, c.age));
+        }
+    }
+
+    let built = game.ctx.buildings_in_land(&id);
+    let (mut gold, mut levy) = (0i64, 0u64);
+    for b in &built {
+        gold += b.gold_profit as i64 - b.gold_upkeep as i64;
+        levy += b.levy as u64;
+        // ponytail: only the non-zero numbers, so a line reads
+        // "market square +10g" not "+10g -0g 0 levy".
+        out.push_str(&format!("\n- {}", b.name));
+        if b.gold_profit > 0 {
+            out.push_str(&format!(" +{}g", b.gold_profit));
+        }
+        if b.gold_upkeep > 0 {
+            out.push_str(&format!(" -{}g", b.gold_upkeep));
+        }
+        if b.levy > 0 {
+            out.push_str(&format!(" {} levy", b.levy));
+        }
+    }
+    if !built.is_empty() {
+        out.push_str(&format!("\ntotal: {gold:+}g {levy} levy"));
+    }
+    legend.0 = out;
 }

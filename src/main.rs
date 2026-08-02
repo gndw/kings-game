@@ -1,8 +1,10 @@
 use anyhow::{Result, bail};
 use bevy::prelude::*;
-use kings_game::app::{Game, input, tick};
+use kings_game::app::{Game, input};
 use kings_game::ctx::Ctx;
+use kings_game::resources::date::Date;
 use kings_game::ui;
+use kings_game::updates;
 use std::path::Path;
 
 fn main() -> Result<()> {
@@ -35,10 +37,13 @@ fn main() -> Result<()> {
     if mods.content.character(&player).is_none() {
         bail!("no character `{player}` in the loaded mods");
     }
-    let game = Game::new(
-        Ctx::new_game(seed, mods.content, mods.state, &player),
-        mods.scripts,
-    );
+    let calendar = mods.content.calendar;
+    let game = Game::new(Ctx::new_game(
+        seed,
+        mods.content,
+        mods.state,
+        &player,
+    ));
     let hz = f64::from(game.speed());
 
     App::new()
@@ -64,8 +69,16 @@ fn main() -> Result<()> {
                 }),
         )
         .insert_resource(game)
+        .insert_resource(Date::START)
+        .insert_resource(calendar)
         .insert_resource(Time::<Fixed>::from_hz(hz))
-        .add_systems(Startup, (ui::startup::startup, ui::map::startup))
+        .add_systems(
+            Startup,
+            (
+                ui::startup::startup,
+                ui::map::startup,
+                updates::yields::recompute_yields
+            ))
         .add_systems(
             Update,
             (
@@ -78,7 +91,16 @@ fn main() -> Result<()> {
                 ui::status::update,
             ),
         )
-        .add_systems(FixedUpdate, tick.run_if(|g: Res<Game>| g.running()))
+        .add_systems(
+            FixedUpdate,
+            (
+                updates::tick::tick,
+                updates::yields::recompute_yields,
+                updates::payout::monthly_payout
+            )
+            .chain()
+            .run_if(|g: Res<Game>| g.running()),
+        )
         .run();
     Ok(())
 }

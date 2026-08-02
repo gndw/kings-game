@@ -28,20 +28,15 @@ pub(super) fn spawn(root: &mut ChildSpawnerCommands, panel: Color) {
 pub fn update(game: Res<Game>, mut bar: Single<&mut Text, With<ResourceBar>>) {
     // A map that doesn't contain the player leaves the bar blank rather than
     // showing zeroes that look like a broke ruler.
-    let (Some(player), Some(purse)) = (game.ctx.player_character(), game.ctx.player_state()) else {
+    let Some(p) = game.ctx.player_summary() else {
         bar.0 = String::new();
         return;
     };
-    let house = game
-        .ctx
-        .content
-        .house(&player.house_id)
-        .map_or(player.house_id.as_str(), |h| h.name.as_str());
     // The monthly income the gold script last published — it owns the rule, so
     // a mod that changes how income is figured changes this number with it.
     // Signed both places: a realm can run at a loss and a ruler can be in debt.
     bar.0 = format!(
         "{} of {}     {} gold ({:+}/mo)     {} levy",
-        player.name, house, purse.gold, purse.gold_yield, purse.levy
+        p.name, p.house, p.gold, p.gold_yield, p.levy
     );
 }

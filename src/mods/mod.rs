@@ -1,75 +1,39 @@
-//! Mods. Each folder under the mods directory contributes data files and any
-//! number of scripts; folders load in sorted name order and later ones win.
+//! Mods. Each folder under the mods directory contributes data files; folders
+//! load in sorted name order and later ones win.
 //!
 //! Every `*.ron` in a folder is a [`ContentFile`], whatever it's called — the
 //! loader doesn't know that `buildings.ron` holds buildings. The one exception
 //! is `*.state.ron`, which is a [`State`]: the mutable half of the world, and
-//! the shape a save file will have. Every `*.rhai` is a script, whatever it's
-//! called, and each gets its own `AST`. So a mod splits itself across files
-//! however reads best (the base game names each script after what it does) and
-//! the loader neither knows nor cares.
+//! the shape a save file will have. So a mod splits itself across files however
+//! reads best and the loader neither knows nor cares.
 //!
-//! What a hook is handed is [`script_ctx`]; what it may read and call off it is
-//! [`register`], one file so that the whole mod surface is one file to read;
-//! what it wrote lands in [`effects`]. Which hooks fire, and calling them, is
-//! [`hooks`]; the frozen world they read is [`view`]. This one is the loader and
-//! the bookkeeping.
+//! Modding scripting (rhai hooks) has been pulled out and will be rebuilt after
+//! the ECS refactoring; `*.rhai` files are ignored for now.
 
-mod effects;
-mod hooks;
-mod register;
-mod script_ctx;
 #[cfg(test)]
 mod testkit;
-mod view;
 
 use crate::content::{self, Content};
-use crate::ctx::Ctx;
 use crate::state::{self, State};
 use anyhow::{Context, Result};
-use effects::Effect;
-use rhai::{AST, Engine};
-use script_ctx::ScriptCtx;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
-
-/// ponytail: a runaway `while true` in a mod would wedge the render thread with
-/// no way out. Cheap seatbelt; raise it if a real mod ever needs the room.
-const MAX_OPS: u64 = 100_000;
-
-/// How deeply a script may nest expressions, at top level and inside a `fn`.
-///
-/// Pinned because Rhai's own defaults are *halved* in debug builds (32/16
-/// rather than 64/32), so an unpinned limit means a mod that runs under
-/// `make play` fails under `make run`. A mod must not care which profile the
-/// game was built with. These are Rhai's release numbers; raise both if a real
-/// script needs the room.
-const MAX_EXPR_DEPTH: usize = 64;
-const MAX_FN_EXPR_DEPTH: usize = 32;
 
 pub struct Mods {
     pub content: Content,
     pub state: State,
-    pub scripts: Scripts,
 }
 
 /// Load every mod in `dir`. Bad *data* is fatal — there's no sensible game
-/// without content. Bad *scripts* are not; see [`Scripts::add`]. Bad *state* is
-/// repaired rather than refused; see [`state::reconcile`].
+/// without content. Bad *state* is repaired rather than refused; see
+/// [`state::reconcile`].
 pub fn load(dir: &Path) -> Result<Mods> {
     let mut content = Content::default();
     let mut state = State::default();
-    let mut scripts = Scripts::new();
 
     for folder in sorted_entries(dir)? {
         if !folder.is_dir() {
             continue;
         }
-        let name = folder
-            .file_name()
-            .unwrap_or_default()
-            .to_string_lossy()
-            .into_owned();
         for file in sorted_entries(&folder)? {
             let Some(ext) = file.extension().and_then(|e| e.to_str()) else {
                 continue;
@@ -93,12 +57,6 @@ pub fn load(dir: &Path) -> Result<Mods> {
                         .with_context(|| format!("parsing {}", file.display()))?;
                     content.merge(parsed);
                 }
-                // Labelled `folder/file` so an error names the script that
-                // broke, not just the mod it came from.
-                "rhai" => {
-                    let stem = file.file_stem().unwrap_or_default().to_string_lossy();
-                    scripts.add(&format!("{name}/{stem}"), &read()?)
-                }
                 _ => {}
             }
         }
@@ -110,17 +68,8 @@ pub fn load(dir: &Path) -> Result<Mods> {
     // `state::reconcile`.
     for note in state::reconcile(&content, &mut state) {
         eprintln!("state: {note}");
-        scripts
-            .out
-            .lock()
-            .unwrap()
-            .push(Effect::AddChronicle(format!("state: {note}")));
     }
-    Ok(Mods {
-        content,
-        state,
-        scripts,
-    })
+    Ok(Mods { content, state })
 }
 
 /// Directory contents, sorted by path. Sorted because load order decides who
@@ -133,90 +82,6 @@ fn sorted_entries(dir: &Path) -> Result<Vec<PathBuf>> {
         .collect::<std::io::Result<_>>()?;
     paths.sort();
     Ok(paths)
-}
-
-struct ModScript {
-    name: String,
-    ast: AST,
-}
-
-pub struct Scripts {
-    engine: Engine,
-    mods: Vec<ModScript>,
-    /// Everything the scripts asked for this tick, plus any complaint about a
-    /// broken mod. One channel, drained into `Ctx` at the end of `run`.
-    out: Arc<Mutex<Vec<Effect>>>,
-}
-
-impl Default for Scripts {
-    fn default() -> Self {
-        Scripts::new()
-    }
-}
-
-impl Scripts {
-    pub fn new() -> Self {
-        let mut engine = Engine::new();
-        engine.set_max_operations(MAX_OPS);
-        engine.set_max_expr_depths(MAX_EXPR_DEPTH, MAX_FN_EXPR_DEPTH);
-        register::script_ctx(&mut engine);
-        Scripts {
-            engine,
-            mods: Vec::new(),
-            out: Arc::new(Mutex::new(Vec::new())),
-        }
-    }
-
-    /// Compile a mod's script. One that won't compile is reported and skipped —
-    /// a broken mod should be visible and survivable, not fatal.
-    pub fn add(&mut self, name: &str, source: &str) {
-        match self.engine.compile(source) {
-            Ok(ast) => self.mods.push(ModScript {
-                name: name.into(),
-                ast,
-            }),
-            Err(e) => self.fail(name, &e.to_string()),
-        }
-    }
-
-    fn fail(&mut self, name: &str, msg: &str) {
-        eprintln!("mod `{name}`: {msg}");
-        self.out
-            .lock()
-            .unwrap()
-            .push(Effect::AddChronicle(format!("mod `{name}` failed: {msg}")));
-    }
-
-    /// Run this tick's hooks.
-    pub fn run(&mut self, ctx: &mut Ctx) {
-        let due = hooks::due(&ctx.date);
-        self.call(ctx, &due);
-    }
-
-    /// Run `on_startup`, once, before the first tick. Whatever a script would
-    /// otherwise only get right on day 1 — a ruler's levy, their monthly
-    /// income — is already right on the opening screen.
-    pub fn run_startup(&mut self, ctx: &mut Ctx) {
-        self.call(ctx, &hooks::STARTUP);
-    }
-
-    /// Call `names` on every mod, then fold whatever the scripts wrote into the
-    /// chronicle. A mod that throws is dropped for the rest of the session, so
-    /// one bad script doesn't spam a line every single day.
-    fn call(&mut self, ctx: &mut Ctx, names: &[&str]) {
-        let sctx = ScriptCtx::build(ctx, self.out.clone());
-
-        let broken = hooks::call(&self.engine, &self.mods, &sctx, names);
-        for (_, name, msg) in &broken {
-            self.fail(name, msg);
-        }
-        // Back to front so the earlier indices stay valid.
-        for (i, _, _) in broken.iter().rev() {
-            self.mods.remove(*i);
-        }
-
-        effects::drain(&self.out, ctx);
-    }
 }
 
 #[cfg(test)]
@@ -309,12 +174,13 @@ mod tests {
         assert_eq!(map.content.calendar.days_per_year(), 50);
 
         // ...and the sim actually runs on it.
-        let mut ctx = Ctx::new_game(1, map.content, map.state, "char-tywin");
+        let calendar = map.content.calendar;
+        let mut date = crate::resources::date::Date::START;
         for _ in 0..50 {
-            ctx.tick();
+            crate::updates::tick::advance(&mut date, &calendar);
         }
-        assert_eq!(ctx.date.year, 1067);
-        assert_eq!((ctx.date.month, ctx.date.day), (1, 1));
+        assert_eq!(date.year, 1067);
+        assert_eq!((date.month, date.day), (1, 1));
 
         // A calendar that would never roll over is refused at load.
         let broken = mods_dir(
@@ -446,35 +312,5 @@ mod tests {
             load(&dir).is_err(),
             "a typo'd section must not pass silently"
         );
-    }
-
-    /// Both halves of surviving a bad mod: `add` reports one that won't compile,
-    /// `run` retires one that throws.
-    #[test]
-    fn a_broken_mod_is_reported_and_the_rest_keep_running() {
-        let dir = mods_dir(
-            "broken",
-            &[
-                ("base/world.ron", WORLD),
-                ("a-bad/mod.rhai", "fn on_day(ctx) { this is not rhai"),
-                ("b-throws/mod.rhai", r#"fn on_day(ctx) { throw "nope"; }"#),
-                (
-                    "c-good/mod.rhai",
-                    r#"fn on_day(ctx) { ctx.add_chronicle("still here"); }"#,
-                ),
-            ],
-        );
-        let (lines, _) = play(&dir, 3);
-        // Errors name the script, not just the mod it came from.
-        assert!(lines.iter().any(|l| l.contains("`a-bad/mod` failed")));
-        assert_eq!(
-            lines
-                .iter()
-                .filter(|l| l.contains("`b-throws/mod` failed"))
-                .count(),
-            1,
-            "a throwing mod is dropped, not re-reported every day"
-        );
-        assert_eq!(lines.iter().filter(|l| *l == "still here").count(), 3);
     }
 }

@@ -42,14 +42,25 @@ fn main() -> Result<()> {
     let hz = f64::from(game.speed());
 
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Kings".into(),
-                mode: bevy::window::WindowMode::BorderlessFullscreen(MonitorSelection::Current),
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(
+            DefaultPlugins
+                .set(WindowPlugin {
+                    primary_window: Some(Window {
+                        title: "Kings".into(),
+                        mode: bevy::window::WindowMode::BorderlessFullscreen(
+                            MonitorSelection::Primary,
+                        ),
+                        ..default()
+                    }),
+                    ..default()
+                })
+                // ponytail: WSLg has no XSETTINGS manager and reports a 0mm display;
+                // both warnings are environment noise, not bugs.
+                .set(bevy::log::LogPlugin {
+                    filter: "wgpu=error,naga=warn,winit=error".into(),
+                    ..default()
+                }),
+        )
         .insert_resource(game)
         .insert_resource(Time::<Fixed>::from_hz(hz))
         .add_systems(Startup, (ui::startup::startup, ui::map::startup))

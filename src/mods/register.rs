@@ -57,21 +57,21 @@ pub(super) fn script_ctx(engine: &mut Engine) {
         )
         .register_fn(
             "land_buildings",
-            |c: &mut ScriptCtx, id: ImmutableString| match c.realms.buildings.get(id.as_str()) {
-                Some(b) => ids(b.iter().map(String::as_str)),
+            |c: &mut ScriptCtx, id: ImmutableString| match c.realms.lands.get(id.as_str()) {
+                Some(l) => ids(l.building_ids.iter().map(String::as_str)),
                 None => Array::new(),
             },
         )
         .register_fn("building_levy", |c: &mut ScriptCtx, id: ImmutableString| {
-            c.realms.building(&id).levy as i64
+            c.realms.buildings.get(&id).levy as i64
         })
         .register_fn(
             "building_gold_profit",
-            |c: &mut ScriptCtx, id: ImmutableString| c.realms.building(&id).gold_profit as i64,
+            |c: &mut ScriptCtx, id: ImmutableString| c.realms.buildings.get(&id).gold_profit as i64,
         )
         .register_fn(
             "building_gold_upkeep",
-            |c: &mut ScriptCtx, id: ImmutableString| c.realms.building(&id).gold_upkeep as i64,
+            |c: &mut ScriptCtx, id: ImmutableString| c.realms.buildings.get(&id).gold_upkeep as i64,
         )
         .register_fn("rand", |c: &mut ScriptCtx| c.rand());
     super::effects::register(engine);

@@ -190,16 +190,6 @@ pub struct Character {
     pub house_id: String,
 }
 
-/// What a realm's holdings yield — troops raised, coin earned, coin owed. All
-/// zeroes for a character who leads no kingdom, which is what keeps gold and
-/// levy to rulers.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub struct Yield {
-    pub levy: u64,
-    pub gold_profit: u64,
-    pub gold_upkeep: u64,
-}
-
 impl Content {
     pub fn building(&self, id: &str) -> Option<&Building> {
         self.buildings.iter().find(|b| b.id == id)

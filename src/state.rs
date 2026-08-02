@@ -189,7 +189,7 @@ pub fn reconcile(content: &Content, state: &mut State) -> Vec<String> {
             ..Default::default()
         });
         land.building_ids.retain(|b| {
-            let known = content.buildings.contains_key(b);
+            let known = content.buildings.contains(b);
             if !known {
                 notes.push(format!("land `{id}` drops unknown building `{b}`"));
             }

@@ -1,7 +1,8 @@
 //! The simulation context: the entity world plus everything that isn't an entity.
 //! The calendar it runs on lives in `crate::resources`.
 
-use crate::content::{Border, Content};
+use crate::content::Content;
+use crate::resources::buildings::Buildings;
 use crate::resources::date::Date;
 use crate::ecs::{
     self, BuildingData, Built, Character, CharacterData, CharacterState, House, HouseOf,
@@ -15,8 +16,6 @@ use std::sync::{Arc, Mutex};
 
 pub struct Ctx {
     pub world: World,
-    /// The edge of the world. Content, but not entity-shaped.
-    pub border: Border,
     pub seed: u64,
     pub rng: Arc<Mutex<SimRng>>,
     pub chronicles: Vec<String>,
@@ -42,7 +41,7 @@ impl Ctx {
         let rng = Arc::new(Mutex::new(SimRng::new(seed)));
         let mut world = World::new();
         world.insert_resource(Registry::new());
-        let border = ecs::populate(&mut world, content, state);
+        ecs::populate(&mut world, content, state);
         // Open on the player's own capital. Falls back to any land at all for
         // content that doesn't happen to contain them — the empty default the
         // clock tests use, or a mod that dropped the character.
@@ -50,7 +49,6 @@ impl Ctx {
             .or_else(|| ecs::random_land_id(&world, &mut *rng.lock().unwrap()));
         let mut ctx = Ctx {
             world,
-            border,
             seed,
             rng,
             chronicles: Vec::new(),
@@ -142,18 +140,18 @@ impl Ctx {
         let Some(built) = self.world.get::<Built>(e) else {
             return Vec::new();
         };
+        let buildings = self.world.resource::<Buildings>();
         built
             .0
             .iter()
-            .filter_map(|&be| {
-                let bd = self.world.get::<ecs::Building>(be)?;
-                let sid = self.world.get::<StringId>(be)?;
+            .filter_map(|bid| {
+                let b = buildings.get(bid)?;
                 Some(BuildingData {
-                    id: sid.0.clone(),
-                    name: bd.name.clone(),
-                    gold_profit: bd.gold_profit,
-                    gold_upkeep: bd.gold_upkeep,
-                    levy: bd.levy,
+                    id: bid.clone(),
+                    name: b.name.clone(),
+                    gold_profit: b.gold_profit,
+                    gold_upkeep: b.gold_upkeep,
+                    levy: b.levy,
                 })
             })
             .collect()

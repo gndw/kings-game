@@ -10,6 +10,8 @@
 //! `crate::mods` does the loading and merging; the camera and drawing live in
 //! `crate::ui::map`.
 
+use crate::resources::border::Border;
+use crate::resources::buildings::{Building, Buildings};
 use crate::resources::calendar::Calendar;
 use anyhow::{Result, bail};
 use indexmap::IndexMap;
@@ -28,7 +30,9 @@ pub struct Content {
     pub calendar: Calendar,
     /// ID-keyed for O(1) lookup; insertion-ordered for deterministic iteration.
     pub lands: IndexMap<String, Land>,
-    pub buildings: IndexMap<String, Building>,
+    /// The building roster, carried through as a resource and seeded into the
+    /// world in `ecs::populate`.
+    pub buildings: Buildings,
     pub houses: IndexMap<String, House>,
     pub characters: IndexMap<String, Character>,
 }
@@ -41,7 +45,7 @@ impl Default for Content {
             border: Border::default(),
             calendar: Calendar::default(),
             lands: IndexMap::new(),
-            buildings: IndexMap::new(),
+            buildings: Buildings::default(),
             houses: IndexMap::new(),
             characters: IndexMap::new(),
         }
@@ -90,7 +94,7 @@ impl Content {
             self.lands.insert(land.id.clone(), land);
         }
         for building in file.buildings {
-            self.buildings.insert(building.id.clone(), building);
+            self.buildings.0.insert(building.id.clone(), building);
         }
         for house in file.houses {
             self.houses.insert(house.id.clone(), house);
@@ -99,15 +103,6 @@ impl Content {
             self.characters.insert(character.id.clone(), character);
         }
     }
-}
-
-/// The edge of the world, `(x0, y0)` bottom-left to `(x1, y1)` top-right. `world.ron`.
-#[derive(Debug, Default, Deserialize)]
-pub struct Border {
-    pub x0: f64,
-    pub y0: f64,
-    pub x1: f64,
-    pub y1: f64,
 }
 
 /// One land, an entry in `lands.ron`.
@@ -120,21 +115,6 @@ pub struct Land {
     pub borders: Vec<(f64, f64)>,
     /// Seat of power, somewhere inside `borders`. Drawn as a circle.
     pub holding: (f64, f64),
-}
-
-/// Something built in a holding. Civil buildings earn `gold_profit`; military
-/// ones cost `gold_upkeep` and add `levy` troops. A building sets one gold field
-/// or the other, never both — the other stays 0.
-#[derive(Debug, Deserialize)]
-pub struct Building {
-    pub id: String,
-    pub name: String,
-    #[serde(default)]
-    pub gold_profit: u32,
-    #[serde(default)]
-    pub gold_upkeep: u32,
-    #[serde(default)]
-    pub levy: u32,
 }
 
 /// A family. Characters belong to one; kingdoms are ruled through them.
@@ -215,11 +195,6 @@ pub fn validate(content: &Content) -> Result<()> {
     Ok(())
 }
 
-/// `(x_min, x_max, y_min, y_max)` of the map edge, for the canvas bounds.
-pub fn bounds(border: &Border) -> (f64, f64, f64, f64) {
-    (border.x0, border.x1, border.y0, border.y1)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -243,7 +218,7 @@ mod tests {
             content.lands[0].borders,
             vec![(1.0, 2.0), (3.0, 4.0), (1.0, 2.0)]
         );
-        assert_eq!(bounds(&content.border), (-1.0, 5.0, 0.0, 9.0));
+        assert_eq!(content.border.bounds(), (-1.0, 5.0, 0.0, 9.0));
         assert!(parse(r#"(border: (x0: 5, y0: 0, x1: 5, y1: 9), lands: [])"#).is_err());
         assert!(
             parse(r#"(border: (x0: 0, y0: 0, x1: 1, y1: 1), lands: [(id: "l", name: "L", holding: (1, 2), borders: [(1, 2)])])"#)

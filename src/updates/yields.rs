@@ -2,7 +2,8 @@
 //! holdings, scheduled by the ECS rather than called by hand from `Ctx::tick`.
 
 use crate::app::Game;
-use crate::ecs::{Building, Built, CharacterState, EntityIndex, Holds, LedBy};
+use crate::ecs::{Built, CharacterState, EntityIndex, Holds, LedBy};
+use crate::resources::buildings::Buildings;
 use bevy::ecs::world::World;
 use bevy::prelude::*;
 use std::collections::HashMap;
@@ -22,6 +23,7 @@ pub fn recompute_yields(mut game: ResMut<Game>) {
 /// who leads nothing is simply absent here, so [`recompute`] defaults them to
 /// zero. `&World`-safe, like every read in the sim.
 fn realm_totals(world: &World) -> HashMap<Entity, (i64, u64)> {
+    let buildings = world.resource::<Buildings>();
     let kingdoms = world.resource::<EntityIndex>().kingdoms.clone();
     let mut totals: HashMap<Entity, (i64, u64)> = HashMap::new();
     for &ke in &kingdoms {
@@ -35,8 +37,8 @@ fn realm_totals(world: &World) -> HashMap<Entity, (i64, u64)> {
             let Some(built) = world.get::<Built>(le) else {
                 continue;
             };
-            for &be in built.0.iter() {
-                let Some(b) = world.get::<Building>(be) else {
+            for bid in built.0.iter() {
+                let Some(b) = buildings.get(bid) else {
                     continue;
                 };
                 entry.0 += b.gold_profit as i64 - b.gold_upkeep as i64;

@@ -6,12 +6,15 @@
 //! parallel `IndexMap`s joined by id:
 //!
 //! - **House** entities: [`StringId`], [`House`].
-//! - **Building** (definition) entities: [`StringId`], [`Building`].
 //! - **Character** entities: [`StringId`], [`Character`],
 //!   [`HouseOf`], [`CharacterState`].
 //! - **Land** entities: [`StringId`], [`Land`], [`Built`].
 //! - **Kingdom** entities: [`StringId`], [`Kingdom`], [`LedBy`],
 //!   [`Seat`], [`Holds`].
+//!
+//! Building *definitions* are not entities — they are a read-only roster held
+//! as the [`Buildings`](crate::resources::buildings::Buildings) resource; lands
+//! keep the ids of what's built in [`Built`].
 //!
 //! Load-time [`Content`](crate::content::Content) /
 //! [`State`](crate::state::State) (still `IndexMap`-based — the deserialization,
@@ -33,7 +36,7 @@
 //! entity it points at is the standard two-step: pull the (cheap, `Copy`)
 //! `Entity` out, drop the borrow, then touch the entity.
 
-use crate::content::{Border, Content};
+use crate::content::Content;
 use crate::state::State;
 use bevy::ecs::world::World;
 use bevy::prelude::{Component, Entity, Resource};
@@ -64,7 +67,6 @@ impl StringId {
 #[derive(Resource, Default)]
 pub struct EntityIndex {
     pub houses: Vec<Entity>,
-    pub buildings: Vec<Entity>,
     pub characters: Vec<Entity>,
     pub lands: Vec<Entity>,
     pub kingdoms: Vec<Entity>,
@@ -108,16 +110,6 @@ pub struct House {
     pub name: String,
 }
 
-/// A building definition: what one of it is worth. Military ones cost upkeep
-/// and add levy; civil ones earn profit. One gold field set, never both.
-#[derive(Component, Debug, Clone)]
-pub struct Building {
-    pub name: String,
-    pub gold_profit: u32,
-    pub gold_upkeep: u32,
-    pub levy: u32,
-}
-
 /// The read-only half of a character: their name. Their house is [`HouseOf`];
 /// their treasury and levy are [`CharacterState`].
 #[derive(Component, Debug, Clone)]
@@ -147,10 +139,11 @@ pub struct Land {
     pub holding: (f64, f64),
 }
 
-/// What stands in a land: the building-definition entities built there. State,
-/// not content — it changes in play and belongs in a save.
+/// What stands in a land: the ids of the buildings built there. State, not
+/// content — it changes in play and belongs in a save. Looked up against the
+/// [`Buildings`](crate::resources::buildings::Buildings) resource to render.
 #[derive(Component, Debug, Clone, Default)]
-pub struct Built(pub Vec<Entity>);
+pub struct Built(pub Vec<String>);
 
 /// Tags a kingdom entity. A kingdom is otherwise just its relations.
 #[derive(Component, Debug, Clone, Copy)]
@@ -218,19 +211,20 @@ pub struct PlayerSummary {
 // Building the world from content + state
 // ===========================================================================
 
-/// Build the entity world from merged, reconciled content and state, and return
-/// the world border. Called once from
-/// [`Ctx::new_game`](crate::ctx::Ctx::new_game); afterwards content and state
-/// are gone.
+/// Build the entity world from merged, reconciled content and state. Called
+/// once from [`Ctx::new_game`](crate::ctx::Ctx::new_game); afterwards content
+/// and state are gone.
 ///
-/// Spawn order is leaves-first — houses, then buildings, then characters (which
-/// point at houses), then lands (which point at buildings), then kingdoms (which
-/// point at characters and lands) — so a relation always resolves to an entity
-/// that already exists. [`reconcile`](crate::state::reconcile) has already pruned
-/// every dangling reference, so the `filter_map`s here only guard against logic
-/// errors, not bad data.
-pub fn populate(world: &mut World, content: Content, mut state: State) -> Border {
+/// Spawn order is leaves-first — houses, then characters (which point at
+/// houses), then lands, then kingdoms (which point at characters and lands) —
+/// so a relation always resolves to an entity that already exists.
+/// [`reconcile`](crate::state::reconcile) has already pruned every dangling
+/// reference, so the `filter_map`s here only guard against logic errors, not
+/// bad data. The building roster leaves as the [`Buildings`] resource rather
+/// than entities.
+pub fn populate(world: &mut World, content: Content, mut state: State) {
     let mut idx = EntityIndex::default();
+    world.insert_resource(content.buildings);
 
     // Houses.
     for (id, h) in content.houses.into_iter() {
@@ -239,23 +233,6 @@ pub fn populate(world: &mut World, content: Content, mut state: State) -> Border
             .id();
         world.resource_mut::<Registry>().insert(id, eid);
         idx.houses.push(eid);
-    }
-
-    // Buildings (definitions only — what's actually built is on each land).
-    for (id, b) in content.buildings.into_iter() {
-        let eid = world
-            .spawn((
-                StringId(id.clone()),
-                Building {
-                    name: b.name,
-                    gold_profit: b.gold_profit,
-                    gold_upkeep: b.gold_upkeep,
-                    levy: b.levy,
-                },
-            ))
-            .id();
-        world.resource_mut::<Registry>().insert(id, eid);
-        idx.buildings.push(eid);
     }
 
     // Characters: content half joined with state half by id.
@@ -282,14 +259,9 @@ pub fn populate(world: &mut World, content: Content, mut state: State) -> Border
         idx.characters.push(eid);
     }
 
-    // Lands: content geometry + state's building list (resolved to entities).
+    // Lands: content geometry + state's building list (the ids, kept as-is).
     for (id, l) in content.lands.into_iter() {
         let lst = state.lands.shift_remove(&id).unwrap_or_default();
-        let built: Vec<Entity> = lst
-            .building_ids
-            .iter()
-            .filter_map(|bid| world.resource::<Registry>().get(bid))
-            .collect();
         let eid = world
             .spawn((
                 StringId(id.clone()),
@@ -298,7 +270,7 @@ pub fn populate(world: &mut World, content: Content, mut state: State) -> Border
                     borders: l.borders,
                     holding: l.holding,
                 },
-                Built(built),
+                Built(lst.building_ids),
             ))
             .id();
         world.resource_mut::<Registry>().insert(id, eid);
@@ -331,8 +303,6 @@ pub fn populate(world: &mut World, content: Content, mut state: State) -> Border
     }
 
     world.insert_resource(idx);
-
-    content.border
 }
 
 /// A random land's id, or `None` when there are no lands. Drawn from the seeded

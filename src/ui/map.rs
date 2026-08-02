@@ -4,7 +4,7 @@
 use super::flag;
 use super::startup::RIGHT_BAR;
 use crate::app::Game;
-use crate::content::bounds;
+use crate::resources::border::Border;
 use bevy::camera::ScalingMode;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
@@ -49,8 +49,8 @@ fn fill(gizmos: &mut Gizmos, poly: &[(f64, f64)], color: Color) {
 }
 
 /// Camera framed on the whole map.
-pub fn startup(mut commands: Commands, game: Res<Game>) {
-    let (x0, x1, y0, y1) = bounds(&game.ctx.border);
+pub fn startup(mut commands: Commands, border: Res<Border>) {
+    let (x0, x1, y0, y1) = border.bounds();
     commands.spawn((
         Camera2d,
         // AutoMin keeps the whole map visible whatever the window shape, so the
@@ -87,8 +87,8 @@ pub fn update_input(keys: Res<ButtonInput<KeyCode>>, mut game: ResMut<Game>) {
 }
 
 /// World border, land outlines, holdings, and the selected land's flag.
-pub fn update_draw(mut gizmos: Gizmos, game: Res<Game>, time: Res<Time>) {
-    let b = &game.ctx.border;
+pub fn update_draw(mut gizmos: Gizmos, game: Res<Game>, border: Res<Border>, time: Res<Time>) {
+    let b = &*border;
     gizmos.rect_2d(
         Isometry2d::from_xy(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32),
         Vec2::new((b.x1 - b.x0) as f32, (b.y1 - b.y0) as f32),

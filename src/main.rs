@@ -38,6 +38,7 @@ fn main() -> Result<()> {
         bail!("no character `{player}` in the loaded mods");
     }
     let calendar = mods.content.calendar.clone();
+    let border = mods.content.border;
     let game = Game::new(Ctx::new_game(
         seed,
         mods.content,
@@ -71,6 +72,7 @@ fn main() -> Result<()> {
         .insert_resource(game)
         .insert_resource(Date::START)
         .insert_resource(calendar)
+        .insert_resource(border)
         .insert_resource(Time::<Fixed>::from_hz(hz))
         .add_systems(
             Startup,

@@ -107,16 +107,16 @@ pub fn update_draw(mut gizmos: Gizmos, game: Res<Game>, time: Res<Time>) {
         .content
         .lands
         .iter()
-        .filter(|s| Some(s.id.as_str()) != sel)
+        .filter(|(id, _)| Some(id.as_str()) != sel)
         .chain(
             game.ctx
                 .content
                 .lands
                 .iter()
-                .filter(|s| Some(s.id.as_str()) == sel),
+                .filter(|(id, _)| Some(id.as_str()) == sel),
         );
-    for land in order {
-        let is_sel = Some(land.id.as_str()) == sel;
+    for (id, land) in order {
+        let is_sel = Some(id.as_str()) == sel;
         let (outline, holder) = if is_sel {
             (css::YELLOW, css::YELLOW)
         } else {

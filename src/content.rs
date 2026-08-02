@@ -12,7 +12,8 @@
 
 use crate::date::Calendar;
 use anyhow::{Result, bail};
-use rand::seq::IndexedRandom;
+use indexmap::IndexMap;
+use rand::seq::IteratorRandom;
 use serde::Deserialize;
 
 /// Everything defined, after every mod file has been merged in.
@@ -20,8 +21,6 @@ use serde::Deserialize;
 /// Named `Content` rather than `Map` because it long ago stopped being just
 /// geometry — it also carries the calendar, the speeds, and the roster of
 /// characters the sim's state hangs off.
-// Default so tests that only care about the clock can build a Ctx with empty
-// content, and so merging can start from nothing.
 #[derive(Debug)]
 pub struct Content {
     pub border: Border,
@@ -31,11 +30,11 @@ pub struct Content {
     /// The simulated-days-per-real-second settings `+` and `-` step through,
     /// slowest first. The game starts on the first one.
     pub speeds: Vec<u32>,
-    pub lands: Vec<Land>,
-    /// Buildings a holding can raise.
-    pub buildings: Vec<Building>,
-    pub houses: Vec<House>,
-    pub characters: Vec<Character>,
+    /// ID-keyed for O(1) lookup; insertion-ordered for deterministic iteration.
+    pub lands: IndexMap<String, Land>,
+    pub buildings: IndexMap<String, Building>,
+    pub houses: IndexMap<String, House>,
+    pub characters: IndexMap<String, Character>,
 }
 
 /// Hand-written rather than derived because an empty `speeds` list is not a
@@ -46,10 +45,10 @@ impl Default for Content {
             border: Border::default(),
             calendar: Calendar::default(),
             speeds: vec![8, 16, 32, 64],
-            lands: Vec::new(),
-            buildings: Vec::new(),
-            houses: Vec::new(),
-            characters: Vec::new(),
+            lands: IndexMap::new(),
+            buildings: IndexMap::new(),
+            houses: IndexMap::new(),
+            characters: IndexMap::new(),
         }
     }
 }
@@ -60,6 +59,9 @@ impl Default for Content {
 ///
 /// `deny_unknown_fields` so a modder's typo is an error instead of a section
 /// that silently does nothing.
+///
+/// Collections stay as `Vec` here — this is a single file's contribution,
+/// merged into [`Content`]'s `IndexMap`s by [`Content::merge`].
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContentFile {
@@ -80,20 +82,11 @@ pub struct ContentFile {
     pub characters: Vec<Character>,
 }
 
-/// ponytail: linear scan per entry, so merging is O(n²) in list length. With a
-/// few hundred lands that's nothing; index by id if a mod set ever gets big.
-pub(crate) fn merge_by_id<T>(dst: &mut Vec<T>, src: Vec<T>, id: impl for<'a> Fn(&'a T) -> &'a str) {
-    for item in src {
-        match dst.iter().position(|d| id(d) == id(&item)) {
-            Some(i) => dst[i] = item,
-            None => dst.push(item),
-        }
-    }
-}
-
 impl Content {
     /// Fold one file in. An entry whose `id` already exists replaces the
     /// earlier one, anything else appends — that is the whole override rule.
+    /// With `IndexMap`, `insert` does both: same key replaces in place, new
+    /// key appends at the end. Insertion order is preserved across merges.
     pub fn merge(&mut self, file: ContentFile) {
         if let Some(border) = file.border {
             self.border = border;
@@ -104,15 +97,23 @@ impl Content {
         if let Some(speeds) = file.speeds {
             self.speeds = speeds;
         }
-        merge_by_id(&mut self.lands, file.lands, |s| &s.id);
-        merge_by_id(&mut self.buildings, file.buildings, |b| &b.id);
-        merge_by_id(&mut self.houses, file.houses, |h| &h.id);
-        merge_by_id(&mut self.characters, file.characters, |c| &c.id);
+        for land in file.lands {
+            self.lands.insert(land.id.clone(), land);
+        }
+        for building in file.buildings {
+            self.buildings.insert(building.id.clone(), building);
+        }
+        for house in file.houses {
+            self.houses.insert(house.id.clone(), house);
+        }
+        for character in file.characters {
+            self.characters.insert(character.id.clone(), character);
+        }
     }
 
     /// Get random land id, or None if there are no lands.
     pub fn random_land_id(&self) -> Option<String> {
-        self.lands.choose(&mut rand::rng()).map(|s| s.id.clone())
+        self.lands.keys().choose(&mut rand::rng()).cloned()
     }
 
     /// The land to move the selection to when stepping from `from` along `dir`
@@ -122,16 +123,16 @@ impl Content {
     /// ponytail: distance heuristic over holdings, no adjacency graph. Add real
     /// borders-touch adjacency in lands.ron if the picks feel wrong on odd shapes.
     pub fn step(&self, from: &str, dir: (f64, f64)) -> Option<String> {
-        let origin = self.lands.iter().find(|s| s.id == from)?.holding;
+        let origin = self.lands.get(from)?.holding;
         self.lands
             .iter()
-            .filter(|s| s.id != from)
-            .filter_map(|s| {
+            .filter(|(id, _)| id.as_str() != from)
+            .filter_map(|(id, s)| {
                 let (dx, dy) = (s.holding.0 - origin.0, s.holding.1 - origin.1);
                 let along = dx * dir.0 + dy * dir.1;
                 // Perpendicular component: how far off-axis the candidate sits.
                 let perp = (dx * dir.1 - dy * dir.0).abs();
-                (along > perp).then(|| (along + perp * 2.0, s.id.clone()))
+                (along > perp).then(|| (along + perp * 2.0, id.clone()))
             })
             .min_by(|a, b| a.0.total_cmp(&b.0))
             .map(|(_, id)| id)
@@ -192,15 +193,15 @@ pub struct Character {
 
 impl Content {
     pub fn building(&self, id: &str) -> Option<&Building> {
-        self.buildings.iter().find(|b| b.id == id)
+        self.buildings.get(id)
     }
 
     pub fn character(&self, id: &str) -> Option<&Character> {
-        self.characters.iter().find(|c| c.id == id)
+        self.characters.get(id)
     }
 
     pub fn house(&self, id: &str) -> Option<&House> {
-        self.houses.iter().find(|h| h.id == id)
+        self.houses.get(id)
     }
 }
 
@@ -240,13 +241,13 @@ pub fn validate(content: &Content) -> Result<()> {
         s if s.contains(&0) => bail!("a speed of 0 days/second would stop the clock"),
         _ => {}
     }
-    for s in &content.lands {
+    for (_, s) in &content.lands {
         if s.borders.len() < 2 {
             bail!("land `{}` needs at least 2 border points", s.id);
         }
     }
-    for c in &content.characters {
-        if !content.houses.iter().any(|h| h.id == c.house_id) {
+    for (_, c) in &content.characters {
+        if !content.houses.contains_key(&c.house_id) {
             bail!(
                 "character `{}` references unknown house `{}`",
                 c.id,

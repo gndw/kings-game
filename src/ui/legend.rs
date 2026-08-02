@@ -34,7 +34,7 @@ pub fn update(game: Res<Game>, mut legend: Single<&mut Text, With<Legend>>) {
         .ctx
         .selected_region
         .as_deref()
-        .and_then(|id| game.ctx.content.lands.iter().find(|s| s.id == id));
+        .and_then(|id| game.ctx.content.lands.get(id));
     legend.0 = match sel {
         Some(s) => {
             let mut out = format!("id:{}\nname:{}", s.id, s.name);

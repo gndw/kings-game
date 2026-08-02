@@ -23,21 +23,31 @@ pub(super) fn script_ctx(engine: &mut Engine) {
         .register_get("land", |c: &mut ScriptCtx| c.land.clone())
         .register_get("player", |c: &mut ScriptCtx| c.player.clone())
         .register_get("characters", |c: &mut ScriptCtx| {
-            ids(c.realms.characters.ids.iter().map(String::as_str))
+            ids(c.realms.characters.keys().map(String::as_str))
         })
         // Per-character reads. An unknown id reads as all zeroes rather
         // than erroring — a script looping the characters can't hit one.
         .register_fn("gold", |c: &mut ScriptCtx, id: ImmutableString| {
-            c.realms.characters.get(&id).gold
+            c.realms
+                .characters
+                .get(id.as_str())
+                .copied()
+                .unwrap_or_default()
+                .gold
         })
         .register_fn("levy", |c: &mut ScriptCtx, id: ImmutableString| {
-            c.realms.characters.get(&id).levy as i64
+            c.realms
+                .characters
+                .get(id.as_str())
+                .copied()
+                .unwrap_or_default()
+                .levy as i64
         })
         // The world's shape. Whether a character rules anything, and what
         // their holdings add up to, is a script's sum to do — see
         // `mods/base/character_levy.rhai`.
         .register_get("kingdoms", |c: &mut ScriptCtx| {
-            ids(c.realms.kingdoms.iter().map(|k| k.id.as_str()))
+            ids(c.realms.kingdoms.keys().map(String::as_str))
         })
         .register_fn(
             "kingdom_leader",
@@ -63,15 +73,34 @@ pub(super) fn script_ctx(engine: &mut Engine) {
             },
         )
         .register_fn("building_levy", |c: &mut ScriptCtx, id: ImmutableString| {
-            c.realms.buildings.get(&id).levy as i64
+            c.realms
+                .buildings
+                .get(id.as_str())
+                .copied()
+                .unwrap_or_default()
+                .levy as i64
         })
         .register_fn(
             "building_gold_profit",
-            |c: &mut ScriptCtx, id: ImmutableString| c.realms.buildings.get(&id).gold_profit as i64,
+            |c: &mut ScriptCtx, id: ImmutableString| {
+                c.realms
+                    .buildings
+                    .get(id.as_str())
+                    .copied()
+                    .unwrap_or_default()
+                    .gold_profit as i64
+            },
         )
         .register_fn(
             "building_gold_upkeep",
-            |c: &mut ScriptCtx, id: ImmutableString| c.realms.buildings.get(&id).gold_upkeep as i64,
+            |c: &mut ScriptCtx, id: ImmutableString| {
+                c.realms
+                    .buildings
+                    .get(id.as_str())
+                    .copied()
+                    .unwrap_or_default()
+                    .gold_upkeep as i64
+            },
         )
         .register_fn("rand", |c: &mut ScriptCtx| c.rand());
     super::effects::register(engine);

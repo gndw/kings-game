@@ -54,10 +54,12 @@ fn main() -> Result<()> {
                     }),
                     ..default()
                 })
-                // ponytail: WSLg has no XSETTINGS manager and reports a 0mm display;
-                // both warnings are environment noise, not bugs.
+                // ponytail: WSLg has no XSETTINGS manager, reports a 0mm display, and
+                // can't report its current monitor at window creation. All of these are
+                // environment noise, not bugs.
                 .set(bevy::log::LogPlugin {
-                    filter: "wgpu=error,naga=warn,winit=error".into(),
+                    filter: "wgpu=error,naga=warn,winit=error,bevy_winit=error"
+                        .into(),
                     ..default()
                 }),
         )

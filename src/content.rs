@@ -134,16 +134,8 @@ pub struct Character {
 }
 
 impl Content {
-    pub fn building(&self, id: &str) -> Option<&Building> {
-        self.buildings.get(id)
-    }
-
     pub fn character(&self, id: &str) -> Option<&Character> {
         self.characters.get(id)
-    }
-
-    pub fn house(&self, id: &str) -> Option<&House> {
-        self.houses.get(id)
     }
 }
 
@@ -156,15 +148,6 @@ pub fn parse_file(text: &str) -> Result<ContentFile> {
     let opts =
         ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
     Ok(opts.from_str(text)?)
-}
-
-/// A whole Content from a single file, for tests and one-file mods. The game merges
-/// many instead, via `crate::mods::load`.
-pub fn parse(text: &str) -> Result<Content> {
-    let mut content = Content::default();
-    content.merge(parse_file(text)?);
-    validate(&content)?;
-    Ok(content)
 }
 
 /// Check the content hangs together. Runs on the *merged* result, never on

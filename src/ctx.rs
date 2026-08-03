@@ -3,11 +3,13 @@
 //! chronicle log, who the player is, and the map selection. The calendar the
 //! sim runs on lives in `crate::resources`.
 
-use crate::ecs::{CharacterState, Land, Leads, Registry, Seat, StringId};
+use crate::app::Game;
+use crate::ecs::{Land, Leads, Registry, Seat, StringId};
 use crate::resources::date::Date;
 use crate::rng::SimRng;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
+use bevy::prelude::{Query, Res, ResMut};
 use std::sync::{Arc, Mutex};
 
 pub struct Ctx {
@@ -20,7 +22,9 @@ pub struct Ctx {
     /// Gold and levy are not kept here: every character has their own, as
     /// `CharacterState`, and the player is only distinguished by this id.
     pub player_character_id: String,
-    pub selected_region: Option<String>,
+    /// The land the map selection sits on, as a `StringId`. Set on startup to
+    /// the player's own seat by [`Ctx::startup`]; arrow keys move it via [`step`].
+    pub selected_land_id: Option<String>,
 }
 
 impl Ctx {
@@ -29,9 +33,9 @@ impl Ctx {
     /// to be. It is only an id, though, and one the content doesn't have
     /// simply leaves the player bar blank rather than failing here.
     ///
-    /// This no longer builds the world — entities are spawned into the App
-    /// world by [`crate::ecs::populate`] afterwards, and `selected_region` is
-    /// filled in by [`Ctx::finish_selection`] once those entities exist.
+    /// This builds only the session state — entities are spawned into the App
+    /// world by [`crate::ecs::populate`], and `selected_land_id` is set by
+    /// [`Ctx::startup`] in the `Startup` schedule once those entities exist.
     pub fn new_game(seed: u64, player: &str) -> Self {
         let rng = Arc::new(Mutex::new(SimRng::new(seed)));
         let chronicles = vec![format!("{} — the chronicle begins.", Date::START)];
@@ -40,40 +44,37 @@ impl Ctx {
             rng,
             chronicles,
             player_character_id: player.to_string(),
-            selected_region: None,
+            selected_land_id: None,
         }
     }
 
-    /// Resolve the player's opening selection once the world is populated: the
-    /// player's own capital, falling back to any land at all for content that
-    /// doesn't contain them. Called from `main` after [`crate::ecs::populate`].
-    pub fn finish_selection(&mut self, world: &World) {
-        self.selected_region = player_seat_land(world, &self.player_character_id)
-            .or_else(|| crate::ecs::random_land_id(world, &mut *self.rng.lock().unwrap()));
+    /// Resolve the opening selection: the player's own capital, via their
+    /// kingdom's [`Seat`]. Runs in the `Startup` schedule, after
+    /// [`crate::ecs::populate`] has spawned the entities. Left `None` if the
+    /// player leads no kingdom with a seat.
+    pub fn startup(
+        mut game: ResMut<Game>,
+        registry: Res<Registry>,
+        leads: Query<&Leads>,
+        seats: Query<&Seat>,
+        string_ids: Query<&StringId>,
+    ) {
+        let Some(player_e) = registry.get(&game.ctx.player_character_id) else {
+            return;
+        };
+        game.ctx.selected_land_id = leads
+            .get(player_e)
+            .ok()
+            .and_then(|l| seats.get(l.kingdom()).ok())
+            .and_then(|s| string_ids.get(s.0).ok())
+            .map(|s| s.0.clone());
     }
 }
 
-// --- entity reads, `&World`/`&mut World` free functions ---------------------
+// --- entity reads, `&mut World` free functions -----------------------------
 // The UI does its reads through Bevy `Query` system params directly (see the
-// `ui` modules); these are the reads the sim logic and tests need, kept here
-// because they mix `Registry` lookups with component reads.
-
-/// The player's capital, if they rule a kingdom that has one. Uses the reverse
-/// [`Leads`] link for an O(1) lookup.
-pub fn player_seat_land(world: &World, player_id: &str) -> Option<String> {
-    let player_e = world.resource::<Registry>().get(player_id)?;
-    let kingdom_e = world.get::<Leads>(player_e)?.kingdom();
-    let seat_e = world.get::<Seat>(kingdom_e)?.0;
-    world.get::<StringId>(seat_e).map(|s| s.0.clone())
-}
-
-/// A character's mutable numbers, copied out. `reconcile` gives every defined
-/// character a state entry, so this is only `None` for an id that isn't
-/// defined.
-pub fn character_state(world: &World, id: &str) -> Option<CharacterState> {
-    let e = world.resource::<Registry>().get(id)?;
-    world.get::<CharacterState>(e).map(|cs| *cs)
-}
+// `ui` modules); `step` mixes `Registry` lookup with component reads and so
+// runs as an exclusive system.
 
 /// The land to move the selection to when stepping from `from` along `dir`
 /// (a unit-ish direction). Picks the nearest holding that lies in that

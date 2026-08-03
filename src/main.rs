@@ -44,7 +44,7 @@ fn main() -> Result<()> {
 
     // Session state without the world; entities are spawned into the App world
     // below, and the opening selection resolves once they exist.
-    let mut ctx = Ctx::new_game(seed, &player);
+    let ctx = Ctx::new_game(seed, &player);
 
     let mut app = App::new();
     app.add_plugins(
@@ -68,7 +68,6 @@ fn main() -> Result<()> {
     {
         let world = app.world_mut();
         ecs::populate(world, mods.content, mods.state);
-        ctx.finish_selection(world);
     }
 
     let game = Game::new(ctx);
@@ -81,6 +80,7 @@ fn main() -> Result<()> {
         .add_systems(
             Startup,
             (
+                Ctx::startup,
                 ui::startup::startup,
                 ui::map::startup,
                 updates::yields::recompute_yields,

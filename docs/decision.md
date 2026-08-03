@@ -6,7 +6,7 @@ append a new section when a decision is made.
 ## Single ECS world (no nested `Ctx.world`)
 
 The simulation entities live directly in Bevy's App world. `Ctx` holds only
-session state (rng, chronicles, `player_character_id`, `selected_region`);
+session state (rng, chronicles, `player_character_id`, `selected_land_id`);
 `Game` wraps it as a `Resource`.
 
 - **Why:** Bevy 0.19's `World::query()` needs `&mut World`, so `Query` is only

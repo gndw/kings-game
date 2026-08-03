@@ -91,12 +91,12 @@ pub fn update_input(world: &mut World) {
     let Some(dir) = dir else {
         return;
     };
-    let sel = world.resource::<Game>().ctx.selected_region.clone();
+    let sel = world.resource::<Game>().ctx.selected_land_id.clone();
     let Some(sel) = sel else {
         return;
     };
     if let Some(next) = crate::ctx::step(world, &sel, dir) {
-        world.resource_mut::<Game>().ctx.selected_region = Some(next);
+        world.resource_mut::<Game>().ctx.selected_land_id = Some(next);
     }
 }
 
@@ -119,7 +119,7 @@ pub fn update_draw(
         css::BLUE,
     );
 
-    let sel = game.ctx.selected_region.as_deref();
+    let sel = game.ctx.selected_land_id.as_deref();
     // The player's own holdings, via the reverse Leads link.
     let own: HashSet<String> = registry
         .get(&game.ctx.player_character_id)

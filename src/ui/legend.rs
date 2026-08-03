@@ -46,7 +46,7 @@ pub fn update(
     houses: Query<&House>,
 ) {
     // Nothing selected, or a selected id the world doesn't have: blank.
-    let Some(id) = game.ctx.selected_region.clone() else {
+    let Some(id) = game.ctx.selected_land_id.clone() else {
         legend.0 = String::new();
         return;
     };

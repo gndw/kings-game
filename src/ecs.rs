@@ -41,8 +41,6 @@ use crate::content::Content;
 use crate::state::State;
 use bevy::ecs::world::World;
 use bevy::prelude::{Component, Entity, Resource};
-use rand::Rng;
-use rand::seq::IteratorRandom;
 use std::collections::HashMap;
 
 // ===========================================================================
@@ -272,14 +270,4 @@ pub fn populate(world: &mut World, content: Content, mut state: State) {
         // leader, so there is no manual reverse insert here.
         world.resource_mut::<Registry>().insert(id, eid);
     }
-}
-
-/// A random land's id, or `None` when there are no lands. Drawn from the seeded
-/// RNG so it replays.
-pub fn random_land_id(world: &World, rng: &mut impl Rng) -> Option<String> {
-    world
-        .iter_entities()
-        .filter(|e| e.get::<Land>().is_some())
-        .choose(rng)
-        .and_then(|e| e.get::<StringId>().map(|s| s.0.clone()))
 }

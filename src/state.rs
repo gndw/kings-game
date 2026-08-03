@@ -120,36 +120,6 @@ impl State {
             self.characters.insert(k, v);
         }
     }
-
-    /// The kingdom holding `land_id`, if any.
-    pub fn kingdom_of(&self, land_id: &str) -> Option<&Kingdom> {
-        self.kingdoms
-            .values()
-            .find(|k| k.land_ids.iter().any(|l| l == land_id))
-    }
-
-    /// The kingdom `character_id` rules, if any.
-    pub fn kingdom_led_by(&self, character_id: &str) -> Option<&Kingdom> {
-        self.kingdoms
-            .values()
-            .find(|k| k.leader_character_id == character_id)
-    }
-
-    pub fn character(&self, id: &str) -> Option<&CharacterState> {
-        self.characters.get(id)
-    }
-
-    /// For the sim to write a character's gold and levy back.
-    pub fn character_mut(&mut self, id: &str) -> Option<&mut CharacterState> {
-        self.characters.get_mut(id)
-    }
-
-    /// What stands in `land_id`. Empty for a land nothing has been built on.
-    pub fn buildings_in(&self, land_id: &str) -> &[String] {
-        self.lands
-            .get(land_id)
-            .map_or(&[], |l| l.building_ids.as_slice())
-    }
 }
 
 /// Pull the merged state up with the merged content, and return a note for

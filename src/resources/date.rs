@@ -21,10 +21,6 @@ impl Date {
         day: 1,
         tick_count: 0,
     };
-
-    pub fn is_month_start(&self) -> bool {
-        self.day == 1
-    }
 }
 
 impl std::fmt::Display for Date {

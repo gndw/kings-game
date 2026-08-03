@@ -1,8 +1,12 @@
 use anyhow::{Result, bail};
 use bevy::prelude::*;
-use kings_game::app::{Game, input, tick};
+use kings_game::app::{Game, input, speed};
 use kings_game::ctx::Ctx;
+use kings_game::ecs;
+use kings_game::resources::date::Date;
+use kings_game::schedules::OnMonth;
 use kings_game::ui;
+use kings_game::updates;
 use std::path::Path;
 
 fn main() -> Result<()> {
@@ -35,37 +39,53 @@ fn main() -> Result<()> {
     if mods.content.character(&player).is_none() {
         bail!("no character `{player}` in the loaded mods");
     }
-    let game = Game::new(
-        Ctx::new_game(seed, mods.content, mods.state, &player),
-        mods.scripts,
-    );
-    let hz = f64::from(game.speed());
+    let calendar = mods.content.calendar.clone();
+    let border = mods.content.border;
 
-    App::new()
-        .add_plugins(
-            DefaultPlugins
-                .set(WindowPlugin {
-                    primary_window: Some(Window {
-                        title: "Kings".into(),
-                        mode: bevy::window::WindowMode::BorderlessFullscreen(
-                            MonitorSelection::Primary,
-                        ),
-                        ..default()
-                    }),
-                    ..default()
-                })
-                // ponytail: WSLg has no XSETTINGS manager, reports a 0mm display, and
-                // can't report its current monitor at window creation. All of these are
-                // environment noise, not bugs.
-                .set(bevy::log::LogPlugin {
-                    filter: "wgpu=error,naga=warn,winit=error,bevy_winit=error"
-                        .into(),
+    // Session state without the world; entities are spawned into the App world
+    // below, and the opening selection resolves once they exist.
+    let ctx = Ctx::new_game(seed, &player);
+
+    let mut app = App::new();
+    app.add_plugins(
+        DefaultPlugins
+            .set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: "Kings".into(),
+                    mode: bevy::window::WindowMode::BorderlessFullscreen(MonitorSelection::Primary),
                     ..default()
                 }),
-        )
-        .insert_resource(game)
+                ..default()
+            })
+            // ponytail: WSLg has no XSETTINGS manager, reports a 0mm display, and
+            // can't report its current monitor at window creation. All of these are
+            // environment noise, not bugs.
+            .set(bevy::log::LogPlugin {
+                filter: "wgpu=error,naga=warn,winit=error,bevy_winit=error".into(),
+                ..default()
+            }),
+    );
+    {
+        let world = app.world_mut();
+        ecs::populate(world, mods.content);
+    }
+
+    let game = Game::new(ctx);
+    let hz = f64::from(speed(&calendar.speeds, game.speed_idx));
+    app.insert_resource(game)
+        .insert_resource(Date::START)
+        .insert_resource(calendar)
+        .insert_resource(border)
         .insert_resource(Time::<Fixed>::from_hz(hz))
-        .add_systems(Startup, (ui::startup::startup, ui::map::startup))
+        .add_systems(
+            Startup,
+            (
+                Ctx::startup,
+                ui::startup::startup,
+                ui::map::startup,
+                updates::yields::recompute_yields,
+            ),
+        )
         .add_systems(
             Update,
             (
@@ -78,7 +98,11 @@ fn main() -> Result<()> {
                 ui::status::update,
             ),
         )
-        .add_systems(FixedUpdate, tick.run_if(|g: Res<Game>| g.running()))
+        .add_systems(
+            FixedUpdate,
+            updates::advance_date::advance.run_if(|g: Res<Game>| g.running()),
+        )
+        .add_systems(OnMonth, updates::payout::payout)
         .run();
     Ok(())
 }

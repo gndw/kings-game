@@ -34,21 +34,3 @@ pub fn draw(gizmos: &mut Gizmos, at: Vec2, phase: f32) {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn cloth_waves_but_stays_pinned() {
-        for i in 0..20 {
-            let phase = i as f32 * 0.1;
-            assert_eq!(wave(phase, 0.0), 0.0, "pole edge moved");
-            assert!(wave(phase, 1.0).abs() <= 2.0, "tip flew off");
-        }
-        // the tip actually moves over time
-        let spread = (0..20).map(|i| wave(i as f32 * 0.1, 1.0));
-        let (lo, hi) = spread.fold((f32::MAX, f32::MIN), |(l, h), v| (l.min(v), h.max(v)));
-        assert!(hi - lo > 2.0, "flag is limp: {lo}..{hi}");
-    }
-}

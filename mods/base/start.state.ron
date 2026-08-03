@@ -45,8 +45,8 @@
             "building-archery-range", "building-watchtower",
         ]),
     ],
-    // Levy and gold_yield are left out on purpose: the base scripts recompute
-    // both in `on_startup`, so writing them here would only ever be wrong.
+    // Levy and gold_yield are left out on purpose: the sim recomputes both at
+    // `new_game`, so writing them here would only ever be wrong.
     characters: [
         (id: "char-leyton", age: 61, gold: 42),
         (id: "char-alerie", age: 34, gold: 8),

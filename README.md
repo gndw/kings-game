@@ -83,10 +83,9 @@ rather than a silent no-op — a typo tells you about itself.
 
 A mod folder may also hold any number of `*.rhai` files
 ([Rhai](https://rhai.rs)). Define `on_startup`, `on_day`, `on_month`, any of
-them, or none. `on_startup` fires once before the first tick — that's where the
-base scripts publish a ruler's levy and monthly income, so a new game opens on
-real numbers instead of zeroes. `on_month` only ever fires on day 1, so it needs
-no date check of its own:
+them, or none. `on_startup` fires once before the first tick — a place to
+publish anything the opening screen should already show. `on_month` only ever
+fires on day 1, so it needs no date check of its own:
 
 ```rhai
 // mods/plague/on_month.rhai
@@ -98,9 +97,8 @@ fn on_month(ctx) {
 ```
 
 As with the data files, the filename is documentation — each `*.rhai` compiles
-on its own, so split a mod however reads best. The base game names each script
-after what it does (`character_levy.rhai`, `character_gold.rhai`); one file with both
-hooks works exactly the same.
+on its own, so split a mod however reads best. Name a script after what it
+does; one file with several hooks works exactly the same.
 
 What `ctx` can read:
 
@@ -127,10 +125,9 @@ What it can do:
 | `set_character_gold_yield(id, n)` | set a character's gold per month |
 
 Gold and levy belong to characters, not to the player — the player is just an
-id, and every ruler runs on the same rules. Who counts as a ruler is not a rule
-the engine knows: the base scripts walk `kingdoms`, keep the ones whose leader
-is the character in hand, and sum the buildings. Lead no kingdom and the sum is
-zero. Change that loop and you change the rule.
+id, and every ruler runs on the same rules. Who counts as a ruler is a question
+the engine itself answers now: it walks each character's kingdoms and sums the
+buildings across their holdings. Lead no kingdom and the sum is zero.
 
 Starting values are state, so a mod hands someone a treasury by overriding
 their entry — no need to redeclare who they are:
@@ -144,10 +141,11 @@ Use `rand()` rather than rolling your own randomness — it draws from the game'
 seeded RNG, so a campaign still replays exactly from its seed.
 
 Writes are collected and applied after every mod's hooks have run, so the
-readable values don't shift under you mid-hook. The economy is itself just a
-script — `mods/base/character_levy.rhai` sets levies and `mods/base/character_gold.rhai`
-collects taxes on the first. Replace them by shipping a folder sorted after
-`base`, or delete them and nobody earns anything.
+readable values don't shift under you mid-hook. The economy itself is no longer
+a script — gold yield, levy and the monthly tax payout are computed in Rust on
+the ECS each tick, so every ruler earns and raises without a mod. A script can
+still read the same surface and call `add_character_gold` and the rest to layer
+its own rules on top.
 
 A script that fails to compile or throws is reported in the chronicle and then
 disabled for the session. It never takes the game down with it.

@@ -24,15 +24,6 @@ impl SimRng {
             draws: 0,
         }
     }
-
-    pub fn restore(seed: u64, draws: u64) -> Self {
-        let mut rng = SimRng::new(seed);
-        for _ in 0..draws {
-            rng.inner.next_u64();
-        }
-        rng.draws = draws;
-        rng
-    }
 }
 
 impl TryRng for SimRng {

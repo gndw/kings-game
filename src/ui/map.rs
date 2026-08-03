@@ -1,13 +1,15 @@
 //! The camera framed on the map and the gizmo drawing of it. The map geometry
-//! itself lives in `crate::content`.
+//! itself lives in the entity world; see `crate::ecs::Land`.
 
 use super::flag;
 use super::startup::RIGHT_BAR;
 use crate::app::Game;
-use crate::content::bounds;
+use crate::ecs::{Holds, LandBorders, LandHolding, Leads, Registry, StringId};
+use crate::resources::border::Border;
 use bevy::camera::ScalingMode;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
+use std::collections::HashSet;
 
 const HOLDING_RADIUS: f32 = 4.0;
 /// Gap between the horizontal lines that stand in for a polygon fill.
@@ -49,8 +51,8 @@ fn fill(gizmos: &mut Gizmos, poly: &[(f64, f64)], color: Color) {
 }
 
 /// Camera framed on the whole map.
-pub fn startup(mut commands: Commands, game: Res<Game>) {
-    let (x0, x1, y0, y1) = bounds(&game.ctx.content);
+pub fn startup(mut commands: Commands, border: Res<Border>) {
+    let (x0, x1, y0, y1) = border.bounds();
     commands.spawn((
         Camera2d,
         // AutoMin keeps the whole map visible whatever the window shape, so the
@@ -70,72 +72,91 @@ pub fn startup(mut commands: Commands, game: Res<Game>) {
 }
 
 /// Arrow keys move the selection to the neighbouring land in that direction.
-pub fn update_input(keys: Res<ButtonInput<KeyCode>>, mut game: ResMut<Game>) {
-    for (key, dir) in [
+/// Exclusive: selection stepping reads many lands and writes the player's
+/// selection, all through the one [`World`].
+pub fn update_input(world: &mut World) {
+    let dir = [
         (KeyCode::ArrowLeft, (-1.0, 0.0)),
         (KeyCode::ArrowRight, (1.0, 0.0)),
         (KeyCode::ArrowUp, (0.0, 1.0)),
         (KeyCode::ArrowDown, (0.0, -1.0)),
-    ] {
-        if keys.just_pressed(key)
-            && let Some(sel) = game.ctx.selected_region.clone()
-            && let Some(next) = game.ctx.content.step(&sel, dir)
-        {
-            game.ctx.selected_region = Some(next);
-        }
+    ]
+    .into_iter()
+    .find_map(|(k, d)| {
+        world
+            .resource::<ButtonInput<KeyCode>>()
+            .just_pressed(k)
+            .then_some(d)
+    });
+    let Some(dir) = dir else {
+        return;
+    };
+    let sel = world.resource::<Game>().ctx.selected_land_id.clone();
+    let Some(sel) = sel else {
+        return;
+    };
+    if let Some(next) = crate::ctx::step(world, &sel, dir) {
+        world.resource_mut::<Game>().ctx.selected_land_id = Some(next);
     }
 }
 
 /// World border, land outlines, holdings, and the selected land's flag.
-pub fn update_draw(mut gizmos: Gizmos, game: Res<Game>, time: Res<Time>) {
-    let b = &game.ctx.content.border;
+pub fn update_draw(
+    mut gizmos: Gizmos,
+    game: Res<Game>,
+    registry: Res<Registry>,
+    border: Res<Border>,
+    time: Res<Time>,
+    leads: Query<&Leads>,
+    holds_q: Query<&Holds>,
+    lands: Query<(&StringId, &LandBorders, &LandHolding)>,
+    string_ids: Query<&StringId>,
+) {
+    let b = &*border;
     gizmos.rect_2d(
         Isometry2d::from_xy(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32),
         Vec2::new((b.x1 - b.x0) as f32, (b.y1 - b.y0) as f32),
         css::BLUE,
     );
 
-    let sel = game.ctx.selected_region.as_deref();
-    let own: &[String] = game
-        .ctx
-        .state
-        .kingdom_led_by(&game.ctx.player_character_id)
-        .map_or(&[], |k| k.land_ids.as_slice());
-    // Selected land last, so it draws over its neighbours.
-    let order = game
-        .ctx
-        .content
-        .lands
+    let sel = game.ctx.selected_land_id.as_deref();
+    // The player's own holdings, via the reverse Leads link.
+    let own: HashSet<String> = registry
+        .get(&game.ctx.player_character_id)
+        .and_then(|pe| leads.get(pe).ok())
+        .and_then(|kl| holds_q.get(kl.kingdom()).ok())
+        .map(|h| {
+            h.iter()
+                .filter_map(|le| string_ids.get(le).ok().map(|s| s.0.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    // Lands in spawn order: one archetype, so `Query` yields content order.
+    let lands_vec: Vec<(String, Vec<(f64, f64)>, (f64, f64))> = lands
         .iter()
-        .filter(|(id, _)| Some(id.as_str()) != sel)
-        .chain(
-            game.ctx
-                .content
-                .lands
-                .iter()
-                .filter(|(id, _)| Some(id.as_str()) == sel),
-        );
-    for (id, land) in order {
-        let is_sel = Some(id.as_str()) == sel;
+        .map(|(sid, borders, holding)| (sid.0.clone(), borders.0.clone(), holding.0))
+        .collect();
+    // Selected land last, so it draws over its neighbours.
+    let order = lands_vec
+        .iter()
+        .filter(|l| Some(l.0.as_str()) != sel)
+        .chain(lands_vec.iter().filter(|l| Some(l.0.as_str()) == sel));
+    for land in order {
+        let is_sel = Some(land.0.as_str()) == sel;
         let (outline, holder) = if is_sel {
             (css::YELLOW, css::YELLOW)
         } else {
             (css::WHITE, Srgba::rgb(0.59, 0.29, 0.0))
         };
-        if own.contains(&land.id) {
-            fill(
-                &mut gizmos,
-                &land.borders,
-                css::GREEN.with_alpha(0.1).into(),
-            );
+        if own.contains(&land.0) {
+            fill(&mut gizmos, &land.1, css::GREEN.with_alpha(0.1).into());
         }
         gizmos.linestrip_2d(
-            land.borders
-                .iter()
-                .map(|&(x, y)| Vec2::new(x as f32, y as f32)),
+            land.1.iter().map(|&(x, y)| Vec2::new(x as f32, y as f32)),
             outline,
         );
-        let holding = Vec2::new(land.holding.0 as f32, land.holding.1 as f32);
+        let holding = Vec2::new(land.2.0 as f32, land.2.1 as f32);
         gizmos
             .circle_2d(
                 Isometry2d::from_translation(holding),

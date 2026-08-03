@@ -196,11 +196,13 @@ asset-loaded sprites.
   fill is a **scanline** routine handling the map's concave shapes), holdings as
   circles, the selected land in yellow over its neighbours, the player's own
   holdings tinted green, and a waving pennant (`flag.rs`) on the selection.
-- **Panels** each own a marker `Component` (`Legend`, `Chronicle`, `ResourceBar`,
-  `Status`) and an `update` system that reads the world through `Query`/`Res` and
-  writes into a `Single<&mut Text>`:
-  - `legend` — the selected land: id/name, holder kingdom + ruler (name, house,
-    age), per-building and total gold/levy.
+- **Panels** each own a marker `Component` (`LegendInfo`, `LegendBuildings`,
+  `Chronicle`, `ResourceBar`, `Status`) and an `update` system that reads the
+  world through `Query`/`Res` and writes into a `Single<&mut Text>`:
+  - `legend` — the selected land, split into two sections separated by a thin
+    divider node: section 1 (`LegendInfo`) holds id/name and the holder kingdom
+    + ruler (name, house, age); section 2 (`LegendBuildings`) holds the
+    per-building and total gold/levy.
   - `chronicle` — last 30 lines of `ctx.chronicles`.
   - `resource` — the player's name, house, gold, yield/mo, levy.
   - `status` — `[PAUSED]`/`[RUNNING]`, the `Date`, current speed.

@@ -9,8 +9,15 @@ use crate::ecs::{
 use crate::resources::buildings::Buildings;
 use bevy::prelude::*;
 
+/// id / land / kingdom detail block.
 #[derive(Component)]
-pub struct Legend;
+pub struct LegendInfo;
+/// Buildings list and total yield block.
+#[derive(Component)]
+pub struct LegendBuildings;
+
+/// Faint rule between the two sections.
+const DIVIDER: Color = Color::srgba(0.5, 0.5, 0.5, 0.6);
 
 /// Fills the space the chronicle leaves in the right-hand column.
 pub(super) fn spawn(col: &mut ChildSpawnerCommands, panel: Color) {
@@ -30,7 +37,22 @@ pub(super) fn spawn(col: &mut ChildSpawnerCommands, panel: Color) {
             TextFont::from_font_size(FONT),
             TextColor(TITLE),
         ));
-        p.spawn((Legend, Text::new(""), TextFont::from_font_size(FONT)));
+        p.spawn((LegendInfo, Text::new(""), TextFont::from_font_size(FONT)));
+        // Section divider: a thin rule with vertical margin.
+        p.spawn((
+            Node {
+                width: percent(100),
+                height: px(1),
+                margin: UiRect::vertical(px(6)),
+                ..default()
+            },
+            BackgroundColor(DIVIDER),
+        ));
+        p.spawn((
+            LegendBuildings,
+            Text::new(""),
+            TextFont::from_font_size(FONT),
+        ));
     });
 }
 
@@ -39,34 +61,39 @@ pub fn update(
     game: Res<Game>,
     registry: Res<Registry>,
     buildings: Res<Buildings>,
-    mut legend: Single<&mut Text, With<Legend>>,
+    mut info: Single<&mut Text, With<LegendInfo>>,
+    mut bld: Single<&mut Text, With<LegendBuildings>>,
     lands: Query<(&LandName, &Built)>,
     kingdoms: Query<(&StringId, &Holds, Option<&Seat>, Option<&LedBy>)>,
     chars: Query<(&CharacterName, &CharacterAge)>,
     house_of: Query<&HouseOf>,
     houses: Query<&HouseName>,
 ) {
-    // Nothing selected, or a selected id the world doesn't have: blank.
+    // Nothing selected, or a selected id the world doesn't have: blank both.
     let Some(id) = game.ctx.selected_land_id.clone() else {
-        legend.0 = String::new();
+        info.0.clear();
+        bld.0.clear();
         return;
     };
     let Some(land_e) = registry.get(&id) else {
-        legend.0 = String::new();
+        info.0.clear();
+        bld.0.clear();
         return;
     };
     let Ok((land, built)) = lands.get(land_e) else {
-        legend.0 = String::new();
+        info.0.clear();
+        bld.0.clear();
         return;
     };
 
-    let mut out = format!("id:{id}\nname:{}", land.0);
+    // Section 1: id, land, kingdom detail.
+    let mut inf = format!("id:{id}\nname:{}", land.0);
     if let Some((k_sid, _holds, seat, leader)) =
         kingdoms.iter().find(|(_, h, _, _)| h.iter().any(|e| e == land_e))
     {
-        out.push_str(&format!("\nkingdom:{}", k_sid.0));
+        inf.push_str(&format!("\nkingdom:{}", k_sid.0));
         if seat.is_some_and(|s| s.0 == land_e) {
-            out.push_str(" (seat)");
+            inf.push_str(" (seat)");
         }
         if let Some(leader) = leader
             && let Ok((ch, cs)) = chars.get(leader.0)
@@ -77,11 +104,14 @@ pub fn update(
                 .and_then(|ho| houses.get(ho.0).ok())
                 .map(|h| h.0.clone())
                 .unwrap_or_default();
-            out.push_str(&format!("\nruler:{} of {} ({})", ch.0, house, cs.0));
+            inf.push_str(&format!("\nruler:{} of {} ({})", ch.0, house, cs.0));
         }
     }
+    info.0 = inf;
 
+    // Section 2: per-building yield and total.
     let (mut gold, mut levy) = (0i64, 0u64);
+    let mut out = String::new();
     for bid in built.0.iter() {
         let Some(b) = buildings.get(bid) else {
             continue;
@@ -90,7 +120,10 @@ pub fn update(
         levy += b.levy as u64;
         // ponytail: only the non-zero numbers, so a line reads
         // "market square +10g" not "+10g -0g 0 levy".
-        out.push_str(&format!("\n- {}", b.name));
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(&format!("- {}", b.name));
         if b.gold_profit > 0 {
             out.push_str(&format!(" +{}g", b.gold_profit));
         }
@@ -102,7 +135,10 @@ pub fn update(
         }
     }
     if !built.0.is_empty() {
-        out.push_str(&format!("\ntotal: {gold:+}g {levy} levy"));
+        if !out.is_empty() {
+            out.push('\n');
+        }
+        out.push_str(&format!("total: {gold:+}g {levy} levy"));
     }
-    legend.0 = out;
+    bld.0 = out;
 }

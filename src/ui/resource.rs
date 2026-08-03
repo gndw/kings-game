@@ -3,7 +3,7 @@
 
 use super::FONT;
 use crate::app::Game;
-use crate::ecs::{Character, CharacterState, House, HouseOf, Registry};
+use crate::ecs::{CharacterGold, CharacterGoldYield, CharacterLevy, CharacterName, HouseName, HouseOf, Registry};
 use bevy::prelude::*;
 
 /// Named `ResourceBar`, not `Resource` — that one is Bevy's trait.
@@ -30,9 +30,9 @@ pub fn update(
     game: Res<Game>,
     registry: Res<Registry>,
     mut bar: Single<&mut Text, With<ResourceBar>>,
-    chars: Query<(&Character, &CharacterState)>,
+    chars: Query<(&CharacterName, &CharacterGold, &CharacterGoldYield, &CharacterLevy)>,
     house_of: Query<&HouseOf>,
-    houses: Query<&House>,
+    houses: Query<&HouseName>,
 ) {
     // A map that doesn't contain the player leaves the bar blank rather than
     // showing zeroes that look like a broke ruler.
@@ -40,7 +40,7 @@ pub fn update(
         bar.0 = String::new();
         return;
     };
-    let Ok((ch, cs)) = chars.get(player_e) else {
+    let Ok((ch, gold, gold_yield, levy)) = chars.get(player_e) else {
         bar.0 = String::new();
         return;
     };
@@ -48,13 +48,13 @@ pub fn update(
         .get(player_e)
         .ok()
         .and_then(|ho| houses.get(ho.0).ok())
-        .map(|h| h.name.clone())
+        .map(|h| h.0.clone())
         .unwrap_or_default();
     // The monthly income the gold script last published — it owns the rule, so
     // a mod that changes how income is figured changes this number with it.
     // Signed both places: a realm can run at a loss and a ruler can be in debt.
     bar.0 = format!(
         "{} of {}     {} gold ({:+}/mo)     {} levy",
-        ch.name, house, cs.gold, cs.gold_yield, cs.levy
+        ch.0, house, gold.0, gold_yield.0, levy.0
     );
 }

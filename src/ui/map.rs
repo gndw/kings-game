@@ -4,7 +4,7 @@
 use super::flag;
 use super::startup::RIGHT_BAR;
 use crate::app::Game;
-use crate::ecs::{Holds, Land, Leads, Registry, StringId};
+use crate::ecs::{Holds, LandBorders, LandHolding, Leads, Registry, StringId};
 use crate::resources::border::Border;
 use bevy::camera::ScalingMode;
 use bevy::color::palettes::css;
@@ -109,7 +109,7 @@ pub fn update_draw(
     time: Res<Time>,
     leads: Query<&Leads>,
     holds_q: Query<&Holds>,
-    lands: Query<(&StringId, &Land)>,
+    lands: Query<(&StringId, &LandBorders, &LandHolding)>,
     string_ids: Query<&StringId>,
 ) {
     let b = &*border;
@@ -135,7 +135,7 @@ pub fn update_draw(
     // Lands in spawn order: one archetype, so `Query` yields content order.
     let lands_vec: Vec<(String, Vec<(f64, f64)>, (f64, f64))> = lands
         .iter()
-        .map(|(sid, l)| (sid.0.clone(), l.borders.clone(), l.holding))
+        .map(|(sid, borders, holding)| (sid.0.clone(), borders.0.clone(), holding.0))
         .collect();
     // Selected land last, so it draws over its neighbours.
     let order = lands_vec

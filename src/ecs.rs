@@ -6,10 +6,12 @@
 //! params (the UI) or `&mut World` free functions (sim logic, which mixes
 //! component and resource access and so runs as exclusive systems).
 //!
-//! - **House** entities: [`StringId`], [`House`].
-//! - **Character** entities: [`StringId`], [`Character`],
-//!   [`HouseOf`], [`CharacterState`], maybe [`Leads`].
-//! - **Land** entities: [`StringId`], [`Land`], [`Built`], maybe [`HeldBy`].
+//! - **House** entities: [`StringId`], [`House`], [`HouseName`].
+//! - **Character** entities: [`StringId`], [`Character`], [`CharacterName`],
+//!   [`CharacterAge`], [`CharacterGold`], [`CharacterLevy`],
+//!   [`CharacterGoldYield`], [`HouseOf`], maybe [`Leads`].
+//! - **Land** entities: [`StringId`], [`Land`], [`LandName`], [`LandBorders`],
+//!   [`LandHolding`], [`Built`], maybe [`HeldBy`].
 //! - **Kingdom** entities: [`StringId`], [`Kingdom`], [`LedBy`],
 //!   [`Seat`], [`Holds`] (auto-maintained from each land's [`HeldBy`]).
 //!
@@ -36,238 +38,19 @@
 //! the `IndexMap` keys once played. Reading the registry and then mutating the
 //! entity it points at is the standard two-step: pull the (cheap, `Copy`)
 //! `Entity` out, drop the borrow, then touch the entity.
+//!
+//! Definitions live in one file per entity kind ([`character`], [`house`],
+//! [`kingdom`], [`land`]); the shared spine — [`StringId`], [`Registry`],
+//! [`populate`] — is in [`ecs`] and re-exported here as one flat namespace.
 
-use crate::content::Content;
-use crate::state::State;
-use bevy::ecs::world::World;
-use bevy::prelude::{Component, Entity, Resource};
-use std::collections::HashMap;
+pub mod character;
+pub mod ecs;
+pub mod house;
+pub mod kingdom;
+pub mod land;
 
-// ===========================================================================
-// Shared components
-// ===========================================================================
-
-/// The id an entity is known by in RON data and save files. Every game entity
-/// has one; the Rhai surface (`ctx.gold("char-tywin")`, …) is built on it.
-#[derive(Component, Debug, Clone)]
-pub struct StringId(pub String);
-
-impl StringId {
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
-}
-
-/// `id → Entity`, for the O(1) lookup the `IndexMap` keys once gave. Held as a
-/// resource on the [`World`].
-///
-/// Reading the registry and then mutating an entity it points at is the
-/// standard two-step dance: pull the (cheap, `Copy`) `Entity` out of the
-/// registry, drop the borrow, then touch the entity.
-#[derive(Resource, Default, Debug)]
-pub struct Registry {
-    pub by_id: HashMap<String, Entity>,
-}
-
-impl Registry {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Register `id` → `entity`, overwriting any earlier mapping for that id.
-    /// Same replace-in-place rule as `IndexMap::insert`.
-    pub fn insert(&mut self, id: String, entity: Entity) {
-        self.by_id.insert(id, entity);
-    }
-
-    /// The entity known by `id`, if any.
-    pub fn get(&self, id: &str) -> Option<Entity> {
-        self.by_id.get(id).copied()
-    }
-}
-
-// ===========================================================================
-// Per-entity components
-// ===========================================================================
-
-/// A family. Characters belong to one; kingdoms are ruled through them.
-#[derive(Component, Debug, Clone)]
-pub struct House {
-    pub name: String,
-}
-
-/// The read-only half of a character: their name. Their house is [`HouseOf`];
-/// their treasury and levy are [`CharacterState`].
-#[derive(Component, Debug, Clone)]
-pub struct Character {
-    pub name: String,
-}
-
-/// Which house a character belongs to. Points at a [`House`] entity.
-#[derive(Component, Debug, Clone, Copy)]
-pub struct HouseOf(pub Entity);
-
-/// The mutable half of a character: age, treasury, troops, monthly yield. All
-/// fields `Copy`, so reads hand back a cheap snapshot.
-#[derive(Component, Debug, Clone, Copy, Default)]
-pub struct CharacterState {
-    pub age: u32,
-    pub gold: i64,
-    pub levy: u64,
-    pub gold_yield: i64,
-}
-
-/// The kingdom a character leads — the auto-maintained reverse of [`LedBy`],
-/// for O(1) character→kingdom lookup. Read-only: set [`LedBy`] on the kingdom
-/// and Bevy's hook keeps this in sync.
-///
-/// One-to-one (single `Entity`): a character leads at most one kingdom. If a
-/// second kingdom claims the same leader, Bevy drops the older [`LedBy`].
-#[derive(Component, Debug)]
-#[relationship_target(relationship = LedBy)]
-pub struct Leads(Entity);
-
-impl Leads {
-    /// The kingdom this character leads.
-    pub fn kingdom(&self) -> Entity {
-        self.0
-    }
-}
-
-/// One land's read-only geometry: outline and seat of power.
-#[derive(Component, Debug, Clone)]
-pub struct Land {
-    pub name: String,
-    pub borders: Vec<(f64, f64)>,
-    pub holding: (f64, f64),
-}
-
-/// What stands in a land: the ids of the buildings built there. State, not
-/// content — it changes in play and belongs in a save. Looked up against the
-/// [`Buildings`](crate::resources::buildings::Buildings) resource to render.
-#[derive(Component, Debug, Clone, Default)]
-pub struct Built(pub Vec<String>);
-
-/// The kingdom that holds a land. Points at a [`Kingdom`] entity. A Bevy
-/// relationship component: inserting it auto-maintains [`Holds`] on the kingdom.
-#[derive(Component, Debug, Clone, Copy)]
-#[relationship(relationship_target = Holds)]
-pub struct HeldBy(pub Entity);
-
-/// Tags a kingdom entity. A kingdom is otherwise just its relations.
-#[derive(Component, Debug, Clone, Copy)]
-pub struct Kingdom;
-
-/// The character who rules a kingdom. Points at a [`Character`] entity. A Bevy
-/// relationship component: inserting it auto-maintains [`Leads`] on the leader.
-#[derive(Component, Debug, Clone, Copy)]
-#[relationship(relationship_target = Leads)]
-pub struct LedBy(pub Entity);
-
-/// The capital land of a kingdom. Points at a [`Land`] entity.
-#[derive(Component, Debug, Clone, Copy)]
-pub struct Seat(pub Entity);
-
-/// The lands a kingdom holds — the auto-maintained reverse of [`HeldBy`].
-/// Read-only: set [`HeldBy`] on each land and Bevy's hook keeps this in sync.
-#[derive(Component, Debug, Default)]
-#[relationship_target(relationship = HeldBy)]
-pub struct Holds(Vec<Entity>);
-
-// ===========================================================================
-// Building the world from content + state
-// ===========================================================================
-
-/// Build the entity world from merged, reconciled content and state. Called
-/// once from [`Ctx::new_game`](crate::ctx::Ctx::new_game); afterwards content
-/// and state are gone.
-///
-/// Spawn order is leaves-first — houses, then characters (which point at
-/// houses), then lands, then kingdoms (which point at characters and lands) —
-/// so a relation always resolves to an entity that already exists.
-/// [`reconcile`](crate::state::reconcile) has already pruned every dangling
-/// reference, so the `filter_map`s here only guard against logic errors, not
-/// bad data. The building roster leaves as the [`Buildings`] resource rather
-/// than entities.
-pub fn populate(world: &mut World, content: Content, mut state: State) {
-    world.insert_resource(Registry::new());
-    world.insert_resource(content.buildings);
-
-    // Houses.
-    for (id, h) in content.houses.into_iter() {
-        let eid = world
-            .spawn((StringId(id.clone()), House { name: h.name }))
-            .id();
-        world.resource_mut::<Registry>().insert(id, eid);
-    }
-
-    // Characters: content half joined with state half by id.
-    for (id, c) in content.characters.into_iter() {
-        let st = state.characters.shift_remove(&id).unwrap_or_default();
-        let house_e = world.resource::<Registry>().get(&c.house_id);
-        let eid = {
-            let mut ec = world.spawn((
-                StringId(id.clone()),
-                Character { name: c.name },
-                CharacterState {
-                    age: st.age,
-                    gold: st.gold,
-                    levy: st.levy,
-                    gold_yield: st.gold_yield,
-                },
-            ));
-            if let Some(he) = house_e {
-                ec.insert(HouseOf(he));
-            }
-            ec.id()
-        };
-        world.resource_mut::<Registry>().insert(id, eid);
-    }
-
-    // Lands: content geometry + state's building list (the ids, kept as-is).
-    for (id, l) in content.lands.into_iter() {
-        let lst = state.lands.shift_remove(&id).unwrap_or_default();
-        let eid = world
-            .spawn((
-                StringId(id.clone()),
-                Land {
-                    name: l.name,
-                    borders: l.borders,
-                    holding: l.holding,
-                },
-                Built(lst.building_ids),
-            ))
-            .id();
-        world.resource_mut::<Registry>().insert(id, eid);
-    }
-
-    // Kingdoms: state-only. Their leader, seat and holdings resolve to the
-    // characters and lands spawned above.
-    for (id, k) in state.kingdoms.into_iter() {
-        let leader = world.resource::<Registry>().get(&k.leader_character_id);
-        let seat = world.resource::<Registry>().get(&k.seat_land_id);
-        let holds: Vec<Entity> = k
-            .land_ids
-            .iter()
-            .filter_map(|lid| world.resource::<Registry>().get(lid))
-            .collect();
-        let eid = {
-            let mut ec = world.spawn((StringId(id.clone()), Kingdom));
-            if let Some(le) = leader {
-                ec.insert(LedBy(le));
-            }
-            if let Some(se) = seat {
-                ec.insert(Seat(se));
-            }
-            ec.id()
-        };
-        // Each land declares the kingdom holding it; `Holds` on the kingdom is
-        // auto-maintained by the relationship hook.
-        for &le in &holds {
-            world.entity_mut(le).insert(HeldBy(eid));
-        }
-        // `LedBy` is a Bevy relationship: its hook auto-maintains `Leads` on the
-        // leader, so there is no manual reverse insert here.
-        world.resource_mut::<Registry>().insert(id, eid);
-    }
-}
+pub use character::*;
+pub use ecs::*;
+pub use house::*;
+pub use kingdom::*;
+pub use land::*;

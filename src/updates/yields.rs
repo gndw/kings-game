@@ -1,7 +1,7 @@
 //! The daily economy: every ruler's gold yield and levy recomputed from their
 //! holdings, scheduled by the ECS rather than called by hand from `Ctx::tick`.
 
-use crate::ecs::{Built, CharacterState, Holds, Leads};
+use crate::ecs::{Built, CharacterGoldYield, CharacterLevy, Holds, Leads};
 use crate::resources::buildings::Buildings;
 use bevy::prelude::*;
 
@@ -17,13 +17,13 @@ use bevy::prelude::*;
 /// lands → [`Built`] → [`Buildings`]. `Option<&Leads>` walks every character so
 /// a ruler who leads nothing (or a landless realm) is zeroed, not left stale.
 pub fn recompute_yields(
-    mut characters: Query<(Option<&Leads>, &mut CharacterState)>,
+    mut characters: Query<(Option<&Leads>, &mut CharacterGoldYield, &mut CharacterLevy)>,
     kingdoms: Query<&Holds>,
     lands: Query<&Built>,
     buildings: Res<Buildings>,
 ) {
-    for (leads, mut cs) in &mut characters {
-        let (gold_yield, levy) = leads
+    for (leads, mut gold_yield, mut levy) in &mut characters {
+        let (yield_total, levy_total) = leads
             .and_then(|l| kingdoms.get(l.kingdom()).ok())
             .map(|holds| {
                 let (mut gold_yield, mut levy) = (0i64, 0u64);
@@ -41,7 +41,7 @@ pub fn recompute_yields(
                 (gold_yield, levy)
             })
             .unwrap_or((0, 0));
-        cs.gold_yield = gold_yield;
-        cs.levy = levy;
+        gold_yield.0 = yield_total;
+        levy.0 = levy_total;
     }
 }

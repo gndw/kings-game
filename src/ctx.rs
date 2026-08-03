@@ -4,7 +4,7 @@
 //! sim runs on lives in `crate::resources`.
 
 use crate::app::Game;
-use crate::ecs::{Land, Leads, Registry, Seat, StringId};
+use crate::ecs::{LandHolding, Leads, Registry, Seat, StringId};
 use crate::resources::date::Date;
 use crate::rng::SimRng;
 use bevy::ecs::entity::Entity;
@@ -20,7 +20,8 @@ pub struct Ctx {
     /// resolved through the [`Registry`] when a component is needed.
     ///
     /// Gold and levy are not kept here: every character has their own, as
-    /// `CharacterState`, and the player is only distinguished by this id.
+    /// `CharacterGold`/`CharacterLevy`, and the player is only distinguished
+    /// by this id.
     pub player_character_id: String,
     /// The land the map selection sits on, as a `StringId`. Set on startup to
     /// the player's own seat by [`Ctx::startup`]; arrow keys move it via [`step`].
@@ -84,14 +85,14 @@ impl Ctx {
 /// borders-touch adjacency in lands.ron if the picks feel wrong on odd shapes.
 pub fn step(world: &mut World, from_id: &str, dir: (f64, f64)) -> Option<String> {
     let from_e = world.resource::<Registry>().get(from_id)?;
-    let origin = world.get::<Land>(from_e)?.holding;
-    let mut q = world.query::<(Entity, &StringId, &Land)>();
+    let origin = world.get::<LandHolding>(from_e)?.0;
+    let mut q = world.query::<(Entity, &StringId, &LandHolding)>();
     let mut best: Option<(f64, String)> = None;
     for (e, sid, l) in q.iter(world) {
         if e == from_e {
             continue;
         }
-        let (dx, dy) = (l.holding.0 - origin.0, l.holding.1 - origin.1);
+        let (dx, dy) = (l.0.0 - origin.0, l.0.1 - origin.1);
         let along = dx * dir.0 + dy * dir.1;
         // Perpendicular component: how far off-axis the candidate sits.
         let perp = (dx * dir.1 - dy * dir.0).abs();

@@ -3,7 +3,8 @@
 use super::{FONT, TITLE};
 use crate::app::Game;
 use crate::ecs::{
-    Built, Character, CharacterState, Holds, House, HouseOf, Land, LedBy, Registry, Seat, StringId,
+    Built, CharacterAge, CharacterName, Holds, HouseName, HouseOf, LandName, LedBy, Registry, Seat,
+    StringId,
 };
 use crate::resources::buildings::Buildings;
 use bevy::prelude::*;
@@ -39,11 +40,11 @@ pub fn update(
     registry: Res<Registry>,
     buildings: Res<Buildings>,
     mut legend: Single<&mut Text, With<Legend>>,
-    lands: Query<(&Land, &Built)>,
+    lands: Query<(&LandName, &Built)>,
     kingdoms: Query<(&StringId, &Holds, Option<&Seat>, Option<&LedBy>)>,
-    chars: Query<(&Character, &CharacterState)>,
+    chars: Query<(&CharacterName, &CharacterAge)>,
     house_of: Query<&HouseOf>,
-    houses: Query<&House>,
+    houses: Query<&HouseName>,
 ) {
     // Nothing selected, or a selected id the world doesn't have: blank.
     let Some(id) = game.ctx.selected_land_id.clone() else {
@@ -59,7 +60,7 @@ pub fn update(
         return;
     };
 
-    let mut out = format!("id:{id}\nname:{}", land.name);
+    let mut out = format!("id:{id}\nname:{}", land.0);
     if let Some((k_sid, _holds, seat, leader)) =
         kingdoms.iter().find(|(_, h, _, _)| h.iter().any(|e| e == land_e))
     {
@@ -74,9 +75,9 @@ pub fn update(
                 .get(leader.0)
                 .ok()
                 .and_then(|ho| houses.get(ho.0).ok())
-                .map(|h| h.name.clone())
+                .map(|h| h.0.clone())
                 .unwrap_or_default();
-            out.push_str(&format!("\nruler:{} of {} ({})", ch.name, house, cs.age));
+            out.push_str(&format!("\nruler:{} of {} ({})", ch.0, house, cs.0));
         }
     }
 

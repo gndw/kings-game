@@ -58,3 +58,19 @@ in sync — no manual `Vec`, no drift.
 - **Naming:** `HeldBy` (land) / `Holds` (kingdom), the same active/passive
   mirror as `LedBy`/`Leads`. Reads go through `RelationshipTarget::iter`
   (in `bevy::prelude`), which yields owned `Entity`.
+
+## ECS components split to one field each
+
+`House`/`Character`/`Land` are marker tags; their data is one field per
+component: `HouseName`; `CharacterName`, `CharacterAge`, `CharacterGold`,
+`CharacterLevy`, `CharacterGoldYield`; `LandName`, `LandBorders`,
+`LandHolding`. The old multi-field `ecs::CharacterState` is dissolved into
+the four character components above.
+
+- **Why:** smallest-form components let a system query only the field it
+  touches (a payout needs gold + yield, not age), and keep each mutable value
+  in its own component so Bevy tracks them independently. The marker tags
+  (`House`/`Character`/`Land`) still answer "what kind of entity is this".
+- **`state`/`content` unchanged:** `state::CharacterState` (save/load) and
+  `content::{House, Character, Land}` (RON data) keep their grouped structs;
+  only the ECS components are split, fanned out by `populate` on spawn.

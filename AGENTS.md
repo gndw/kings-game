@@ -1,5 +1,16 @@
 # AGENTS.md
 
+## Architecture
+
+`docs/architecture.md` maps how the code is put together (layers, the data
+load pipeline, the ECS world, the sim loop, UI, key invariants, a file map).
+**Refer to it before any structural change** — a new entity kind, schedule,
+data section, or refactoring across a layer. It is the *what*; the decision
+doc is the *why*. If your change alters the structure that file describes
+(component shape, a relationship, a schedule, the load passes, an invariant),
+**update the relevant section in the same change** — a stale architecture doc
+is worse than none.
+
 ## Decisions
 
 `docs/decision.md` holds the standing decisions for this project. Read it

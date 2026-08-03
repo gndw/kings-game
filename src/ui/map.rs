@@ -4,7 +4,7 @@
 use super::flag;
 use super::startup::RIGHT_BAR;
 use crate::app::Game;
-use crate::ecs::{Holds, KingdomLedBy, Land, Registry, StringId};
+use crate::ecs::{Holds, Land, Leads, Registry, StringId};
 use crate::resources::border::Border;
 use bevy::camera::ScalingMode;
 use bevy::color::palettes::css;
@@ -107,7 +107,7 @@ pub fn update_draw(
     registry: Res<Registry>,
     border: Res<Border>,
     time: Res<Time>,
-    led_by_kingdom: Query<&KingdomLedBy>,
+    leads: Query<&Leads>,
     holds_q: Query<&Holds>,
     lands: Query<(&StringId, &Land)>,
     string_ids: Query<&StringId>,
@@ -120,14 +120,14 @@ pub fn update_draw(
     );
 
     let sel = game.ctx.selected_region.as_deref();
-    // The player's own holdings, via the reverse KingdomLedBy link.
+    // The player's own holdings, via the reverse Leads link.
     let own: HashSet<String> = registry
         .get(&game.ctx.player_character_id)
-        .and_then(|pe| led_by_kingdom.get(pe).ok())
-        .and_then(|kl| holds_q.get(kl.0).ok())
+        .and_then(|pe| leads.get(pe).ok())
+        .and_then(|kl| holds_q.get(kl.kingdom()).ok())
         .map(|h| {
-            h.0.iter()
-                .filter_map(|&le| string_ids.get(le).ok().map(|s| s.0.clone()))
+            h.iter()
+                .filter_map(|le| string_ids.get(le).ok().map(|s| s.0.clone()))
                 .collect()
         })
         .unwrap_or_default();

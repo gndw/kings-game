@@ -26,5 +26,35 @@ session state (rng, chronicles, `player_character_id`, `selected_region`);
   still needed; `Registry` is a resource on the App world.
 - **Deleted:** `EntityIndex`, the read-model snapshot structs
   (`LandData`/`BuildingData`/… — the UI reads directly now), and the O(n)
-  kingdom scans (replaced by the reverse `KingdomLedBy` component for O(1)
+  kingdom scans (replaced by the auto-maintained `Leads` component for O(1)
   character→kingdom lookup).
+
+## Character↔kingdom leader link is Bevy-native (`LedBy`/`Leads`)
+
+The kingdom→leader link is a Bevy `#[relationship]` component `LedBy` (on the
+kingdom, single `Entity`, source of truth) paired with the auto-maintained
+`#[relationship_target]` `Leads` (on the leader character). Inserting `LedBy`
+on a kingdom has Bevy's hook keep `Leads` on the leader in sync — no manual
+reverse insert, no drift.
+
+- **One-to-one** (the target holds a single `Entity`): a character leads at
+  most one kingdom; if a second kingdom claims the same leader, Bevy drops the
+  older `LedBy`.
+- **Naming:** `LedBy` mirrors Bevy's `LikedBy`; `Leads` is the read-only
+  reverse. The manual `KingdomLedBy` reverse component is gone.
+
+## Kingdom↔lands link is Bevy-native (`HeldBy`/`Holds`)
+
+The kingdom→holdings link is a Bevy `#[relationship]` component `HeldBy`
+(on each **land**, single `Entity`, source of truth) paired with the
+auto-maintained `#[relationship_target]` `Holds` (`Vec<Entity>`) on the
+kingdom. A land declares its kingdom; Bevy's hook keeps the kingdom's `Holds`
+in sync — no manual `Vec`, no drift.
+
+- **Direction flipped from the old model:** the data has kingdoms listing
+  `land_ids`, but the relationship's single-`Entity` side lives on the land, so
+  `populate` inserts `HeldBy(kingdom)` per land rather than a `Holds` Vec on the
+  kingdom.
+- **Naming:** `HeldBy` (land) / `Holds` (kingdom), the same active/passive
+  mirror as `LedBy`/`Leads`. Reads go through `RelationshipTarget::iter`
+  (in `bevy::prelude`), which yields owned `Entity`.

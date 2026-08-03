@@ -67,9 +67,6 @@ fn main() -> Result<()> {
     {
         let world = app.world_mut();
         ecs::populate(world, mods.content, mods.state);
-        // Seed every ruler's yield and levy so the opening screen shows what
-        // their realm renders; `recompute_yields` keeps it fresh each day.
-        updates::yields::recompute(world);
         ctx.finish_selection(world);
     }
 
@@ -104,7 +101,6 @@ fn main() -> Result<()> {
             FixedUpdate,
             (
                 updates::tick::tick,
-                updates::yields::recompute_yields,
                 updates::payout::monthly_payout,
             )
                 .chain()

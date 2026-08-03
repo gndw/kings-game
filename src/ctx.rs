@@ -3,7 +3,7 @@
 //! chronicle log, who the player is, and the map selection. The calendar the
 //! sim runs on lives in `crate::resources`.
 
-use crate::ecs::{CharacterState, KingdomLedBy, Land, Registry, Seat, StringId};
+use crate::ecs::{CharacterState, Land, Leads, Registry, Seat, StringId};
 use crate::resources::date::Date;
 use crate::rng::SimRng;
 use bevy::ecs::entity::Entity;
@@ -59,10 +59,10 @@ impl Ctx {
 // because they mix `Registry` lookups with component reads.
 
 /// The player's capital, if they rule a kingdom that has one. Uses the reverse
-/// [`KingdomLedBy`] link for an O(1) lookup.
+/// [`Leads`] link for an O(1) lookup.
 pub fn player_seat_land(world: &World, player_id: &str) -> Option<String> {
     let player_e = world.resource::<Registry>().get(player_id)?;
-    let kingdom_e = world.get::<KingdomLedBy>(player_e)?.0;
+    let kingdom_e = world.get::<Leads>(player_e)?.kingdom();
     let seat_e = world.get::<Seat>(kingdom_e)?.0;
     world.get::<StringId>(seat_e).map(|s| s.0.clone())
 }

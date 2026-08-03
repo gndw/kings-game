@@ -8,10 +8,10 @@
 //!
 //! - **House** entities: [`StringId`], [`House`].
 //! - **Character** entities: [`StringId`], [`Character`],
-//!   [`HouseOf`], [`CharacterState`], maybe [`KingdomLedBy`].
-//! - **Land** entities: [`StringId`], [`Land`], [`Built`].
+//!   [`HouseOf`], [`CharacterState`], maybe [`Leads`].
+//! - **Land** entities: [`StringId`], [`Land`], [`Built`], maybe [`HeldBy`].
 //! - **Kingdom** entities: [`StringId`], [`Kingdom`], [`LedBy`],
-//!   [`Seat`], [`Holds`].
+//!   [`Seat`], [`Holds`] (auto-maintained from each land's [`HeldBy`]).
 //!
 //! Building *definitions* are not entities — they are a read-only roster held
 //! as the [`Buildings`](crate::resources::buildings::Buildings) resource; lands
@@ -119,12 +119,22 @@ pub struct CharacterState {
     pub gold_yield: i64,
 }
 
-/// Points at the [`Kingdom`] entity a character leads — the reverse of
-/// [`LedBy`], for O(1) character→kingdom lookup.
-// ponytail: one kingdom per character; a leader of two keeps only the last.
-// Add KingdomLeads(Vec) if a character ever rules more than one.
-#[derive(Component, Debug, Clone, Copy)]
-pub struct KingdomLedBy(pub Entity);
+/// The kingdom a character leads — the auto-maintained reverse of [`LedBy`],
+/// for O(1) character→kingdom lookup. Read-only: set [`LedBy`] on the kingdom
+/// and Bevy's hook keeps this in sync.
+///
+/// One-to-one (single `Entity`): a character leads at most one kingdom. If a
+/// second kingdom claims the same leader, Bevy drops the older [`LedBy`].
+#[derive(Component, Debug)]
+#[relationship_target(relationship = LedBy)]
+pub struct Leads(Entity);
+
+impl Leads {
+    /// The kingdom this character leads.
+    pub fn kingdom(&self) -> Entity {
+        self.0
+    }
+}
 
 /// One land's read-only geometry: outline and seat of power.
 #[derive(Component, Debug, Clone)]
@@ -140,21 +150,31 @@ pub struct Land {
 #[derive(Component, Debug, Clone, Default)]
 pub struct Built(pub Vec<String>);
 
+/// The kingdom that holds a land. Points at a [`Kingdom`] entity. A Bevy
+/// relationship component: inserting it auto-maintains [`Holds`] on the kingdom.
+#[derive(Component, Debug, Clone, Copy)]
+#[relationship(relationship_target = Holds)]
+pub struct HeldBy(pub Entity);
+
 /// Tags a kingdom entity. A kingdom is otherwise just its relations.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Kingdom;
 
-/// The character who rules a kingdom. Points at a [`Character`] entity.
+/// The character who rules a kingdom. Points at a [`Character`] entity. A Bevy
+/// relationship component: inserting it auto-maintains [`Leads`] on the leader.
 #[derive(Component, Debug, Clone, Copy)]
+#[relationship(relationship_target = Leads)]
 pub struct LedBy(pub Entity);
 
 /// The capital land of a kingdom. Points at a [`Land`] entity.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Seat(pub Entity);
 
-/// The lands a kingdom holds. Entities point at [`Land`]s.
-#[derive(Component, Debug, Clone, Default)]
-pub struct Holds(pub Vec<Entity>);
+/// The lands a kingdom holds — the auto-maintained reverse of [`HeldBy`].
+/// Read-only: set [`HeldBy`] on each land and Bevy's hook keeps this in sync.
+#[derive(Component, Debug, Default)]
+#[relationship_target(relationship = HeldBy)]
+pub struct Holds(Vec<Entity>);
 
 // ===========================================================================
 // Building the world from content + state
@@ -241,13 +261,15 @@ pub fn populate(world: &mut World, content: Content, mut state: State) {
             if let Some(se) = seat {
                 ec.insert(Seat(se));
             }
-            ec.insert(Holds(holds));
             ec.id()
         };
-        // Reverse of LedBy on the leader, for O(1) character→kingdom lookup.
-        if let Some(le) = leader {
-            world.entity_mut(le).insert(KingdomLedBy(eid));
+        // Each land declares the kingdom holding it; `Holds` on the kingdom is
+        // auto-maintained by the relationship hook.
+        for &le in &holds {
+            world.entity_mut(le).insert(HeldBy(eid));
         }
+        // `LedBy` is a Bevy relationship: its hook auto-maintains `Leads` on the
+        // leader, so there is no manual reverse insert here.
         world.resource_mut::<Registry>().insert(id, eid);
     }
 }

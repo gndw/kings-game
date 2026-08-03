@@ -1,11 +1,13 @@
-//! Everything the mods *define*: map geometry, the calendar, and the houses,
-//! characters and buildings that populate the world. All of it
-//! comes from RON data files at startup so it can be modded without a rebuild
-//! (see `mods/base/`).
+//! Everything the mods define, with the starting state overlaid on top: map
+//! geometry, the calendar, and the houses, characters, lands and kingdoms that
+//! populate the world. All of it comes from RON data files at startup so it can
+//! be modded without a rebuild (see `mods/base/`).
 //!
-//! Read-only once loaded. Everything the sim writes — treasuries, levies, who
-//! rules what, what has been built — is [`crate::state`], which is keyed by the
-//! ids declared here and is what a save file would hold.
+//! Loaded in two phases by [`crate::mods`]: first every definition file merges
+//! in (id-replace), then every `*.state.ron` overlays the mutable half — ages,
+//! treasuries, levies, what's built, who rules what — onto the *same* structs
+//! field by field (see [`crate::state`]). The result is one struct per entity
+//! kind, passed whole into [`crate::ecs::populate`].
 //!
 //! `crate::mods` does the loading and merging; the camera and drawing live in
 //! `crate::ui::map`.
@@ -17,11 +19,12 @@ use anyhow::{Result, bail};
 use indexmap::IndexMap;
 use serde::Deserialize;
 
-/// Everything defined, after every mod file has been merged in.
+/// Everything the mods define plus the starting state, after every definition
+/// file has merged in and the state overlaid.
 ///
 /// Named `Content` rather than `Map` because it long ago stopped being just
-/// geometry — it also carries the calendar and the roster of characters the
-/// sim's state hangs off.
+/// geometry — it also carries the calendar, the roster of characters, and who
+/// rules what.
 #[derive(Debug)]
 pub struct Content {
     pub border: Border,
@@ -35,6 +38,9 @@ pub struct Content {
     pub buildings: Buildings,
     pub houses: IndexMap<String, House>,
     pub characters: IndexMap<String, Character>,
+    /// Realms. Wholly state — a kingdom's leader, seat and lands all change in
+    /// play — so they arrive only via the state overlay.
+    pub kingdoms: IndexMap<String, Kingdom>,
 }
 
 /// Hand-written rather than derived because an empty `speeds` list is not a
@@ -48,12 +54,13 @@ impl Default for Content {
             buildings: Buildings::default(),
             houses: IndexMap::new(),
             characters: IndexMap::new(),
+            kingdoms: IndexMap::new(),
         }
     }
 }
 
-/// One data file on disk. Every section is optional, so a mod ships only what
-/// it changes — and the base game can split itself across `lands.ron`,
+/// One definition file on disk. Every section is optional, so a mod ships only
+/// what it changes — and the base game can split itself across `lands.ron`,
 /// `buildings.ron` and friends without the loader knowing the difference.
 ///
 /// `deny_unknown_fields` so a modder's typo is an error instead of a section
@@ -79,10 +86,10 @@ pub struct ContentFile {
 }
 
 impl Content {
-    /// Fold one file in. An entry whose `id` already exists replaces the
-    /// earlier one, anything else appends — that is the whole override rule.
-    /// With `IndexMap`, `insert` does both: same key replaces in place, new
-    /// key appends at the end. Insertion order is preserved across merges.
+    /// Fold one definition file in. An entry whose `id` already exists replaces
+    /// the earlier one, anything else appends — that is the whole override rule.
+    /// With `IndexMap`, `insert` does both: same key replaces in place, new key
+    /// appends at the end. Insertion order is preserved across merges.
     pub fn merge(&mut self, file: ContentFile) {
         if let Some(border) = file.border {
             self.border = border;
@@ -105,32 +112,79 @@ impl Content {
     }
 }
 
-/// One land, an entry in `lands.ron`.
+/// One land: its geometry (definition) plus what stands on it (state). The
+/// `building_ids` arrive empty from a definition file and are filled in by the
+/// state overlay.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Land {
     pub id: String,
+    // Every non-id field defaults: a definition file carries the geometry
+    // (name/borders/holding), a state file carries only `building_ids`, and
+    // each omits the other's fields. The overlay keeps the two halves from
+    // clobbering each other — see `Content::merge_state`.
+    #[serde(default)]
     pub name: String,
     /// This land's own outline, a polyline of `(x, y)` points. Not to be
     /// confused with `Content::border`, the edge of the world.
+    #[serde(default)]
     pub borders: Vec<(f64, f64)>,
     /// Seat of power, somewhere inside `borders`. Drawn as a circle.
+    #[serde(default)]
     pub holding: (f64, f64),
+    /// What has been built here — ids into `Content::buildings`. State, filled
+    /// by the `*.state.ron` overlay; empty on a definition-only entry.
+    #[serde(default)]
+    pub building_ids: Vec<String>,
 }
 
 /// A family. Characters belong to one; kingdoms are ruled through them.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct House {
     pub id: String,
     pub name: String,
 }
 
-/// Who exists and where they come from. Their age, treasury and levy change in
-/// play, so those live on `state::CharacterState` under the same id.
+/// One character: who they are (definition) plus their numbers (state). Age,
+/// treasury, levy and yield arrive at zero from a definition file and are filled
+/// in by the state overlay.
 #[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Character {
     pub id: String,
+    // Every non-id field defaults: a definition file carries name/house_id, a
+    // state file carries only the numbers, and each omits the other's fields.
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub house_id: String,
+    /// State: years. Defaults to 0 on a definition-only entry.
+    #[serde(default)]
+    pub age: u32,
+    /// State: treasury. Signed, so a script may spend past zero.
+    #[serde(default)]
+    pub gold: i64,
+    /// State: troops currently raised. Only a character who leads a kingdom has
+    /// holdings to raise them from.
+    #[serde(default)]
+    pub levy: u64,
+    /// State: gold per month — what their holdings render at the next payout,
+    /// profit less upkeep. Signed, like `gold`. Recomputed by `on_startup`, so a
+    /// save carrying a stale one self-corrects on load.
+    #[serde(default)]
+    pub gold_yield: i64,
+}
+
+/// A realm: a ruler, a capital, and the lands it holds. Wholly state — there is
+/// no definition half — so a kingdom only exists once the state overlay adds it.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Kingdom {
+    pub id: String,
+    pub leader_character_id: String,
+    pub seat_land_id: String,
+    pub land_ids: Vec<String>,
 }
 
 impl Content {
@@ -139,8 +193,8 @@ impl Content {
     }
 }
 
-/// One data file. No cross-reference checking — a mod may legitimately point at
-/// a building some other mod declares, so that waits for [`validate`].
+/// One definition file. No cross-reference checking — a mod may legitimately
+/// point at a building some other mod declares, so that waits for [`validate`].
 pub fn parse_file(text: &str) -> Result<ContentFile> {
     // IMPLICIT_SOME so an optional section is written `border: (...)` rather
     // than `border: Some((...))` — modders shouldn't have to know which
@@ -150,11 +204,11 @@ pub fn parse_file(text: &str) -> Result<ContentFile> {
     Ok(opts.from_str(text)?)
 }
 
-/// Check the content hangs together. Runs on the *merged* result, never on
-/// one file.
+/// Check the content hangs together. Runs on the *merged* result, never on one
+/// file.
 ///
-/// Fatal, unlike `state::reconcile`: content is authored by hand, so a dangling
-/// reference here is a mod bug worth stopping for.
+/// Fatal, unlike [`crate::state::reconcile`]: content is authored by hand, so a
+/// dangling reference here is a mod bug worth stopping for.
 pub fn validate(content: &Content) -> Result<()> {
     let b = &content.border;
     if b.x1 <= b.x0 || b.y1 <= b.y0 {

@@ -71,6 +71,30 @@ the four character components above.
   touches (a payout needs gold + yield, not age), and keep each mutable value
   in its own component so Bevy tracks them independently. The marker tags
   (`House`/`Character`/`Land`) still answer "what kind of entity is this".
-- **`state`/`content` unchanged:** `state::CharacterState` (save/load) and
-  `content::{House, Character, Land}` (RON data) keep their grouped structs;
-  only the ECS components are split, fanned out by `populate` on spawn.
+- **`state`/`content` merged:** superseded by the decision below — `Character`
+  and `Land` now each hold definition *and* state fields in one struct, and
+  `populate` reads them directly. See "Definition + state: one struct per kind".
+
+## Definition + state: one struct per kind
+
+`CharacterState`/`LandState` are gone. Each entity kind now has a single struct
+in `content.rs` that holds *both* its definition fields (name, `house_id`,
+geometry) and its state fields (age, treasury, levy, yield, `building_ids`).
+`Kingdom` (state-only) moved into `content.rs` alongside them.
+
+- **Load is two-pass** (`mods::load`): every definition `*.ron` merges first
+  (`Content::merge`, id-replace), then every `*.state.ron` overlays
+  (`Content::merge_state`, field-by-field). Two-pass so state can only fill
+  entries the definitions established — content is the source of truth for what
+  exists.
+- **Overlay never clobbers definition data.** `merge_state` copies only the
+  state fields onto the matching content entry; `name`/`house_id`/geometry are
+  untouched, so a state entry may carry only its state fields. Because the two
+  field sets are disjoint, a single non-`Option` struct suffices — no `Option`
+  overlay gymnastics, no parallel `CharacterState`.
+- **`State` (the parallel map) is gone.** `Content` carries `kingdoms` too;
+`reconcile(&mut Content)` repairs building ids and kingdom refs in place.
+`populate(world, content)` takes the one struct and reads every field off it.
+- **Dropped:** the old "dropped state for unknown …" chronicle notes. With state
+  folded into content there is no separate state map to diff against; an unknown
+  id is simply never overlaid. Revisit when save files exist.

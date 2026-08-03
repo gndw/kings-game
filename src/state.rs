@@ -1,180 +1,101 @@
-//! The half of the world that changes: who rules what, what stands in each
-//! land, and every character's own numbers. Everything here is written by the
-//! sim and belongs in a save file; everything in [`crate::content`] is
-//! read-only data the mods define and the sim never touches.
+//! The mutable half of the world, overlaid onto [`Content`]: ages, treasuries,
+//! levies, what stands in each land, and who rules what.
 //!
-//! State is an *overlay*, keyed by id. A mod — or, later, a save file — ships
-//! only the entries it knows about, and [`reconcile`] fills in a default for
-//! every id the content defines while dropping every entry that points at
-//! content which is gone. That is what lets an old save load against new
-//! content: anything added since keeps the starting state its mod shipped.
+//! State is an *overlay*, keyed by id. A `*.state.ron` ships only the entries
+//! and fields it knows about; [`Content::merge_state`] fills the state fields
+//! onto the matching content entries and leaves every definition field alone.
+//! [`reconcile`] then repairs every reference that no longer resolves — the same
+//! "old save against new content" resilience the split model had.
 //!
 //! On disk a state file is any `*.state.ron` in a mod folder; see
 //! `crate::mods::load`.
 
-use crate::content::Content;
-use indexmap::IndexMap;
+use crate::content::{Character, Content, Kingdom, Land};
 use serde::Deserialize;
 
-/// Everything mutable, after every `*.state.ron` has been merged in.
-///
-/// ID-keyed (`IndexMap`) for O(1) lookup and deterministic insertion-order
-/// iteration — the same rule as `Content`.
-#[derive(Debug, Default)]
-pub struct State {
-    /// Realms. Wholly state — a kingdom's leader, seat and lands all change in
-    /// play. Nothing about a kingdom is fixed data yet, so there is no
-    /// definition side to join against.
-    pub kingdoms: IndexMap<String, Kingdom>,
-    pub lands: IndexMap<String, LandState>,
-    pub characters: IndexMap<String, CharacterState>,
-}
-
-/// The deserialization target for a `*.state.ron` file. Collections are `Vec`
-/// here because RON files are arrays of structs; [`State::merge`] inserts them
-/// into `IndexMap`s keyed by id.
+/// The deserialization target for a `*.state.ron` file. It reuses the unified
+/// [`Character`]/[`Land`]/[`Kingdom`] types: a state entry carries only its
+/// state fields and the rest default, and [`Content::merge_state`] copies just
+/// the state fields across so definition data is never clobbered.
 #[derive(Debug, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StateFile {
     #[serde(default)]
     pub kingdoms: Vec<Kingdom>,
     #[serde(default)]
-    pub lands: Vec<LandState>,
+    pub lands: Vec<Land>,
     #[serde(default)]
-    pub characters: Vec<CharacterState>,
+    pub characters: Vec<Character>,
 }
 
-impl From<StateFile> for State {
-    fn from(file: StateFile) -> Self {
-        let mut state = State::default();
+impl Content {
+    /// Overlay one state file onto the merged content.
+    ///
+    /// - **Kingdoms** (state-only): id-replace, the same rule as [`merge`](Self::merge).
+    /// - **Characters / lands**: field by field onto the matching content entry.
+    ///   Definition fields (`name`, `house_id`, geometry) are never touched, so
+    ///   a state entry may carry only its state fields.
+    ///
+    /// An id with no content entry is ignored — the content roster is the source
+    /// of truth for what exists. (The old split model chronicled these as
+    /// "dropped state for unknown …"; that note is dropped until saves exist.)
+    pub fn merge_state(&mut self, file: StateFile) {
         for k in file.kingdoms {
-            state.kingdoms.insert(k.id.clone(), k);
-        }
-        for l in file.lands {
-            state.lands.insert(l.id.clone(), l);
+            self.kingdoms.insert(k.id.clone(), k);
         }
         for c in file.characters {
-            state.characters.insert(c.id.clone(), c);
+            if let Some(existing) = self.characters.get_mut(&c.id) {
+                existing.age = c.age;
+                existing.gold = c.gold;
+                existing.levy = c.levy;
+                existing.gold_yield = c.gold_yield;
+            }
         }
-        state
-    }
-}
-
-/// A realm: a ruler, a capital, and the lands it holds.
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Kingdom {
-    pub id: String,
-    pub leader_character_id: String,
-    pub seat_land_id: String,
-    pub land_ids: Vec<String>,
-}
-
-/// What stands in one land. The land itself — its name and its outline — is
-/// content; what has been built on it is not.
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct LandState {
-    pub id: String,
-    /// Ids into `Content::buildings`.
-    #[serde(default)]
-    pub building_ids: Vec<String>,
-}
-
-/// One character's numbers. Their name and house are content.
-#[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct CharacterState {
-    pub id: String,
-    #[serde(default)]
-    pub age: u32,
-    /// Treasury. Signed, so a script may spend past zero.
-    #[serde(default)]
-    pub gold: i64,
-    /// Troops currently raised. Only a character who leads a kingdom has
-    /// holdings to raise them from.
-    #[serde(default)]
-    pub levy: u64,
-    /// Gold per month: what their holdings render at the next payout, profit
-    /// less upkeep. Signed, like `gold` — a realm that garrisons more than it
-    /// earns runs at a loss. Written by the same script that pays it, so the
-    /// two can't disagree.
-    ///
-    /// Recomputed by `on_startup`, so a save carrying a stale one self-corrects
-    /// on load.
-    #[serde(default)]
-    pub gold_yield: i64,
-}
-
-impl State {
-    /// Fold one state into another. Same id rule as content: same id replaces,
-    /// new id appends.
-    pub fn merge(&mut self, other: State) {
-        for (k, v) in other.kingdoms {
-            self.kingdoms.insert(k, v);
-        }
-        for (k, v) in other.lands {
-            self.lands.insert(k, v);
-        }
-        for (k, v) in other.characters {
-            self.characters.insert(k, v);
+        for l in file.lands {
+            if let Some(existing) = self.lands.get_mut(&l.id) {
+                existing.building_ids = l.building_ids;
+            }
         }
     }
 }
 
-/// Pull the merged state up with the merged content, and return a note for
+/// Repair references now that content and state are one, and return a note for
 /// everything that had to be repaired.
 ///
-/// Unlike [`crate::content::validate`], this *never* fails. Content is
-/// authored, so a broken reference there is a bug worth stopping for; state
-/// comes from a save that may predate — or outlive — the mods it was written
-/// against, and refusing to load it would be the worst possible answer.
+/// Never fails: state comes from a save that may predate — or outlive — the
+/// mods it was written against, and refusing to load it would be the worst
+/// possible answer.
 ///
-/// Afterwards there is exactly one state entry per content land and per content
-/// character, in content order, and every remaining reference resolves.
-pub fn reconcile(content: &Content, state: &mut State) -> Vec<String> {
+/// Afterwards every building id on a land resolves, and every kingdom points at
+/// a real leader and at least one real land with a valid seat.
+pub fn reconcile(content: &mut Content) -> Vec<String> {
+    use std::collections::HashSet;
     let mut notes = Vec::new();
 
-    // Characters: one entry per content character, in content order.
-    let mut new_characters = IndexMap::new();
-    for (id, _) in &content.characters {
-        new_characters.insert(
-            id.clone(),
-            state.characters.shift_remove(id).unwrap_or_else(|| CharacterState {
-                id: id.clone(),
-                ..Default::default()
-            }),
-        );
-    }
-    for (id, _) in &state.characters {
-        notes.push(format!("dropped state for unknown character `{id}`"));
-    }
-    state.characters = new_characters;
+    // Snapshot the id sets up front so the mutable loops below don't have to
+    // fight the borrow checker for `content`. `known_buildings` is used in the
+    // lands loop; the character/land sets are taken after it, since they alias
+    // `content.lands`/`content.characters` which that loop and the kingdom loop
+    // touch.
+    let known_buildings: HashSet<&str> = content.buildings.0.keys().map(String::as_str).collect();
 
-    // Lands: one entry per content land, in content order.
-    let mut new_lands = IndexMap::new();
-    for (id, _) in &content.lands {
-        let mut land = state.lands.shift_remove(id).unwrap_or_else(|| LandState {
-            id: id.clone(),
-            ..Default::default()
-        });
+    // Lands: drop building ids the roster no longer defines.
+    for (id, land) in &mut content.lands {
         land.building_ids.retain(|b| {
-            let known = content.buildings.contains(b);
+            let known = known_buildings.contains(b.as_str());
             if !known {
                 notes.push(format!("land `{id}` drops unknown building `{b}`"));
             }
             known
         });
-        new_lands.insert(id.clone(), land);
     }
-    for (id, _) in &state.lands {
-        notes.push(format!("dropped state for unknown land `{id}`"));
-    }
-    state.lands = new_lands;
 
-    // Kingdoms: state-only (no content counterpart), so retain in place.
-    state.kingdoms.retain(|id, k| {
-        if !content.characters.contains_key(&k.leader_character_id) {
+    let known_chars: HashSet<&str> = content.characters.keys().map(String::as_str).collect();
+    let known_lands: HashSet<&str> = content.lands.keys().map(String::as_str).collect();
+
+    // Kingdoms: keep only those with a real leader and real lands.
+    content.kingdoms.retain(|id, k| {
+        if !known_chars.contains(k.leader_character_id.as_str()) {
             notes.push(format!(
                 "dropped kingdom `{id}`: unknown leader `{}`",
                 k.leader_character_id
@@ -182,7 +103,7 @@ pub fn reconcile(content: &Content, state: &mut State) -> Vec<String> {
             return false;
         }
         k.land_ids.retain(|l| {
-            let known = content.lands.contains_key(l);
+            let known = known_lands.contains(l.as_str());
             if !known {
                 notes.push(format!("kingdom `{id}` drops unknown land `{l}`"));
             }
@@ -208,10 +129,7 @@ pub fn reconcile(content: &Content, state: &mut State) -> Vec<String> {
     notes
 }
 
-/// One state file, parsed and converted to runtime [`State`]. Same shape as
-/// the merged whole, because every section is already optional — a save writes
-/// exactly what a mod would.
-pub fn parse_file(text: &str) -> anyhow::Result<State> {
-    let file: StateFile = ron::from_str(text)?;
-    Ok(file.into())
+/// One state file, parsed.
+pub fn parse_file(text: &str) -> anyhow::Result<StateFile> {
+    Ok(ron::from_str(text)?)
 }

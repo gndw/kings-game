@@ -1,10 +1,10 @@
 //! The shared spine of the ECS: the [`StringId`](super::StringId) every entity
 //! carries, the [`Registry`](super::Registry) that maps ids to entities for O(1)
 //! lookup, and [`populate`](super::populate), which builds the world once from
-//! [`Content`](crate::content::Content) and [`State`](crate::state::State).
+//! [`Content`](crate::content::Content) — the merged definitions with the
+//! starting state already overlaid.
 
 use crate::content::Content;
-use crate::state::State;
 use bevy::ecs::world::World;
 use bevy::prelude::{Component, Entity, Resource};
 use std::collections::HashMap;
@@ -56,9 +56,9 @@ impl Registry {
     }
 }
 
-/// Build the entity world from merged, reconciled content and state. Called
-/// once from [`Ctx::new_game`](crate::ctx::Ctx::new_game); afterwards content
-/// and state are gone.
+/// Build the entity world from merged, reconciled content (state already
+/// overlaid). Called once from [`Ctx::new_game`](crate::ctx::Ctx::new_game);
+/// afterwards the content is gone.
 ///
 /// Spawn order is leaves-first — houses, then characters (which point at
 /// houses), then lands, then kingdoms (which point at characters and lands) —
@@ -68,7 +68,7 @@ impl Registry {
 /// bad data. The building roster leaves as the
 /// [`Buildings`](crate::resources::buildings::Buildings) resource rather than
 /// entities.
-pub fn populate(world: &mut World, content: Content, mut state: State) {
+pub fn populate(world: &mut World, content: Content) {
     world.insert_resource(Registry::new());
     world.insert_resource(content.buildings);
 
@@ -80,19 +80,18 @@ pub fn populate(world: &mut World, content: Content, mut state: State) {
         world.resource_mut::<Registry>().insert(id, eid);
     }
 
-    // Characters: content half joined with state half by id.
+    // Characters: one struct holds both definition and state now.
     for (id, c) in content.characters.into_iter() {
-        let st = state.characters.shift_remove(&id).unwrap_or_default();
         let house_e = world.resource::<Registry>().get(&c.house_id);
         let eid = {
             let mut ec = world.spawn((
                 StringId(id.clone()),
                 Character,
                 CharacterName(c.name),
-                CharacterAge(st.age),
-                CharacterGold(st.gold),
-                CharacterLevy(st.levy),
-                CharacterGoldYield(st.gold_yield),
+                CharacterAge(c.age),
+                CharacterGold(c.gold),
+                CharacterLevy(c.levy),
+                CharacterGoldYield(c.gold_yield),
             ));
             if let Some(he) = house_e {
                 ec.insert(HouseOf(he));
@@ -102,9 +101,8 @@ pub fn populate(world: &mut World, content: Content, mut state: State) {
         world.resource_mut::<Registry>().insert(id, eid);
     }
 
-    // Lands: content geometry + state's building list (the ids, kept as-is).
+    // Lands: geometry + the buildings that stand on them.
     for (id, l) in content.lands.into_iter() {
-        let lst = state.lands.shift_remove(&id).unwrap_or_default();
         let eid = world
             .spawn((
                 StringId(id.clone()),
@@ -112,7 +110,7 @@ pub fn populate(world: &mut World, content: Content, mut state: State) {
                 LandName(l.name),
                 LandBorders(l.borders),
                 LandHolding(l.holding),
-                Built(lst.building_ids),
+                Built(l.building_ids),
             ))
             .id();
         world.resource_mut::<Registry>().insert(id, eid);
@@ -120,7 +118,7 @@ pub fn populate(world: &mut World, content: Content, mut state: State) {
 
     // Kingdoms: state-only. Their leader, seat and holdings resolve to the
     // characters and lands spawned above.
-    for (id, k) in state.kingdoms.into_iter() {
+    for (id, k) in content.kingdoms.into_iter() {
         let leader = world.resource::<Registry>().get(&k.leader_character_id);
         let seat = world.resource::<Registry>().get(&k.seat_land_id);
         let holds: Vec<Entity> = k

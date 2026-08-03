@@ -3,21 +3,25 @@
 //!
 //! Every `*.ron` in a folder is a [`ContentFile`], whatever it's called — the
 //! loader doesn't know that `buildings.ron` holds buildings. The one exception
-//! is `*.state.ron`, which is a [`State`]: the mutable half of the world, and
-//! the shape a save file will have. So a mod splits itself across files however
-//! reads best and the loader neither knows nor cares.
+//! is `*.state.ron`, which is a [`StateFile`]: the mutable half of the world,
+//! overlaid onto the content structs, and the shape a save file will have. So a
+//! mod splits itself across files however reads best and the loader neither
+//! knows nor cares.
+//!
+//! Loading is two-pass per the content/state contract: all definition files
+//! merge first, then the state files overlay onto the same structs — so state
+//! can only ever fill entries the definitions established.
 //!
 //! Modding scripting (rhai hooks) has been pulled out and will be rebuilt after
 //! the ECS refactoring; `*.rhai` files are ignored for now.
 
 use crate::content::{self, Content};
-use crate::state::{self, State};
+use crate::state;
 use anyhow::{Context, Result};
 use std::path::{Path, PathBuf};
 
 pub struct Mods {
     pub content: Content,
-    pub state: State,
 }
 
 /// Load every mod in `dir`. Bad *data* is fatal — there's no sensible game
@@ -25,8 +29,9 @@ pub struct Mods {
 /// [`state::reconcile`].
 pub fn load(dir: &Path) -> Result<Mods> {
     let mut content = Content::default();
-    let mut state = State::default();
+    let mut state_files: Vec<PathBuf> = Vec::new();
 
+    // Pass 1: definitions. State files are just collected.
     for folder in sorted_entries(dir)? {
         if !folder.is_dir() {
             continue;
@@ -35,38 +40,40 @@ pub fn load(dir: &Path) -> Result<Mods> {
             let Some(ext) = file.extension().and_then(|e| e.to_str()) else {
                 continue;
             };
-            let read = || {
-                std::fs::read_to_string(&file)
-                    .with_context(|| format!("reading {}", file.display()))
-            };
+            if ext != "ron" {
+                continue;
+            }
             let is_state = file
                 .file_name()
                 .is_some_and(|n| n.to_string_lossy().ends_with(".state.ron"));
-            match ext {
-                "ron" if is_state => {
-                    let parsed = state::parse_file(&read()?)
-                        .with_context(|| format!("parsing {}", file.display()))?;
-                    state.merge(parsed);
-                }
-                "ron" => {
-                    let text = read()?;
-                    let parsed = content::parse_file(&text)
-                        .with_context(|| format!("parsing {}", file.display()))?;
-                    content.merge(parsed);
-                }
-                _ => {}
+            if is_state {
+                state_files.push(file);
+            } else {
+                let text = read_to_string(&file)?;
+                let parsed = content::parse_file(&text)
+                    .with_context(|| format!("parsing {}", file.display()))?;
+                content.merge(parsed);
             }
         }
     }
-
     content::validate(&content).context("the merged mod data is inconsistent")?;
-    // State goes last: it can only be lined up once every mod has had its say
-    // about what exists. Repairs are chronicled rather than fatal — see
-    // `state::reconcile`.
-    for note in state::reconcile(&content, &mut state) {
+
+    // Pass 2: state overlays onto the now-complete content. Repairs are
+    // chronicled rather than fatal — see `state::reconcile`.
+    for file in state_files {
+        let text = read_to_string(&file)?;
+        let parsed = state::parse_file(&text)
+            .with_context(|| format!("parsing {}", file.display()))?;
+        content.merge_state(parsed);
+    }
+    for note in state::reconcile(&mut content) {
         eprintln!("state: {note}");
     }
-    Ok(Mods { content, state })
+    Ok(Mods { content })
+}
+
+fn read_to_string(file: &Path) -> Result<String> {
+    std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))
 }
 
 /// Directory contents, sorted by path. Sorted because load order decides who

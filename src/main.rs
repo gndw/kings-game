@@ -67,7 +67,7 @@ fn main() -> Result<()> {
     );
     {
         let world = app.world_mut();
-        ecs::populate(world, mods.content, mods.state);
+        ecs::populate(world, mods.content);
     }
 
     let game = Game::new(ctx);

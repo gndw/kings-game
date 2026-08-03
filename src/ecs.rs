@@ -19,11 +19,11 @@
 //! as the [`Buildings`](crate::resources::buildings::Buildings) resource; lands
 //! keep the ids of what's built in [`Built`].
 //!
-//! Load-time [`Content`](crate::content::Content) /
-//! [`State`](crate::state::State) (still `IndexMap`-based — the deserialization,
-//! merge and reconcile targets) are consumed by [`populate`] once, in
-//! [`Ctx::new_game`](crate::ctx::Ctx::new_game); afterwards they are gone and
-//! the ECS is the whole world.
+//! Load-time [`Content`](crate::content::Content) — the merged definitions with
+//! the starting state overlaid (still `IndexMap`-based: the deserialization,
+//! merge and reconcile target) — is consumed by [`populate`] once, in
+//! [`Ctx::new_game`](crate::ctx::Ctx::new_game); afterwards it is gone and the
+//! ECS is the whole world.
 //!
 //! Two invariants carried over from the `IndexMap` model:
 //!

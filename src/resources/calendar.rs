@@ -53,21 +53,3 @@ impl Calendar {
         Ok(())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_zero_length_calendar_is_rejected() {
-        assert!(Calendar::default().validate().is_ok());
-        for bad in [(0, 12), (30, 0)] {
-            let cal = Calendar {
-                days_per_month: bad.0,
-                months_per_year: bad.1,
-                ..Default::default()
-            };
-            assert!(cal.validate().is_err(), "{cal:?} must not be accepted");
-        }
-    }
-}

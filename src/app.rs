@@ -49,14 +49,19 @@ pub fn input(
     if keys.just_pressed(KeyCode::Space) {
         game.paused = !game.paused;
     }
-    // Step through the mod's speed list rather than doubling: the steps are
-    // whatever the data says, and the ends just clamp.
+    // Digits 1–4 jump straight to a speed and unpause, faster than stepping.
+    // The index clamps if a mod lists fewer than four speeds.
     let last = calendar.speeds.len().saturating_sub(1);
-    if keys.just_pressed(KeyCode::Equal) || keys.just_pressed(KeyCode::NumpadAdd) {
-        game.speed_idx = (game.speed_idx + 1).min(last);
-    }
-    if keys.just_pressed(KeyCode::Minus) {
-        game.speed_idx = game.speed_idx.saturating_sub(1);
+    for (key, idx) in [
+        (KeyCode::Digit1, 0),
+        (KeyCode::Digit2, 1),
+        (KeyCode::Digit3, 2),
+        (KeyCode::Digit4, 3),
+    ] {
+        if keys.just_pressed(key) {
+            game.speed_idx = idx.min(last);
+            game.paused = false;
+        }
     }
     fixed.set_timestep_hz(f64::from(speed(&calendar.speeds, game.speed_idx)));
 }

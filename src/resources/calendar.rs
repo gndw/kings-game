@@ -14,8 +14,8 @@ use serde::Deserialize;
 pub struct Calendar {
     pub days_per_month: u8,
     pub months_per_year: u8,
-    /// Simulated days per real second. `+` and `-` step through the list,
-    /// slowest first; the game starts on the first entry.
+    /// Simulated days per real second. Keys `1`–`4` select an entry directly;
+    /// the game starts on the first entry (paused).
     pub speeds: Vec<u32>,
 }
 

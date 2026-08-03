@@ -1,13 +1,14 @@
 //! The simulation's entity-component model and the world it lives in.
 //!
-//! [`Ctx`](crate::ctx::Ctx) holds a [`World`] (Bevy's ECS) as the single source
-//! of truth for the simulation. Content (read-only, what mods define) and state
-//! (mutable, what a save holds) become *components* on entities rather than two
-//! parallel `IndexMap`s joined by id:
+//! The entities live directly in Bevy's App world — [`Ctx`](crate::ctx::Ctx)
+//! holds only the session state that isn't an entity (rng, chronicles, the
+//! player id, the current selection). Reads go through Bevy `Query` system
+//! params (the UI) or `&mut World` free functions (sim logic, which mixes
+//! component and resource access and so runs as exclusive systems).
 //!
 //! - **House** entities: [`StringId`], [`House`].
 //! - **Character** entities: [`StringId`], [`Character`],
-//!   [`HouseOf`], [`CharacterState`].
+//!   [`HouseOf`], [`CharacterState`], maybe [`KingdomLedBy`].
 //! - **Land** entities: [`StringId`], [`Land`], [`Built`].
 //! - **Kingdom** entities: [`StringId`], [`Kingdom`], [`LedBy`],
 //!   [`Seat`], [`Holds`].
@@ -26,10 +27,10 @@
 //!
 //! - **Every game entity carries a [`StringId`]** — the id its RON data and save
 //!   address it by. The Rhai script ABI is string ids and does not change.
-//! - **Read order comes from [`EntityIndex`], not the ECS** — Bevy's
-//!   `World::query` needs `&mut World`, so `&self` readers iterate these lists
-//!   (one per kind, in content-insertion order) and fetch components with the
-//!   `&self`-safe `World::get`.
+//! - **Read order is Bevy archetype order**, which within one archetype is spawn
+//!   order. Each kind (houses, characters, lands, kingdoms) is a single
+//!   archetype, so a `Query` over e.g. `(&StringId, &Land)` yields lands in the
+//!   order [`populate`] spawned them.
 //!
 //! A [`Registry`] resource maps `StringId → Entity` for O(1) lookup, the role
 //! the `IndexMap` keys once played. Reading the registry and then mutating the
@@ -40,8 +41,8 @@ use crate::content::Content;
 use crate::state::State;
 use bevy::ecs::world::World;
 use bevy::prelude::{Component, Entity, Resource};
-use rand::seq::IteratorRandom;
 use rand::Rng;
+use rand::seq::IteratorRandom;
 use std::collections::HashMap;
 
 // ===========================================================================
@@ -57,19 +58,6 @@ impl StringId {
     pub fn as_str(&self) -> &str {
         &self.0
     }
-}
-
-/// Ordered entity lists per kind, in content-insertion order — the read-side
-/// order source. Bevy's `World::query` takes `&mut World`, so `&self` readers
-/// iterate these lists and fetch components with the `&self`-safe `World::get`
-/// instead. Built once by [`populate`]; entities never spawn or despawn
-/// afterwards, so these are stable for the whole game.
-#[derive(Resource, Default)]
-pub struct EntityIndex {
-    pub houses: Vec<Entity>,
-    pub characters: Vec<Entity>,
-    pub lands: Vec<Entity>,
-    pub kingdoms: Vec<Entity>,
 }
 
 /// `id → Entity`, for the O(1) lookup the `IndexMap` keys once gave. Held as a
@@ -131,6 +119,13 @@ pub struct CharacterState {
     pub gold_yield: i64,
 }
 
+/// Points at the [`Kingdom`] entity a character leads — the reverse of
+/// [`LedBy`], for O(1) character→kingdom lookup.
+// ponytail: one kingdom per character; a leader of two keeps only the last.
+// Add KingdomLeads(Vec) if a character ever rules more than one.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct KingdomLedBy(pub Entity);
+
 /// One land's read-only geometry: outline and seat of power.
 #[derive(Component, Debug, Clone)]
 pub struct Land {
@@ -162,52 +157,6 @@ pub struct Seat(pub Entity);
 pub struct Holds(pub Vec<Entity>);
 
 // ===========================================================================
-// Read models — owned snapshots the UI copies out of the ECS
-// ===========================================================================
-
-#[derive(Debug, Clone)]
-pub struct LandData {
-    pub id: String,
-    pub name: String,
-    pub borders: Vec<(f64, f64)>,
-    pub holding: (f64, f64),
-}
-
-#[derive(Debug, Clone)]
-pub struct BuildingData {
-    pub id: String,
-    pub name: String,
-    pub gold_profit: u32,
-    pub gold_upkeep: u32,
-    pub levy: u32,
-}
-
-#[derive(Debug, Clone)]
-pub struct KingdomData {
-    pub id: String,
-    pub seat_land_id: String,
-    pub leader_character_id: String,
-    pub land_ids: Vec<String>,
-}
-
-#[derive(Debug, Clone)]
-pub struct CharacterData {
-    pub id: String,
-    pub name: String,
-    pub house_name: String,
-    pub age: u32,
-}
-
-#[derive(Debug, Clone)]
-pub struct PlayerSummary {
-    pub name: String,
-    pub house: String,
-    pub gold: i64,
-    pub gold_yield: i64,
-    pub levy: u64,
-}
-
-// ===========================================================================
 // Building the world from content + state
 // ===========================================================================
 
@@ -223,7 +172,7 @@ pub struct PlayerSummary {
 /// bad data. The building roster leaves as the [`Buildings`] resource rather
 /// than entities.
 pub fn populate(world: &mut World, content: Content, mut state: State) {
-    let mut idx = EntityIndex::default();
+    world.insert_resource(Registry::new());
     world.insert_resource(content.buildings);
 
     // Houses.
@@ -232,7 +181,6 @@ pub fn populate(world: &mut World, content: Content, mut state: State) {
             .spawn((StringId(id.clone()), House { name: h.name }))
             .id();
         world.resource_mut::<Registry>().insert(id, eid);
-        idx.houses.push(eid);
     }
 
     // Characters: content half joined with state half by id.
@@ -256,7 +204,6 @@ pub fn populate(world: &mut World, content: Content, mut state: State) {
             ec.id()
         };
         world.resource_mut::<Registry>().insert(id, eid);
-        idx.characters.push(eid);
     }
 
     // Lands: content geometry + state's building list (the ids, kept as-is).
@@ -274,7 +221,6 @@ pub fn populate(world: &mut World, content: Content, mut state: State) {
             ))
             .id();
         world.resource_mut::<Registry>().insert(id, eid);
-        idx.lands.push(eid);
     }
 
     // Kingdoms: state-only. Their leader, seat and holdings resolve to the
@@ -298,20 +244,20 @@ pub fn populate(world: &mut World, content: Content, mut state: State) {
             ec.insert(Holds(holds));
             ec.id()
         };
+        // Reverse of LedBy on the leader, for O(1) character→kingdom lookup.
+        if let Some(le) = leader {
+            world.entity_mut(le).insert(KingdomLedBy(eid));
+        }
         world.resource_mut::<Registry>().insert(id, eid);
-        idx.kingdoms.push(eid);
     }
-
-    world.insert_resource(idx);
 }
 
 /// A random land's id, or `None` when there are no lands. Drawn from the seeded
 /// RNG so it replays.
 pub fn random_land_id(world: &World, rng: &mut impl Rng) -> Option<String> {
-    let lands = world.resource::<EntityIndex>().lands.clone();
-    lands
-        .iter()
-        .copied()
+    world
+        .iter_entities()
+        .filter(|e| e.get::<Land>().is_some())
         .choose(rng)
-        .and_then(|e| world.get::<StringId>(e).map(|s| s.0.clone()))
+        .and_then(|e| e.get::<StringId>().map(|s| s.0.clone()))
 }

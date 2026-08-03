@@ -3,6 +3,7 @@
 
 use super::FONT;
 use crate::app::Game;
+use crate::ecs::{Character, CharacterState, House, HouseOf, Registry};
 use bevy::prelude::*;
 
 /// Named `ResourceBar`, not `Resource` — that one is Bevy's trait.
@@ -25,18 +26,35 @@ pub(super) fn spawn(root: &mut ChildSpawnerCommands, panel: Color) {
     ));
 }
 
-pub fn update(game: Res<Game>, mut bar: Single<&mut Text, With<ResourceBar>>) {
+pub fn update(
+    game: Res<Game>,
+    registry: Res<Registry>,
+    mut bar: Single<&mut Text, With<ResourceBar>>,
+    chars: Query<(&Character, &CharacterState)>,
+    house_of: Query<&HouseOf>,
+    houses: Query<&House>,
+) {
     // A map that doesn't contain the player leaves the bar blank rather than
     // showing zeroes that look like a broke ruler.
-    let Some(p) = game.ctx.player_summary() else {
+    let Some(player_e) = registry.get(&game.ctx.player_character_id) else {
         bar.0 = String::new();
         return;
     };
+    let Ok((ch, cs)) = chars.get(player_e) else {
+        bar.0 = String::new();
+        return;
+    };
+    let house = house_of
+        .get(player_e)
+        .ok()
+        .and_then(|ho| houses.get(ho.0).ok())
+        .map(|h| h.name.clone())
+        .unwrap_or_default();
     // The monthly income the gold script last published — it owns the rule, so
     // a mod that changes how income is figured changes this number with it.
     // Signed both places: a realm can run at a loss and a ruler can be in debt.
     bar.0 = format!(
         "{} of {}     {} gold ({:+}/mo)     {} levy",
-        p.name, p.house, p.gold, p.gold_yield, p.levy
+        ch.name, house, cs.gold, cs.gold_yield, cs.levy
     );
 }

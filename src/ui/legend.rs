@@ -2,6 +2,10 @@
 
 use super::{FONT, TITLE};
 use crate::app::Game;
+use crate::ecs::{
+    Built, Character, CharacterState, Holds, House, HouseOf, Land, LedBy, Registry, Seat, StringId,
+};
+use crate::resources::buildings::Buildings;
 use bevy::prelude::*;
 
 #[derive(Component)]
@@ -29,31 +33,58 @@ pub(super) fn spawn(col: &mut ChildSpawnerCommands, panel: Color) {
     });
 }
 
-pub fn update(game: Res<Game>, mut legend: Single<&mut Text, With<Legend>>) {
+#[allow(clippy::type_complexity)]
+pub fn update(
+    game: Res<Game>,
+    registry: Res<Registry>,
+    buildings: Res<Buildings>,
+    mut legend: Single<&mut Text, With<Legend>>,
+    lands: Query<(&Land, &Built)>,
+    kingdoms: Query<(&StringId, &Holds, Option<&Seat>, Option<&LedBy>)>,
+    chars: Query<(&Character, &CharacterState)>,
+    house_of: Query<&HouseOf>,
+    houses: Query<&House>,
+) {
     // Nothing selected, or a selected id the world doesn't have: blank.
     let Some(id) = game.ctx.selected_region.clone() else {
         legend.0 = String::new();
         return;
     };
-    let Some(name) = game.ctx.land_name(&id) else {
+    let Some(land_e) = registry.get(&id) else {
+        legend.0 = String::new();
+        return;
+    };
+    let Ok((land, built)) = lands.get(land_e) else {
         legend.0 = String::new();
         return;
     };
 
-    let mut out = format!("id:{id}\nname:{name}");
-    if let Some(k) = game.ctx.kingdom_of_land(&id) {
-        out.push_str(&format!("\nkingdom:{}", k.id));
-        if k.seat_land_id == id {
+    let mut out = format!("id:{id}\nname:{}", land.name);
+    if let Some((k_sid, _holds, seat, leader)) =
+        kingdoms.iter().find(|(_, h, _, _)| h.0.contains(&land_e))
+    {
+        out.push_str(&format!("\nkingdom:{}", k_sid.0));
+        if seat.is_some_and(|s| s.0 == land_e) {
             out.push_str(" (seat)");
         }
-        if let Some(c) = game.ctx.character_brief(&k.leader_character_id) {
-            out.push_str(&format!("\nruler:{} of {} ({})", c.name, c.house_name, c.age));
+        if let Some(leader) = leader
+            && let Ok((ch, cs)) = chars.get(leader.0)
+        {
+            let house = house_of
+                .get(leader.0)
+                .ok()
+                .and_then(|ho| houses.get(ho.0).ok())
+                .map(|h| h.name.clone())
+                .unwrap_or_default();
+            out.push_str(&format!("\nruler:{} of {} ({})", ch.name, house, cs.age));
         }
     }
 
-    let built = game.ctx.buildings_in_land(&id);
     let (mut gold, mut levy) = (0i64, 0u64);
-    for b in &built {
+    for bid in built.0.iter() {
+        let Some(b) = buildings.get(bid) else {
+            continue;
+        };
         gold += b.gold_profit as i64 - b.gold_upkeep as i64;
         levy += b.levy as u64;
         // ponytail: only the non-zero numbers, so a line reads
@@ -69,7 +100,7 @@ pub fn update(game: Res<Game>, mut legend: Single<&mut Text, With<Legend>>) {
             out.push_str(&format!(" {} levy", b.levy));
         }
     }
-    if !built.is_empty() {
+    if !built.0.is_empty() {
         out.push_str(&format!("\ntotal: {gold:+}g {levy} levy"));
     }
     legend.0 = out;

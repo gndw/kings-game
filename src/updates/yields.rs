@@ -9,7 +9,7 @@ use bevy::prelude::*;
 /// leader's realm summed across its lands' buildings (gold profit less upkeep,
 /// troop total); everyone else zeroed. Scheduled in `FixedUpdate`, chained
 /// before [`crate::updates::tick::tick`] and
-/// [`crate::updates::payout::monthly_payout`] (which pays out the freshly
+/// [`crate::updates::payout::payout`] (which pays out the freshly
 /// recomputed yield on month start), and again in `Startup` so the opening
 /// screen already shows what a realm renders.
 ///

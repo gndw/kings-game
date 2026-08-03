@@ -4,6 +4,7 @@ use kings_game::app::{Game, input, speed};
 use kings_game::ctx::Ctx;
 use kings_game::ecs;
 use kings_game::resources::date::Date;
+use kings_game::schedules::OnMonth;
 use kings_game::ui;
 use kings_game::updates;
 use std::path::Path;
@@ -99,13 +100,9 @@ fn main() -> Result<()> {
         )
         .add_systems(
             FixedUpdate,
-            (
-                updates::tick::tick,
-                updates::payout::monthly_payout,
-            )
-                .chain()
-                .run_if(|g: Res<Game>| g.running()),
+            updates::advance_date::advance.run_if(|g: Res<Game>| g.running()),
         )
+        .add_systems(OnMonth, updates::payout::payout)
         .run();
     Ok(())
 }

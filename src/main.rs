@@ -76,7 +76,7 @@ fn main() -> Result<()> {
     let hz = f64::from(speed(&calendar.speeds, game.speed_idx));
     app.insert_resource(game)
         .insert_resource(Date::START)
-        .insert_resource(Chronicles(vec![format!("{} — the chronicle begins.", Date::START)]))
+        .insert_resource(Chronicles(vec![format!("{} -- the chronicle begins.", Date::START)]))
         .insert_resource(calendar)
         .insert_resource(border)
         .insert_resource(CommandMenu::default())

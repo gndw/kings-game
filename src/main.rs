@@ -1,6 +1,7 @@
 use anyhow::{Result, bail};
 use bevy::prelude::*;
 use kings_game::app::{Game, input, speed};
+use kings_game::commands;
 use kings_game::ctx::Ctx;
 use kings_game::ecs;
 use kings_game::resources::chronicle::Chronicles;
@@ -92,6 +93,7 @@ fn main() -> Result<()> {
             Update,
             (
                 input,
+                commands::handle_input,
                 ui::map::update_input,
                 ui::map::update_draw,
                 ui::legend::update,

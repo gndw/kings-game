@@ -181,12 +181,46 @@ Lives in `updates/` and `schedules.rs`.
   refactoring and `mods/mod.rs` currently ignores `*.rhai` files. Treat the
   README's script tables as the *intended* surface, not the current one.
 
+## Player commands
+
+Lives in `commands/`. The *first* mutation path driven by player input
+(prior input only navigated the selection and set sim speed). A `Command` enum
+is *what to do* (`ConstructBuilding { land_id, def_id }`, …); the *who* (a
+character id) and the command go to `apply`, an exclusive `&mut World` free
+function in the style of `ctx::step` (it mixes component mutation with resource
+reads).
+
+- **Layout:** `commands.rs` (root: the `Command` enum, `apply` dispatch,
+  `handle_input`, shared id/chronicle helpers) + one submodule per command
+  (`construct_building.rs`).
+- **Extending** = add a `Command` variant + an arm in `apply` + a submodule per
+  command. No trait, no registry — those earn their keep only when
+  modders add commands at runtime, which the compiled game does not.
+- **One issuer now (the player); queue deferred.** Input builds a `Command`
+  from keys + the selection and calls `apply` immediately in an exclusive
+  `Update` system (`commands::handle_input`). A `CommandQueue` drained per
+tick is the obvious next step if a second issuer arrives (AI, replay,
+  multiplayer); not built speculatively.
+- **`ConstructBuilding`** validates (def exists in `BuildingDefs`; actor's kingdom — via
+  `Leads` — equals the land's `HeldBy`, i.e. they rule it; gold ≥
+  `construction_price`, no debt), then spawns the same bundle `populate` uses
+  (`StringId`/`Building`/`BuildingOf`/`OnLand`), registers the id in `Registry`,
+  deducts gold, and appends a chronicle line on success *and* every rejection.
+  `recompute_yields` already runs each `FixedUpdate`, so the new building's
+  gold/levy flows next tick with no wiring.
+- **Runtime building id** is a v4 UUID drawn from the seeded `SimRng` (not OS
+  entropy), keeping the one-entropy-source invariant; format-only, no `uuid`
+  crate. The random building pick on key **B** is seeded too, so a replay
+  presses B at the same point and builds the same kind.
+
 ## Input
 
 `app::input` (`Update`) handles global keys: `q`/`esc` → `AppExit`, `space` →
 toggle `Game::paused`, `+`/`-` → step `speed_idx` through `Calendar::speeds`
 (clamped) and update the `FixedUpdate` timestep. `ui::map::update_input`
 (exclusive) handles arrow keys → `ctx::step` → move the selection.
+`commands::handle_input` (exclusive) handles `b` → construct a random building
+on the selected land.
 
 ## UI
 
@@ -240,6 +274,9 @@ asset-loaded sprites.
 |---|---|
 | `src/main.rs` | arg parse, load mods, build `App`, register systems/schedules, `run` |
 | `src/app.rs` | `Game` resource, `Ctx` wrapper, `speed`, `input` |
+| `src/commands.rs` | module root: `Command` enum, `apply` dispatch, `handle_input` (key B), re-exports |
+| `src/commands/core.rs` | dispatch, input, shared id (`next_id`) + chronicle (`note`) helpers |
+| `src/commands/construct_building.rs` | the `ConstructBuilding` command (validate + spawn + pay) |
 | `src/ctx.rs` | `Ctx` (session state: rng, player id, selection), `startup`, selection `step` |
 | `src/content.rs` | `Content`, per-kind structs, `parse_file`, `merge`, `validate` |
 | `src/state.rs` | `StateFile`, `merge_state`, `reconcile` |

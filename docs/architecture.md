@@ -14,7 +14,7 @@ A Bevy `App` runs three schedules — `Startup`, `FixedUpdate` (the tick), and
 `Update` (render + input) — plus one custom `OnMonth`. The world is Bevy ECS
 (not hecs, despite the README): every land, character, house, kingdom and building is an
 entity, and a read-only building-definition roster plus the calendar, date and map border
-are `Resource`s. Session state (rng, chronicle log, player id, map selection)
+and chronicle log are `Resource`s. Session state (rng, player id, map selection)
 lives in a single `Game` resource wrapping `Ctx`. All of the *what exists* comes
 from mod folders of RON data, loaded in two passes — definitions merge by id,
 then state overlays the mutable fields — and is consumed once by `populate` to
@@ -33,9 +33,9 @@ spawn entities, after which the ECS is the whole world.
   │  Entities (Bevy ECS)              Resources                       │
   │   House, Character, Land,          Registry (id→Entity)           │
   │   Kingdom, Building + relations   BuildingDefs (kind roster)      │
-  │            + one-field components  Calendar, Date, Border         │
-  │                                    Game(Ctx): rng, chronicle,     │
-  │                                     player id, selection          │
+  │            + one-field components  Calendar, Date, Border,        │
+  │                                    Chronicles, Game(Ctx): rng,   │
+  │                                     player id, selection         │
   │                                                                   │
   │  Schedules:  Startup →  FixedUpdate(tick) →  Update(render/input) │
   │              + OnMonth (run from the tick on month rollover)      │
@@ -88,7 +88,8 @@ Lives in `mods/`, `content.rs`, `state.rs`, `resources/`.
 
 - **`resources/`** are the data shapes that become `Resource`s (not entities):
   `Border`, `Calendar` (+`validate`), `Date` (the walking clock),
-  `BuildingDefs`/`BuildingDef` (read-only roster of building kinds).
+  `BuildingDefs`/`BuildingDef` (read-only roster of building kinds), and
+  `Chronicles` (the append-only chronicle log).
 
 ## The ECS world
 
@@ -138,15 +139,16 @@ shape; this is the *what*.
 ## Session state & resources
 
 - **`Ctx`** (`ctx.rs`) holds only what isn't an entity: `seed`, the `SimRng`
-  behind an `Arc<Mutex<>>`, the `chronicles: Vec<String>` log,
-  `player_character_id`, and `selected_land_id` (set on `Startup` to the player's
-  own seat via `Leads`→`Seat`). Gold/levy are **not** here — every character has
-  their own components and the player is only distinguished by the id.
+  behind an `Arc<Mutex<>>`, `player_character_id`, and `selected_land_id` (set
+  on `Startup` to the player's own seat via `Leads`→`Seat`). The chronicle log
+  is not here — it is the separate `Chronicles` resource. Gold/levy are
+  **not** here — every character has their own components and the player is
+  only distinguished by the id.
 - **`Game`** (`app.rs`) is the `Resource` wrapping `Ctx`, plus `paused` and
   `speed_idx` (index into `Calendar::speeds`, because the rates are mod data).
   `Game::running()` gates the tick.
-- The static `Resource`s (`Border`, `Calendar`, `Date`, `BuildingDefs`) are seeded
-  in `main`; `Registry` is seeded by `populate`.
+- The static `Resource`s (`Border`, `Calendar`, `Date`, `BuildingDefs`) and the
+  `Chronicles` log are seeded in `main`; `Registry` is seeded by `populate`.
 - **`ctx::step`** is an exclusive `&mut World` free function: selection movement
   by direction heuristic over land holdings (no adjacency graph — see the
   `ponytail:` note; revisit if picks feel wrong).
@@ -209,7 +211,7 @@ asset-loaded sprites.
     divider node: section 1 (`LegendInfo`) holds id/name and the holder kingdom
     + ruler (name, house, age); section 2 (`LegendBuildings`) holds the
     per-building and total gold/levy.
-  - `chronicle` — last 30 lines of `ctx.chronicles`.
+  - `chronicle` — last 30 lines of the `Chronicles` resource.
   - `resource` — the player's name, house, gold, yield/mo, levy.
   - `status` — `[PAUSED]`/`[RUNNING]`, the `Date`, current speed.
 
@@ -238,11 +240,11 @@ asset-loaded sprites.
 |---|---|
 | `src/main.rs` | arg parse, load mods, build `App`, register systems/schedules, `run` |
 | `src/app.rs` | `Game` resource, `Ctx` wrapper, `speed`, `input` |
-| `src/ctx.rs` | `Ctx` (session state), `startup`, selection `step` |
+| `src/ctx.rs` | `Ctx` (session state: rng, player id, selection), `startup`, selection `step` |
 | `src/content.rs` | `Content`, per-kind structs, `parse_file`, `merge`, `validate` |
 | `src/state.rs` | `StateFile`, `merge_state`, `reconcile` |
 | `src/mods/mod.rs` | `load(dir)` — the two-pass orchestrator |
-| `src/resources/*` | `Border`, `Calendar`(+validate), `Date`, `BuildingDefs`/`BuildingDef` (kind roster) |
+| `src/resources/*` | `Border`, `Calendar`(+validate), `Date`, `BuildingDefs`/`BuildingDef` (kind roster), `Chronicles` (log) |
 | `src/ecs/ecs.rs` | `StringId`, `Registry`, `populate` |
 | `src/ecs/{house,character,land,building,kingdom}.rs` | components + relationships per kind |
 | `src/ecs.rs` | module root, re-exports, the component map |

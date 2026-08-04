@@ -1,11 +1,11 @@
 //! The simulation context: everything that isn't an entity. The entity world
-//! lives in the App's `World`; this holds only session state — the rng, the
-//! chronicle log, who the player is, and the map selection. The calendar the
-//! sim runs on lives in `crate::resources`.
+//! lives in the App's `World`; this holds only session state — the rng,
+//! who the player is, and the map selection. The chronicle log is its own
+//! resource (`crate::resources::chronicle`); the calendar the sim runs on
+//! lives in `crate::resources`.
 
 use crate::app::Game;
 use crate::ecs::{LandHolding, Leads, Registry, Seat, StringId};
-use crate::resources::date::Date;
 use crate::rng::SimRng;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
@@ -15,7 +15,6 @@ use std::sync::{Arc, Mutex};
 pub struct Ctx {
     pub seed: u64,
     pub rng: Arc<Mutex<SimRng>>,
-    pub chronicles: Vec<String>,
     /// Whoever the player is playing as. An id into the character entities,
     /// resolved through the [`Registry`] when a component is needed.
     ///
@@ -39,11 +38,9 @@ impl Ctx {
     /// [`Ctx::startup`] in the `Startup` schedule once those entities exist.
     pub fn new_game(seed: u64, player: &str) -> Self {
         let rng = Arc::new(Mutex::new(SimRng::new(seed)));
-        let chronicles = vec![format!("{} — the chronicle begins.", Date::START)];
         Ctx {
             seed,
             rng,
-            chronicles,
             player_character_id: player.to_string(),
             selected_land_id: None,
         }

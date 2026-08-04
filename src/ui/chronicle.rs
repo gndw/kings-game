@@ -1,7 +1,7 @@
 //! The chronicle panel on the right: the last few chronicle lines.
 
 use super::{FONT, TITLE};
-use crate::app::Game;
+use crate::resources::chronicle::Chronicles;
 use bevy::prelude::*;
 
 /// Lines of the chronicle kept on screen.
@@ -34,7 +34,10 @@ pub(super) fn spawn(col: &mut ChildSpawnerCommands, panel: Color) {
     });
 }
 
-pub fn update(game: Res<Game>, mut chronicle: Single<&mut Text, With<Chronicle>>) {
-    let start = game.ctx.chronicles.len().saturating_sub(CHRONICLE_LINES);
-    chronicle.0 = game.ctx.chronicles[start..].join("\n");
+pub fn update(
+    chronicles: Res<Chronicles>,
+    mut chronicle: Single<&mut Text, With<Chronicle>>,
+) {
+    let start = chronicles.0.len().saturating_sub(CHRONICLE_LINES);
+    chronicle.0 = chronicles.0[start..].join("\n");
 }

@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use kings_game::app::{Game, input, speed};
 use kings_game::ctx::Ctx;
 use kings_game::ecs;
+use kings_game::resources::chronicle::Chronicles;
 use kings_game::resources::date::Date;
 use kings_game::schedules::OnMonth;
 use kings_game::ui;
@@ -74,6 +75,7 @@ fn main() -> Result<()> {
     let hz = f64::from(speed(&calendar.speeds, game.speed_idx));
     app.insert_resource(game)
         .insert_resource(Date::START)
+        .insert_resource(Chronicles(vec![format!("{} — the chronicle begins.", Date::START)]))
         .insert_resource(calendar)
         .insert_resource(border)
         .insert_resource(Time::<Fixed>::from_hz(hz))

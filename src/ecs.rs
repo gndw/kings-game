@@ -1,10 +1,11 @@
 //! The simulation's entity-component model and the world it lives in.
 //!
 //! The entities live directly in Bevy's App world — [`Ctx`](crate::ctx::Ctx)
-//! holds only the session state that isn't an entity (rng, chronicles, the
-//! player id, the current selection). Reads go through Bevy `Query` system
-//! params (the UI) or `&mut World` free functions (sim logic, which mixes
-//! component and resource access and so runs as exclusive systems).
+//! holds only the session state that isn't an entity (rng, the player id,
+//! the current selection; the chronicle log is its own resource). Reads go
+//! through Bevy `Query` system params (the UI) or `&mut World` free
+//! functions (sim logic, which mixes component and resource access and so
+//! runs as exclusive systems).
 //!
 //! - **House** entities: [`StringId`], [`House`], [`HouseName`].
 //! - **Character** entities: [`StringId`], [`Character`], [`CharacterName`],

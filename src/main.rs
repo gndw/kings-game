@@ -1,13 +1,13 @@
 use anyhow::{Result, bail};
 use bevy::prelude::*;
 use kings_game::app::{Game, input, speed};
-use kings_game::commands;
 use kings_game::ctx::Ctx;
 use kings_game::ecs;
 use kings_game::resources::chronicle::Chronicles;
 use kings_game::resources::date::Date;
 use kings_game::schedules::OnMonth;
 use kings_game::ui;
+use kings_game::ui::command_menu::CommandMenu;
 use kings_game::updates;
 use std::path::Path;
 
@@ -79,6 +79,7 @@ fn main() -> Result<()> {
         .insert_resource(Chronicles(vec![format!("{} — the chronicle begins.", Date::START)]))
         .insert_resource(calendar)
         .insert_resource(border)
+        .insert_resource(CommandMenu::default())
         .insert_resource(Time::<Fixed>::from_hz(hz))
         .add_systems(
             Startup,
@@ -86,6 +87,7 @@ fn main() -> Result<()> {
                 Ctx::startup,
                 ui::startup::startup,
                 ui::map::startup,
+                ui::command_menu::startup,
                 updates::yields::recompute_yields,
             ),
         )
@@ -93,7 +95,8 @@ fn main() -> Result<()> {
             Update,
             (
                 input,
-                commands::handle_input,
+                ui::command_menu::input,
+                ui::command_menu::update,
                 ui::map::update_input,
                 ui::map::update_draw,
                 ui::legend::update,

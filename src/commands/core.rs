@@ -1,5 +1,6 @@
-//! Command dispatch, input, and the shared helpers every command reaches for
-//! (a fresh id, a chronicle line).
+//! Command dispatch and the shared helpers every command reaches for (a fresh
+//! id, a chronicle line). The input path that *builds* a command lives in
+//! [`crate::ui::command_menu`].
 //!
 //! [`apply`] is an exclusive `&mut World` free function in the style of
 //! [`crate::ctx::step`] — it mixes component mutation with resource reads, the
@@ -7,11 +8,8 @@
 
 use super::construct_building;
 use crate::app::Game;
-use crate::resources::buildings::BuildingDefs;
 use crate::resources::chronicle::Chronicles;
 use bevy::ecs::world::World;
-use bevy::input::ButtonInput;
-use bevy::input::keyboard::KeyCode;
 use rand::TryRng;
 
 /// A player action: *what* to do. The *who* (a character id) is passed to
@@ -30,41 +28,6 @@ pub fn apply(world: &mut World, actor_id: &str, cmd: Command) {
             construct_building::construct_building(world, actor_id, &land_id, &def_id)
         }
     }
-}
-
-/// Exclusive input → command. Key **B** constructs a random building (seeded
-/// pick from the roster) on the currently selected land, paid by the player.
-pub fn handle_input(world: &mut World) {
-    if !world
-        .resource::<ButtonInput<KeyCode>>()
-        .just_pressed(KeyCode::KeyB)
-    {
-        return;
-    }
-    let (actor, land_id, rng) = {
-        let game = world.resource::<Game>();
-        let Some(land_id) = game.ctx.selected_land_id.clone() else {
-            return;
-        };
-        (
-            game.ctx.player_character_id.clone(),
-            land_id,
-            game.ctx.rng.clone(),
-        )
-    };
-    // Seeded pick: a replay presses B at the same point and draws the same def.
-    let def_id = {
-        let defs = world.resource::<BuildingDefs>();
-        if defs.0.is_empty() {
-            return;
-        }
-        let i = {
-            let mut r = rng.lock().unwrap();
-            (r.try_next_u64().unwrap_or(0) as usize) % defs.0.len()
-        };
-        defs.0.get_index(i).unwrap().0.clone()
-    };
-    apply(world, &actor, Command::ConstructBuilding { land_id, def_id });
 }
 
 /// A fresh v4 UUID for a runtime-built entity, drawn from the seeded `SimRng`.

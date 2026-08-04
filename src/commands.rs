@@ -7,8 +7,9 @@
 //! [`crate::ctx::step`] — so every player mutation flows through one place:
 //! validate, apply, chronicle.
 //!
-//! - [`core`] — the [`Command`] enum, [`apply`] dispatch, `handle_input`
-//!   (key **B**), and the shared id/chronicle helpers.
+//! - [`core`] — the [`Command`] enum, [`apply`] dispatch, and the shared
+//!   id/chronicle helpers. (The palette that builds a command from input lives
+//!   in [`crate::ui::command_menu`].)
 //! - [`construct_building`] — the construct-building command.
 //!
 //! Extending: add a [`Command`] variant + an arm in [`apply`] + a submodule per
@@ -18,4 +19,4 @@
 pub mod construct_building;
 pub mod core;
 
-pub use core::{Command, apply, handle_input};
+pub use core::{Command, apply};

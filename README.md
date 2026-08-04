@@ -26,6 +26,7 @@ without wayland, audio, or 3d.
 | Key | |
 |---|---|
 | `space` | pause / unpause |
+| `c` | open the command palette (build, …) |
 | `+` / `-` | step through the speeds in `calendar.ron` |
 | `q`, `esc` | quit |
 

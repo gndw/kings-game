@@ -3,6 +3,7 @@
 
 use crate::ctx::Ctx;
 use crate::resources::calendar::Calendar;
+use crate::ui::command_menu::CommandMenu;
 use bevy::prelude::*;
 
 #[derive(Resource)]
@@ -38,12 +39,14 @@ pub fn speed(speeds: &[u32], idx: usize) -> u32 {
 
 pub fn input(
     keys: Res<ButtonInput<KeyCode>>,
+    menu: Res<CommandMenu>,
     mut game: ResMut<Game>,
     calendar: Res<Calendar>,
     mut fixed: ResMut<Time<Fixed>>,
     mut exit: MessageWriter<AppExit>,
 ) {
-    if keys.just_pressed(KeyCode::KeyQ) || keys.just_pressed(KeyCode::Escape) {
+    // Escape closes the command palette while it's open, so it mustn't quit.
+    if !menu.open && (keys.just_pressed(KeyCode::KeyQ) || keys.just_pressed(KeyCode::Escape)) {
         exit.write(AppExit::Success);
     }
     if keys.just_pressed(KeyCode::Space) {

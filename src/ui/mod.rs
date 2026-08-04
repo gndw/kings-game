@@ -3,6 +3,7 @@
 //! `map`, the layout that spawns the panels in `startup`.
 
 pub mod chronicle;
+pub mod command_menu;
 pub mod flag;
 pub mod legend;
 pub mod map;

@@ -148,7 +148,9 @@ shape; this is the *what*.
   `speed_idx` (index into `Calendar::speeds`, because the rates are mod data).
   `Game::running()` gates the tick.
 - The static `Resource`s (`Border`, `Calendar`, `Date`, `BuildingDefs`) and the
-  `Chronicles` log are seeded in `main`; `Registry` is seeded by `populate`.
+  `Chronicles` log are seeded in `main`; `Registry` is seeded by `populate`. The
+  command palette's open/stage/cursor state is the `CommandMenu` resource
+  (`ui/command_menu.rs`), also seeded in `main`.
 - **`ctx::step`** is an exclusive `&mut World` free function: selection movement
   by direction heuristic over land holdings (no adjacency graph — see the
   `ponytail:` note; revisit if picks feel wrong).
@@ -190,16 +192,17 @@ character id) and the command go to `apply`, an exclusive `&mut World` free
 function in the style of `ctx::step` (it mixes component mutation with resource
 reads).
 
-- **Layout:** `commands.rs` (root: the `Command` enum, `apply` dispatch,
-  `handle_input`, shared id/chronicle helpers) + one submodule per command
-  (`construct_building.rs`).
+- **Layout:** `commands.rs` (root: the `Command` enum, `apply` dispatch, shared
+  id/chronicle helpers) + one submodule per command (`construct_building.rs`).
+  The input path that *builds* a command is the palette in `ui/command_menu.rs`
+  (see UI) — there is no key handler in `commands/`.
 - **Extending** = add a `Command` variant + an arm in `apply` + a submodule per
   command. No trait, no registry — those earn their keep only when
   modders add commands at runtime, which the compiled game does not.
-- **One issuer now (the player); queue deferred.** Input builds a `Command`
-  from keys + the selection and calls `apply` immediately in an exclusive
-  `Update` system (`commands::handle_input`). A `CommandQueue` drained per
-tick is the obvious next step if a second issuer arrives (AI, replay,
+- **One issuer now (the player); queue deferred.** The command palette
+  (`ui::command_menu`) builds a `Command` from the player's picks and calls
+  `apply` immediately in an exclusive `Update` system. A `CommandQueue` drained
+  per tick is the obvious next step if a second issuer arrives (AI, replay,
   multiplayer); not built speculatively.
 - **`ConstructBuilding`** validates (def exists in `BuildingDefs`; actor's kingdom — via
   `Leads` — equals the land's `HeldBy`, i.e. they rule it; gold ≥
@@ -210,17 +213,19 @@ tick is the obvious next step if a second issuer arrives (AI, replay,
   gold/levy flows next tick with no wiring.
 - **Runtime building id** is a v4 UUID drawn from the seeded `SimRng` (not OS
   entropy), keeping the one-entropy-source invariant; format-only, no `uuid`
-  crate. The random building pick on key **B** is seeded too, so a replay
-  presses B at the same point and builds the same kind.
+  crate. (The player now picks the building kind in the palette, so there is no
+  seeded random pick anymore.)
 
 ## Input
 
-`app::input` (`Update`) handles global keys: `q`/`esc` → `AppExit`, `space` →
-toggle `Game::paused`, `+`/`-` → step `speed_idx` through `Calendar::speeds`
-(clamped) and update the `FixedUpdate` timestep. `ui::map::update_input`
-(exclusive) handles arrow keys → `ctx::step` → move the selection.
-`commands::handle_input` (exclusive) handles `b` → construct a random building
-on the selected land.
+`app::input` (`Update`) handles global keys: `q`/`esc` → `AppExit` (but `esc`
+is yielded to the command palette while it is open), `space` → toggle
+`Game::paused`, the digit keys jump `speed_idx` through `Calendar::speeds` and
+update the `FixedUpdate` timestep. `ui::map::update_input` (exclusive) handles
+arrow keys → `ctx::step` → move the selection, but yields the arrows to the
+palette while it is open. `ui::command_menu::input` (exclusive) opens the
+spotlight-style command palette on `c` and navigates it (arrows + enter +
+Esc); on the final pick it calls `commands::apply`.
 
 ## UI
 
@@ -251,7 +256,17 @@ asset-loaded sprites.
     building, then a thin rule and a `total` row in the same layout.
   - `chronicle` — last 30 lines of the `Chronicles` resource.
   - `resource` — the player's name, house, gold, yield/mo, levy.
-  - `status` — `[PAUSED]`/`[RUNNING]`, the `Date`, current speed.
+  - `status` — `[PAUSED]`/`[RUNNING]`, the `Date`, current speed, a `C commands`
+    hint.
+- **Command palette** (`ui/command_menu.rs`): a spotlight-style modal — a
+  centered window over a dimmed backdrop, lifted above the panels with
+  `GlobalZIndex`. A `CommandMenu` resource holds `open`/stage/cursor; `c` opens
+  it, arrows move the cursor, `enter` drills in (command → a land you rule → a
+  building kind), `esc` closes. `update` toggles the overlay and rebuilds the
+  list rows only when the stage/cursor changes (the legend's cache idea). The
+  final pick builds a `Command` and calls `commands::apply`. While open it owns
+  `esc` and the arrows, so `app::input` and `ui::map::update_input` read its
+  `open` flag and yield them.
 
 ## Key invariants (things that will bite you if broken)
 
@@ -278,8 +293,8 @@ asset-loaded sprites.
 |---|---|
 | `src/main.rs` | arg parse, load mods, build `App`, register systems/schedules, `run` |
 | `src/app.rs` | `Game` resource, `Ctx` wrapper, `speed`, `input` |
-| `src/commands.rs` | module root: `Command` enum, `apply` dispatch, `handle_input` (key B), re-exports |
-| `src/commands/core.rs` | dispatch, input, shared id (`next_id`) + chronicle (`note`) helpers |
+| `src/commands.rs` | module root: `Command` enum, `apply` dispatch, re-exports |
+| `src/commands/core.rs` | dispatch + shared id (`next_id`) + chronicle (`note`) helpers |
 | `src/commands/construct_building.rs` | the `ConstructBuilding` command (validate + spawn + pay) |
 | `src/ctx.rs` | `Ctx` (session state: rng, player id, selection), `startup`, selection `step` |
 | `src/content.rs` | `Content`, per-kind structs, `parse_file`, `merge`, `validate` |
@@ -295,6 +310,7 @@ asset-loaded sprites.
 | `src/updates/payout.rs` | `payout` (monthly gold to leaders) |
 | `src/rng.rs` | `SimRng` — seeded, draw-counted for exact replay |
 | `src/ui/*` | flex layout, map/camera gizmos, the four text panels |
+| `src/ui/command_menu.rs` | the command palette modal (open/navigate/dispatch + render) |
 
 ## Related docs
 

@@ -75,6 +75,10 @@ pub fn startup(mut commands: Commands, border: Res<Border>) {
 /// Exclusive: selection stepping reads many lands and writes the player's
 /// selection, all through the one [`World`].
 pub fn update_input(world: &mut World) {
+    // The command palette owns the arrows while open; don't move the selection.
+    if world.resource::<crate::ui::command_menu::CommandMenu>().open {
+        return;
+    }
     let dir = [
         (KeyCode::ArrowLeft, (-1.0, 0.0)),
         (KeyCode::ArrowRight, (1.0, 0.0)),

@@ -251,7 +251,8 @@ asset-loaded sprites.
 
 - **Layout** (`ui/startup.rs`): a column flex tree — `resource` bar on top, a row
   holding the map (left, full remaining width) and the right-hand column
-  (`legend` over `chronicle`, the latter pinned to 30% height), `status` bar on
+  (`legend` over `actions` over `chronicle`, the latter pinned to 30% height),
+  `status` bar on
   the bottom. `RIGHT_BAR = 0.3` is shared with the camera so the map lands beside
   the column, not under it.
 - **Map** (`ui/map.rs`): camera (`Startup`) framed on the whole `Border` with an
@@ -261,17 +262,22 @@ asset-loaded sprites.
   circles, the selected land in yellow over its neighbours, the player's own
   holdings tinted green, and a waving pennant (`flag.rs`) on the selection.
 - **Panels** each own a marker `Component` (`LegendInfo`, `LegendBuildings`,
-  `Chronicle`, `ResourceBar`, `Status`) and an `update` system that reads the
-  world through `Query`/`Res` and writes into a `Single<&mut Text>`. The one
-  exception is `LegendBuildings`, a column *container*: `update` holds a
-  `Single<Entity, With<LegendBuildings>>` and rebuilds its child rows only when
-  a `Local` cache key (selection + building roster) changes — not every frame.
+  `LegendActions`, `Chronicle`, `ResourceBar`, `Status`) and an `update` system
+  that reads the world through `Query`/`Res` and writes into a `Single<&mut Text>`.
+  The exceptions are the column *containers* `LegendBuildings` and
+  `LegendActions`: their `update` holds a `Single<Entity, With<…>>` and rebuilds
+  child rows — buildings only when a `Local` cache key (selection + building
+  roster) changes, actions every frame since the list is ≤2 rows.
   - `legend` — the selected land, split into two sections separated by a thin
     divider node: section 1 (`LegendInfo`) holds id/name and the holder kingdom
     + ruler (name, house, age); section 2 (`LegendBuildings`) is a 3-column
     table — name (left, fills) / gold (right) / levy (right), one row per
     building, then a thin rule and a `total` row in the same layout.
-  - `chronicle` — last 30 lines of the `Chronicles` resource.
+  - `actions` — its own panel between `legend` and `chronicle`: a title
+    (`ACTIONS`) + a `LegendActions` column listing the player's build/destroy
+    hotkeys if the player rules the selected land, else a `(none)` placeholder.
+    `update` runs as its own system each frame.
+  - `chronicle` — last 10 lines of the `Chronicles` resource.
   - `resource` — the player's name, house, gold, yield/mo, levy.
   - `status` — `[PAUSED]`/`[RUNNING]`, the `Date`, current speed, a `C commands`
     hint.

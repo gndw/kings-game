@@ -105,6 +105,7 @@ fn main() -> Result<()> {
                 ui::map::update_input,
                 ui::map::update_draw,
                 ui::legend::update,
+                ui::actions::update,
                 ui::chronicle::update,
                 ui::resource::update,
                 ui::status::update,

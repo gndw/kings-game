@@ -2,6 +2,7 @@
 //! and the status bar along the bottom. The camera and map drawing live in
 //! `map`, the layout that spawns the panels in `startup`.
 
+pub mod actions;
 pub mod chronicle;
 pub mod command_menu;
 pub mod flag;

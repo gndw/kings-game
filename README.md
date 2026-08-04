@@ -81,56 +81,28 @@ rather than a silent no-op — a typo tells you about itself.
 
 ### Scripts
 
-A mod folder may also hold any number of `*.rhai` files
-([Rhai](https://rhai.rs)). Define `on_startup`, `on_day`, `on_month`, any of
-them, or none. `on_startup` fires once before the first tick — a place to
-publish anything the opening screen should already show. `on_month` only ever
-fires on day 1, so it needs no date check of its own:
+Kings Game uses [bevy_mod_scripting](https://github.com/makspll/bevy_mod_scripting)
+for multi-language scripted modding. Scripts live in `assets/scripts/` and are
+hot-reloadable. See `docs/scripting.md` for the full guide.
 
-```rhai
-// mods/plague/on_month.rhai
-fn on_month(ctx) {
-    if ctx.month == 6 && ctx.rand() < 0.05 {
-        ctx.add_chronicle("A sickness takes the holdings.");
-    }
-}
+Two callback hooks are available:
+
+- `on_day()` — fires every simulated day (every tick)
+- `on_month()` — fires when the in-game month rolls over
+
+```lua
+-- assets/scripts/economy_overhaul.lua
+function on_month()
+    print("A new month begins")
+end
 ```
 
-As with the data files, the filename is documentation — each `*.rhai` compiles
-on its own, so split a mod however reads best. Name a script after what it
-does; one file with several hooks works exactly the same.
+Scripts access the ECS world via Bevy reflection. All game components
+(`Character`, `Land`, `Kingdom`, etc.) are reflected and accessible from
+script. See `docs/scripting.md` for the API.
 
-What `ctx` can read:
-
-| | |
-|---|---|
-| `year` `month` `day` `tick` | the clock |
-| `land` | the selected land's id, or `""` |
-| `player` | the player's character id |
-| `characters` | every character id, in data order |
-| `gold(id)` `levy(id)` | that character's resources, as of the start of the tick |
-| `kingdoms` | every kingdom id, in data order |
-| `kingdom_leader(kid)` | the character ruling it, or `""` |
-| `kingdom_lands(kid)` `land_buildings(lid)` | what a realm holds, and what stands in a land |
-| `building_levy(bid)` `building_gold_profit(bid)` `building_gold_upkeep(bid)` | what one building is worth |
-
-What it can do:
-
-| | |
-|---|---|
-| `rand()` | uniform in `[0, 1)`, from the seeded RNG |
-| `add_chronicle(line)` | write a line to the chronicle |
-| `add_character_gold(id, n)` | add to (or, negative, take from) a treasury |
-| `set_character_levy(id, n)` | set a character's raised troops |
-| `set_character_gold_yield(id, n)` | set a character's gold per month |
-
-Gold and levy belong to characters, not to the player — the player is just an
-id, and every ruler runs on the same rules. Who counts as a ruler is a question
-the engine itself answers now: it walks each character's kingdoms and sums the
-buildings across their holdings. Lead no kingdom and the sum is zero.
-
-Starting values are state, so a mod hands someone a treasury by overriding
-their entry — no need to redeclare who they are:
+**Cold path only.** Script callbacks fire once per event, not per entity.
+Keep per-entity hot-loop computation in Rust systems or modifier tables.
 
 ```ron
 // mods/rich-arryn/start.state.ron

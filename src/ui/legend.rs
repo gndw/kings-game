@@ -61,8 +61,9 @@ pub fn update(
     };
 
     let mut out = format!("id:{id}\nname:{}", land.0);
-    if let Some((k_sid, _holds, seat, leader)) =
-        kingdoms.iter().find(|(_, h, _, _)| h.iter().any(|e| e == land_e))
+    if let Some((k_sid, _holds, seat, leader)) = kingdoms
+        .iter()
+        .find(|(_, h, _, _)| h.iter().any(|e| e == land_e))
     {
         out.push_str(&format!("\nkingdom:{}", k_sid.0));
         if seat.is_some_and(|s| s.0 == land_e) {

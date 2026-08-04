@@ -62,8 +62,8 @@ pub fn load(dir: &Path) -> Result<Mods> {
     // chronicled rather than fatal — see `state::reconcile`.
     for file in state_files {
         let text = read_to_string(&file)?;
-        let parsed = state::parse_file(&text)
-            .with_context(|| format!("parsing {}", file.display()))?;
+        let parsed =
+            state::parse_file(&text).with_context(|| format!("parsing {}", file.display()))?;
         content.merge_state(parsed);
     }
     for note in state::reconcile(&mut content) {

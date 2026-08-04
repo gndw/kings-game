@@ -1,11 +1,12 @@
 pub mod app;
 pub mod content;
 pub mod ctx;
-pub mod resources;
 pub mod ecs;
 pub mod mods;
+pub mod resources;
 pub mod rng;
-pub mod state;
 pub mod schedules;
+pub mod scripting;
+pub mod state;
 pub mod ui;
 pub mod updates;

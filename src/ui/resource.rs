@@ -3,7 +3,9 @@
 
 use super::FONT;
 use crate::app::Game;
-use crate::ecs::{CharacterGold, CharacterGoldYield, CharacterLevy, CharacterName, HouseName, HouseOf, Registry};
+use crate::ecs::{
+    CharacterGold, CharacterGoldYield, CharacterLevy, CharacterName, HouseName, HouseOf, Registry,
+};
 use bevy::prelude::*;
 
 /// Named `ResourceBar`, not `Resource` — that one is Bevy's trait.
@@ -30,7 +32,12 @@ pub fn update(
     game: Res<Game>,
     registry: Res<Registry>,
     mut bar: Single<&mut Text, With<ResourceBar>>,
-    chars: Query<(&CharacterName, &CharacterGold, &CharacterGoldYield, &CharacterLevy)>,
+    chars: Query<(
+        &CharacterName,
+        &CharacterGold,
+        &CharacterGoldYield,
+        &CharacterLevy,
+    )>,
     house_of: Query<&HouseOf>,
     houses: Query<&HouseName>,
 ) {

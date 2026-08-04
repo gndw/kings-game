@@ -5,8 +5,9 @@
 //! starting state already overlaid.
 
 use crate::content::Content;
+use bevy::ecs::reflect::ReflectComponent;
 use bevy::ecs::world::World;
-use bevy::prelude::{Component, Entity, Resource};
+use bevy::prelude::{Component, Entity, Reflect, Resource};
 use std::collections::HashMap;
 
 use super::character::{
@@ -18,8 +19,9 @@ use super::kingdom::{Kingdom, LedBy, Seat};
 use super::land::{Built, HeldBy, Land, LandBorders, LandHolding, LandName};
 
 /// The id an entity is known by in RON data and save files. Every game entity
-/// has one; the Rhai surface (`ctx.gold("char-tywin")`, …) is built on it.
-#[derive(Component, Debug, Clone)]
+/// has one; the scripting surface (`ctx.gold("char-tywin")`, …) is built on it.
+#[derive(Component, Debug, Clone, Reflect)]
+#[reflect(Component)]
 pub struct StringId(pub String);
 
 impl StringId {

@@ -5,6 +5,7 @@ use kings_game::ctx::Ctx;
 use kings_game::ecs;
 use kings_game::resources::date::Date;
 use kings_game::schedules::OnMonth;
+use kings_game::scripting::ScriptingPlugin;
 use kings_game::ui;
 use kings_game::updates;
 use std::path::Path;
@@ -64,7 +65,8 @@ fn main() -> Result<()> {
                 filter: "wgpu=error,naga=warn,winit=error,bevy_winit=error".into(),
                 ..default()
             }),
-    );
+    )
+    .add_plugins(ScriptingPlugin);
     {
         let world = app.world_mut();
         ecs::populate(world, mods.content);

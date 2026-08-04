@@ -17,11 +17,16 @@ bevy = { version = "0.19", default-features = false, features = [
     "2d_bevy_render",
     "ui_api",
     "ui_bevy_render",
+    "custom_cursor",
 ] }
 rand = "0.10.2"
 indexmap = { version = "2", features = ["serde"] }
 ron = "0.12.2"
 serde = { version = "1.0.229", features = ["derive"] }
+
+# Scripting: multi-language (Lua) mod support via bevy_mod_scripting.
+# Lua 5.4 chosen for widest modding community familiarity (Factorio, WoW, Roblox).
+bevy_mod_scripting = { version = "0.21", features = ["lua54"] }
 
 # Bevy is unusably slow at opt-level 0; its own crates get full optimisation
 # since we never step through them.

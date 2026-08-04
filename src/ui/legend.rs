@@ -3,10 +3,10 @@
 use super::{FONT, TITLE};
 use crate::app::Game;
 use crate::ecs::{
-    Built, CharacterAge, CharacterName, Holds, HouseName, HouseOf, LandName, LedBy, Registry, Seat,
-    StringId,
+    BuildingOf, BuildingsOn, CharacterAge, CharacterName, Holds, HouseName, HouseOf, LandName,
+    LedBy, Registry, Seat, StringId,
 };
-use crate::resources::buildings::Buildings;
+use crate::resources::buildings::BuildingDefs;
 use bevy::prelude::*;
 
 /// id / land / kingdom detail block.
@@ -60,10 +60,11 @@ pub(super) fn spawn(col: &mut ChildSpawnerCommands, panel: Color) {
 pub fn update(
     game: Res<Game>,
     registry: Res<Registry>,
-    buildings: Res<Buildings>,
+    defs: Res<BuildingDefs>,
     mut info: Single<&mut Text, (With<LegendInfo>, Without<LegendBuildings>)>,
     mut bld: Single<&mut Text, (With<LegendBuildings>, Without<LegendInfo>)>,
-    lands: Query<(&LandName, &Built)>,
+    lands: Query<(&LandName, &BuildingsOn)>,
+    buildings: Query<&BuildingOf>,
     kingdoms: Query<(&StringId, &Holds, Option<&Seat>, Option<&LedBy>)>,
     chars: Query<(&CharacterName, &CharacterAge)>,
     house_of: Query<&HouseOf>,
@@ -80,7 +81,7 @@ pub fn update(
         bld.0.clear();
         return;
     };
-    let Ok((land, built)) = lands.get(land_e) else {
+    let Ok((land, on)) = lands.get(land_e) else {
         info.0.clear();
         bld.0.clear();
         return;
@@ -109,35 +110,34 @@ pub fn update(
     }
     info.0 = inf;
 
-    // Section 2: per-building yield and total.
+    // Section 2: per-building yield and total — walk the land's building
+    // instances through to their definitions for the stats.
     let (mut gold, mut levy) = (0i64, 0u64);
     let mut out = String::new();
-    for bid in built.0.iter() {
-        let Some(b) = buildings.get(bid) else {
+    for b_e in on.iter() {
+        let Some(d) = buildings.get(b_e).ok().and_then(|of| defs.get(&of.0)) else {
             continue;
         };
-        gold += b.gold_profit as i64 - b.gold_upkeep as i64;
-        levy += b.levy as u64;
+        gold += d.gold_profit as i64 - d.gold_upkeep as i64;
+        levy += d.levy as u64;
         // ponytail: only the non-zero numbers, so a line reads
         // "market square +10g" not "+10g -0g 0 levy".
         if !out.is_empty() {
             out.push('\n');
         }
-        out.push_str(&format!("- {}", b.name));
-        if b.gold_profit > 0 {
-            out.push_str(&format!(" +{}g", b.gold_profit));
+        out.push_str(&format!("- {}", d.name));
+        if d.gold_profit > 0 {
+            out.push_str(&format!(" +{}g", d.gold_profit));
         }
-        if b.gold_upkeep > 0 {
-            out.push_str(&format!(" -{}g", b.gold_upkeep));
+        if d.gold_upkeep > 0 {
+            out.push_str(&format!(" -{}g", d.gold_upkeep));
         }
-        if b.levy > 0 {
-            out.push_str(&format!(" {} levy", b.levy));
+        if d.levy > 0 {
+            out.push_str(&format!(" {} levy", d.levy));
         }
     }
-    if !built.0.is_empty() {
-        if !out.is_empty() {
-            out.push('\n');
-        }
+    if !out.is_empty() {
+        out.push('\n');
         out.push_str(&format!("total: {gold:+}g {levy} levy"));
     }
     bld.0 = out;

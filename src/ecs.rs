@@ -11,13 +11,17 @@
 //!   [`CharacterAge`], [`CharacterGold`], [`CharacterLevy`],
 //!   [`CharacterGoldYield`], [`HouseOf`], maybe [`Leads`].
 //! - **Land** entities: [`StringId`], [`Land`], [`LandName`], [`LandBorders`],
-//!   [`LandHolding`], [`Built`], maybe [`HeldBy`].
+//!   [`LandHolding`], maybe [`HeldBy`], plus a [`BuildingsOn`] collection
+//!   auto-maintained from each building's [`OnLand`].
 //! - **Kingdom** entities: [`StringId`], [`Kingdom`], [`LedBy`],
 //!   [`Seat`], [`Holds`] (auto-maintained from each land's [`HeldBy`]).
+//! - **Building** entities: [`StringId`], [`Building`], [`BuildingOf`] (a
+//!   definition id into the [`BuildingDefs`](crate::resources::buildings::BuildingDefs)
+//!   roster), [`OnLand`] (whose reverse [`BuildingsOn`] sits on the land).
 //!
 //! Building *definitions* are not entities — they are a read-only roster held
-//! as the [`Buildings`](crate::resources::buildings::Buildings) resource; lands
-//! keep the ids of what's built in [`Built`].
+//! as the [`BuildingDefs`](crate::resources::buildings::BuildingDefs) resource;
+//! each built building *instance* is an entity that points at its definition.
 //!
 //! Load-time [`Content`](crate::content::Content) — the merged definitions with
 //! the starting state overlaid (still `IndexMap`-based: the deserialization,
@@ -30,7 +34,7 @@
 //! - **Every game entity carries a [`StringId`]** — the id its RON data and save
 //!   address it by. The Rhai script ABI is string ids and does not change.
 //! - **Read order is Bevy archetype order**, which within one archetype is spawn
-//!   order. Each kind (houses, characters, lands, kingdoms) is a single
+//!   order. Each kind (houses, characters, lands, buildings, kingdoms) is a single
 //!   archetype, so a `Query` over e.g. `(&StringId, &Land)` yields lands in the
 //!   order [`populate`] spawned them.
 //!
@@ -43,12 +47,14 @@
 //! [`kingdom`], [`land`]); the shared spine — [`StringId`], [`Registry`],
 //! [`populate`] — is in [`ecs`] and re-exported here as one flat namespace.
 
+pub mod building;
 pub mod character;
 pub mod ecs;
 pub mod house;
 pub mod kingdom;
 pub mod land;
 
+pub use building::*;
 pub use character::*;
 pub use ecs::*;
 pub use house::*;

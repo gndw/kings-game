@@ -79,8 +79,8 @@ the four character components above.
 
 `CharacterState`/`LandState` are gone. Each entity kind now has a single struct
 in `content.rs` that holds *both* its definition fields (name, `house_id`,
-geometry) and its state fields (age, treasury, levy, yield, `building_ids`).
-`Kingdom` (state-only) moved into `content.rs` alongside them.
+geometry) and its state fields (age, treasury, levy, yield). `Kingdom`
+(state-only) moved into `content.rs` alongside them.
 
 - **Load is two-pass** (`mods::load`): every definition `*.ron` merges first
   (`Content::merge`, id-replace), then every `*.state.ron` overlays
@@ -93,8 +93,38 @@ geometry) and its state fields (age, treasury, levy, yield, `building_ids`).
   field sets are disjoint, a single non-`Option` struct suffices — no `Option`
   overlay gymnastics, no parallel `CharacterState`.
 - **`State` (the parallel map) is gone.** `Content` carries `kingdoms` too;
-`reconcile(&mut Content)` repairs building ids and kingdom refs in place.
+`reconcile(&mut Content)` repairs building-instance refs and kingdom refs in place.
 `populate(world, content)` takes the one struct and reads every field off it.
 - **Dropped:** the old "dropped state for unknown …" chronicle notes. With state
   folded into content there is no separate state map to diff against; an unknown
   id is simply never overlaid. Revisit when save files exist.
+
+## Buildings are ECS entities (definitions stay a roster)
+
+Each *built building* is its own entity, not a string id on the land. The
+read-only *definition* per building kind stays a resource roster
+(`BuildingDefs`/`BuildingDef`, renamed from `Buildings`/`Building` and moved to
+`building_definitions.ron`); a building *instance* entity carries
+`BuildingOf(def_id)` to reach its stats and an `OnLand` relationship to its land.
+
+- **Why entities, not the old `Built(Vec<String>)`:** the task asked for
+  buildings to be addressable ECS entities with a relationship to the land, so
+  construction/destruction, per-instance state (health, level, …), and scripting
+  by instance id all have somewhere to live. Keeping `Built` alongside would be
+  duplicated state — the architecture's single-source-of-truth rule rules that
+  out, so `Built` is removed and the land's `BuildingsOn` target (the
+  auto-maintained reverse of `OnLand`) replaces it.
+- **Definition roster stays a resource.** Stats (profit, upkeep, levy,
+  `construction_price`) are shared and read-only across every instance of a
+  kind; copying them onto each entity would duplicate definition data and break
+  the definition/state split. So a building entity holds the *def id* and looks
+  the stats up, exactly as `Built`'s ids once did — just from the entity side.
+- **Direction mirrors `HeldBy`/`Holds`:** the building is the child declaring its
+  land (`OnLand`, single `Entity`, source of truth); the land's `BuildingsOn`
+  auto-fills. Same active/passive mirror as the land↔kingdom link.
+- **Instances are state-only,** like `Kingdom`: a `buildings:` section in
+  `*.state.ron` is an id-keyed overlay (`merge_state` id-replaces, since a save
+  holds the full set of what's built), and `reconcile` drops any instance whose
+  `def_id` or `land_id` no longer resolves — the same repair-not-refuse policy.
+- **Spawn order** gains a buildings step after lands and before kingdoms, so
+  `OnLand` resolves to an entity that already exists.

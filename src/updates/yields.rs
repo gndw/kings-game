@@ -1,8 +1,8 @@
 //! The daily economy: every ruler's gold yield and levy recomputed from their
 //! holdings, scheduled by the ECS rather than called by hand from `Ctx::tick`.
 
-use crate::ecs::{Built, CharacterGoldYield, CharacterLevy, Holds, Leads};
-use crate::resources::buildings::Buildings;
+use crate::ecs::{BuildingOf, CharacterGoldYield, CharacterLevy, Holds, Leads, BuildingsOn};
+use crate::resources::buildings::BuildingDefs;
 use bevy::prelude::*;
 
 /// Recompute every character's `gold_yield` and `levy` from their holdings: a
@@ -14,13 +14,15 @@ use bevy::prelude::*;
 /// screen already shows what a realm renders.
 ///
 /// One pass over the graph: character → [`Leads`] → kingdom → [`Holds`] →
-/// lands → [`Built`] → [`Buildings`]. `Option<&Leads>` walks every character so
-/// a ruler who leads nothing (or a landless realm) is zeroed, not left stale.
+/// lands → [`BuildingsOn`] → [`BuildingOf`] → [`BuildingDefs`]. `Option<&Leads>`
+/// walks every character so a ruler who leads nothing (or a landless realm) is
+/// zeroed, not left stale.
 pub fn recompute_yields(
     mut characters: Query<(Option<&Leads>, &mut CharacterGoldYield, &mut CharacterLevy)>,
     kingdoms: Query<&Holds>,
-    lands: Query<&Built>,
-    buildings: Res<Buildings>,
+    lands: Query<&BuildingsOn>,
+    buildings: Query<&BuildingOf>,
+    defs: Res<BuildingDefs>,
 ) {
     for (leads, mut gold_yield, mut levy) in &mut characters {
         let (yield_total, levy_total) = leads
@@ -28,13 +30,16 @@ pub fn recompute_yields(
             .map(|holds| {
                 let (mut gold_yield, mut levy) = (0i64, 0u64);
                 for land_e in holds.iter() {
-                    let Ok(built) = lands.get(land_e) else {
+                    let Ok(on) = lands.get(land_e) else {
                         continue;
                     };
-                    for bid in built.0.iter() {
-                        if let Some(b) = buildings.get(bid) {
-                            gold_yield += b.gold_profit as i64 - b.gold_upkeep as i64;
-                            levy += b.levy as u64;
+                    for b_e in on.iter() {
+                        let Ok(of) = buildings.get(b_e) else {
+                            continue;
+                        };
+                        if let Some(d) = defs.get(&of.0) {
+                            gold_yield += d.gold_profit as i64 - d.gold_upkeep as i64;
+                            levy += d.levy as u64;
                         }
                     }
                 }

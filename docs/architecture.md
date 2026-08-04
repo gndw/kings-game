@@ -12,8 +12,8 @@ section stops matching the code, fix the section in the same change.
 
 A Bevy `App` runs three schedules — `Startup`, `FixedUpdate` (the tick), and
 `Update` (render + input) — plus one custom `OnMonth`. The world is Bevy ECS
-(not hecs, despite the README): every land, character, house and kingdom is an
-entity, and a read-only building roster plus the calendar, date and map border
+(not hecs, despite the README): every land, character, house, kingdom and building is an
+entity, and a read-only building-definition roster plus the calendar, date and map border
 are `Resource`s. Session state (rng, chronicle log, player id, map selection)
 lives in a single `Game` resource wrapping `Ctx`. All of the *what exists* comes
 from mod folders of RON data, loaded in two passes — definitions merge by id,
@@ -32,7 +32,7 @@ spawn entities, after which the ECS is the whole world.
   ┌───────────────────────── Bevy App world ─────────────────────────┐
   │  Entities (Bevy ECS)              Resources                       │
   │   House, Character, Land,          Registry (id→Entity)           │
-  │   Kingdom   + relationships        Buildings (read-only roster)   │
+  │   Kingdom, Building + relations   BuildingDefs (kind roster)      │
   │            + one-field components  Calendar, Date, Border         │
   │                                    Game(Ctx): rng, chronicle,     │
   │                                     player id, selection          │
@@ -70,8 +70,8 @@ Lives in `mods/`, `content.rs`, `state.rs`, `resources/`.
   `border: (...)` not `border: Some((...))`.
 
 - **Definition vs state split (the save contract).**
-  - *Definitions* = read-only, only ever grows: map geometry, building roster,
-    houses, who characters are (name/house). Authored by hand, so a dangling
+  - *Definitions* = read-only, only ever grows: map geometry, the building
+    catalogue (one entry per kind), houses, who characters are (name/house). Authored by hand, so a dangling
     reference is a **fatal** mod bug.
   - *State* = the mutable half, what a save holds: ages, treasuries, levies,
     yields, what's built, who rules what. An overlay keyed by id; unknown ids are
@@ -82,12 +82,13 @@ Lives in `mods/`, `content.rs`, `state.rs`, `resources/`.
 
 - **`Content`** (`content.rs`) is the merged result: `IndexMap`s (id-keyed for
   O(1) lookup, insertion-ordered for deterministic iteration) for lands, houses,
-  characters, kingdoms; a `Buildings` roster; a `Border`; a `Calendar`. It exists
+  characters, kingdoms, building instances; a `BuildingDefs` roster (the
+  catalogue of building kinds); a `Border`; a `Calendar`. It exists
   only between `load` and `populate`; afterwards the ECS owns everything.
 
 - **`resources/`** are the data shapes that become `Resource`s (not entities):
   `Border`, `Calendar` (+`validate`), `Date` (the walking clock),
-  `Buildings`/`Building` (read-only roster).
+  `BuildingDefs`/`BuildingDef` (read-only roster of building kinds).
 
 ## The ECS world
 
@@ -114,16 +115,21 @@ shape; this is the *what*.
   - `HeldBy` (on land) ↔ `Holds` (on kingdom, `Vec<Entity>`) — a land declares
     its kingdom; the kingdom's `Holds` auto-fills. Iterate via
     `RelationshipTarget::iter`.
+  - `OnLand` (on building) ↔ `BuildingsOn` (on land, `Vec<Entity>`) — a
+    building declares its land; the land's `BuildingsOn` auto-fills. Iterate via
+    `RelationshipTarget::iter`.
   - Plain (non-relationship) entity links: `HouseOf` (character→house), `Seat`
-    (kingdom→capital land), `Built` (land→`Vec<building_id>` strings, looked up
-    against the `Buildings` resource).
+    (kingdom→capital land), `BuildingOf` (building→definition id, a string
+    looked up against the `BuildingDefs` resource — not an entity link, since
+    definitions are a roster, not entities).
 
 - **`populate(world, content)`** (`ecs/ecs.rs`) builds the world **once** from
   merged+reconciled content, called from `main` before `App::run`. Spawn order is
-  **leaves-first** (houses → characters → lands → kingdoms) so every relationship
-  resolves to an entity that already exists. `reconcile` has already pruned
-  dangling refs, so the `filter_map`s here guard logic, not bad data. The
-  building roster leaves as the `Buildings` resource, not entities.
+  **leaves-first** (houses → characters → lands → buildings → kingdoms) so every
+  relationship resolves to an entity that already exists. `reconcile` has
+  already pruned dangling refs, so the `filter_map`s here guard logic, not bad
+  data. The building *definition* roster leaves as the `BuildingDefs` resource;
+  each building *instance* becomes an entity related to its land via `OnLand`.
 
 - **Read order is Bevy archetype order**, which within one archetype is spawn
   order. Each kind is a single archetype, so a `Query` over `(&StringId, &Land)`
@@ -139,7 +145,7 @@ shape; this is the *what*.
 - **`Game`** (`app.rs`) is the `Resource` wrapping `Ctx`, plus `paused` and
   `speed_idx` (index into `Calendar::speeds`, because the rates are mod data).
   `Game::running()` gates the tick.
-- The static `Resource`s (`Border`, `Calendar`, `Date`, `Buildings`) are seeded
+- The static `Resource`s (`Border`, `Calendar`, `Date`, `BuildingDefs`) are seeded
   in `main`; `Registry` is seeded by `populate`.
 - **`ctx::step`** is an exclusive `&mut World` free function: selection movement
   by direction heuristic over land holdings (no adjacency graph — see the
@@ -162,7 +168,7 @@ Lives in `updates/` and `schedules.rs`.
   - `recompute_yields` (`updates/yields.rs`) — runs in `Startup` (so the opening
     screen shows what a realm renders) and `FixedUpdate`. One pass over the
     relationship graph per character: `character → Leads → kingdom → Holds →
-    lands → Built → Buildings`, summing `gold_profit - gold_upkeep` into
+    lands → BuildingsOn → BuildingOf → BuildingDefs`, summing `gold_profit - gold_upkeep` into
     `CharacterGoldYield` and `levy` into `CharacterLevy`. `Option<&Leads>` walks
     every character so a non-ruler is zeroed, not left stale.
   - `payout` (`updates/payout.rs`) — runs in `OnMonth`. Pays every leader
@@ -236,9 +242,9 @@ asset-loaded sprites.
 | `src/content.rs` | `Content`, per-kind structs, `parse_file`, `merge`, `validate` |
 | `src/state.rs` | `StateFile`, `merge_state`, `reconcile` |
 | `src/mods/mod.rs` | `load(dir)` — the two-pass orchestrator |
-| `src/resources/*` | `Border`, `Calendar`(+validate), `Date`, `Buildings`/`Building` |
+| `src/resources/*` | `Border`, `Calendar`(+validate), `Date`, `BuildingDefs`/`BuildingDef` (kind roster) |
 | `src/ecs/ecs.rs` | `StringId`, `Registry`, `populate` |
-| `src/ecs/{house,character,land,kingdom}.rs` | components + relationships per kind |
+| `src/ecs/{house,character,land,building,kingdom}.rs` | components + relationships per kind |
 | `src/ecs.rs` | module root, re-exports, the component map |
 | `src/schedules.rs` | `OnMonth` label |
 | `src/updates/advance_date.rs` | the tick (exclusive `&mut World`) |

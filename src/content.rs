@@ -13,7 +13,7 @@
 //! `crate::ui::map`.
 
 use crate::resources::border::Border;
-use crate::resources::buildings::{Building, Buildings};
+use crate::resources::buildings::{BuildingDef, BuildingDefs};
 use crate::resources::calendar::Calendar;
 use anyhow::{Result, bail};
 use indexmap::IndexMap;
@@ -33,9 +33,14 @@ pub struct Content {
     pub calendar: Calendar,
     /// ID-keyed for O(1) lookup; insertion-ordered for deterministic iteration.
     pub lands: IndexMap<String, Land>,
-    /// The building roster, carried through as a resource and seeded into the
-    /// world in `ecs::populate`.
-    pub buildings: Buildings,
+    /// The read-only building-definition roster (one entry per building kind),
+    /// carried through as a resource and seeded into the world in
+    /// `ecs::populate`.
+    pub building_defs: BuildingDefs,
+    /// Building *instances* — what actually stands in the world, one per built
+    /// building. State-only (a save holds what's built); spawned as entities by
+    /// `ecs::populate`. Keyed by instance id.
+    pub buildings: IndexMap<String, Building>,
     pub houses: IndexMap<String, House>,
     pub characters: IndexMap<String, Character>,
     /// Realms. Wholly state — a kingdom's leader, seat and lands all change in
@@ -51,7 +56,8 @@ impl Default for Content {
             border: Border::default(),
             calendar: Calendar::default(),
             lands: IndexMap::new(),
-            buildings: Buildings::default(),
+            building_defs: BuildingDefs::default(),
+            buildings: IndexMap::new(),
             houses: IndexMap::new(),
             characters: IndexMap::new(),
             kingdoms: IndexMap::new(),
@@ -61,7 +67,8 @@ impl Default for Content {
 
 /// One definition file on disk. Every section is optional, so a mod ships only
 /// what it changes — and the base game can split itself across `lands.ron`,
-/// `buildings.ron` and friends without the loader knowing the difference.
+/// `building_definitions.ron` and friends without the loader knowing the
+/// difference.
 ///
 /// `deny_unknown_fields` so a modder's typo is an error instead of a section
 /// that silently does nothing.
@@ -77,8 +84,11 @@ pub struct ContentFile {
     pub calendar: Option<Calendar>,
     #[serde(default)]
     pub lands: Vec<Land>,
+    /// The `buildings:` section of a *definition* file is the catalogue — one
+    /// [`BuildingDef`] per kind. (In a `*.state.ron` the same key holds instance
+    /// overlays instead; see [`crate::state::StateFile`].)
     #[serde(default)]
-    pub buildings: Vec<Building>,
+    pub buildings: Vec<BuildingDef>,
     #[serde(default)]
     pub houses: Vec<House>,
     #[serde(default)]
@@ -100,8 +110,8 @@ impl Content {
         for land in file.lands {
             self.lands.insert(land.id.clone(), land);
         }
-        for building in file.buildings {
-            self.buildings.0.insert(building.id.clone(), building);
+        for def in file.buildings {
+            self.building_defs.0.insert(def.id.clone(), def);
         }
         for house in file.houses {
             self.houses.insert(house.id.clone(), house);
@@ -112,17 +122,15 @@ impl Content {
     }
 }
 
-/// One land: its geometry (definition) plus what stands on it (state). The
-/// `building_ids` arrive empty from a definition file and are filled in by the
-/// state overlay.
+/// One land: pure geometry (definition). What stands on a land is no longer a
+/// field here — each built building is its own entity, related to the land via
+/// `ecs::OnLand` (the instances live in [`Content::buildings`]).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Land {
     pub id: String,
     // Every non-id field defaults: a definition file carries the geometry
-    // (name/borders/holding), a state file carries only `building_ids`, and
-    // each omits the other's fields. The overlay keeps the two halves from
-    // clobbering each other — see `Content::merge_state`.
+    // (name/borders/holding), and a state file may carry only the id.
     #[serde(default)]
     pub name: String,
     /// This land's own outline, a polyline of `(x, y)` points. Not to be
@@ -132,10 +140,6 @@ pub struct Land {
     /// Seat of power, somewhere inside `borders`. Drawn as a circle.
     #[serde(default)]
     pub holding: (f64, f64),
-    /// What has been built here — ids into `Content::buildings`. State, filled
-    /// by the `*.state.ron` overlay; empty on a definition-only entry.
-    #[serde(default)]
-    pub building_ids: Vec<String>,
 }
 
 /// A family. Characters belong to one; kingdoms are ruled through them.
@@ -174,6 +178,21 @@ pub struct Character {
     /// save carrying a stale one self-corrects on load.
     #[serde(default)]
     pub gold_yield: i64,
+}
+
+/// One built building instance: which definition it is an instance of, and
+/// which land it stands on. State-only (what's built changes in play and
+/// belongs in a save), like [`Kingdom`]. Spawned as an entity by
+/// [`crate::ecs::populate`].
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Building {
+    pub id: String,
+    /// The building *definition* id — which kind of building this is. A key
+    /// into [`Content::building_defs`].
+    pub def_id: String,
+    /// The land this building stands on, by id.
+    pub land_id: String,
 }
 
 /// A realm: a ruler, a capital, and the lands it holds. Wholly state — there is

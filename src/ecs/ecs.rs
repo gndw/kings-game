@@ -9,13 +9,14 @@ use bevy::ecs::world::World;
 use bevy::prelude::{Component, Entity, Resource};
 use std::collections::HashMap;
 
+use super::building::{Building, BuildingOf, OnLand};
 use super::character::{
     Character, CharacterAge, CharacterGold, CharacterGoldYield, CharacterLevy, CharacterName,
     HouseOf,
 };
 use super::house::{House, HouseName};
 use super::kingdom::{Kingdom, LedBy, Seat};
-use super::land::{Built, HeldBy, Land, LandBorders, LandHolding, LandName};
+use super::land::{HeldBy, Land, LandBorders, LandHolding, LandName};
 
 /// The id an entity is known by in RON data and save files. Every game entity
 /// has one; the Rhai surface (`ctx.gold("char-tywin")`, …) is built on it.
@@ -61,16 +62,16 @@ impl Registry {
 /// afterwards the content is gone.
 ///
 /// Spawn order is leaves-first — houses, then characters (which point at
-/// houses), then lands, then kingdoms (which point at characters and lands) —
-/// so a relation always resolves to an entity that already exists.
-/// [`reconcile`](crate::state::reconcile) has already pruned every dangling
-/// reference, so the `filter_map`s here only guard against logic errors, not
-/// bad data. The building roster leaves as the
-/// [`Buildings`](crate::resources::buildings::Buildings) resource rather than
-/// entities.
+/// houses), then lands, then the buildings standing on them, then kingdoms
+/// (which point at characters and lands) — so a relation always resolves to an
+/// entity that already exists. [`reconcile`](crate::state::reconcile) has
+/// already pruned every dangling reference, so the `filter_map`s here only guard
+/// against logic errors, not bad data. The building *definition* roster leaves
+/// as the [`BuildingDefs`](crate::resources::buildings::BuildingDefs) resource;
+/// each building *instance* becomes an entity.
 pub fn populate(world: &mut World, content: Content) {
     world.insert_resource(Registry::new());
-    world.insert_resource(content.buildings);
+    world.insert_resource(content.building_defs);
 
     // Houses.
     for (id, h) in content.houses.into_iter() {
@@ -101,7 +102,7 @@ pub fn populate(world: &mut World, content: Content) {
         world.resource_mut::<Registry>().insert(id, eid);
     }
 
-    // Lands: geometry + the buildings that stand on them.
+    // Lands: pure geometry now — buildings stand as their own entities.
     for (id, l) in content.lands.into_iter() {
         let eid = world
             .spawn((
@@ -110,7 +111,24 @@ pub fn populate(world: &mut World, content: Content) {
                 LandName(l.name),
                 LandBorders(l.borders),
                 LandHolding(l.holding),
-                Built(l.building_ids),
+            ))
+            .id();
+        world.resource_mut::<Registry>().insert(id, eid);
+    }
+
+    // Buildings: one entity per built instance. Spawned after lands so `OnLand`
+    // resolves to an entity that already exists; the land's `BuildingsOn` is
+    // auto-maintained by the relationship hook.
+    for (id, b) in content.buildings.into_iter() {
+        let Some(land_e) = world.resource::<Registry>().get(&b.land_id) else {
+            continue;
+        };
+        let eid = world
+            .spawn((
+                StringId(id.clone()),
+                Building,
+                BuildingOf(b.def_id),
+                OnLand(land_e),
             ))
             .id();
         world.resource_mut::<Registry>().insert(id, eid);

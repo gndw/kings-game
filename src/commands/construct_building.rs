@@ -2,22 +2,78 @@
 //! actor rules, paid from their treasury.
 //!
 //! All immutable reads happen in [`validate`] (against `&World`); all
-//! `&mut World` happens in [`construct_building`], never tangled. On success it
-//! spawns the same bundle [`crate::ecs::populate`] uses, so a built building is
+//! `&mut World` happens in [`construct`], never tangled. On success it spawns
+//! the same bundle [`crate::ecs::populate`] uses, so a built building is
 //! indistinguishable from an authored one — and [`recompute_yields`] already
 //! runs each `FixedUpdate`, so the new building's gold/levy flows next tick
 //! with no wiring.
 //!
 //! [`recompute_yields`]: crate::updates::yields::recompute_yields
 
-use super::core::{next_id, note};
+use super::core::{Choice, Command, MenuItem, next_id, note, ruled_lands};
 use crate::ecs::{Building, BuildingOf, CharacterGold, HeldBy, Leads, OnLand, Registry, StringId};
 use crate::resources::buildings::BuildingDefs;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
 
-/// The validated go-ahead: the entities and numbers [`construct_building`]
-/// mutates with.
+/// Build a building kind on a land the actor rules.
+pub struct ConstructBuilding;
+
+impl Command for ConstructBuilding {
+    fn name(&self) -> &str {
+        "Construct Building"
+    }
+
+    fn step_count(&self) -> usize {
+        2
+    }
+
+    fn step_title(&self, step: usize) -> &str {
+        match step {
+            0 => "Select a land",
+            _ => "Select a building",
+        }
+    }
+
+    fn step_items(
+        &self,
+        step: usize,
+        _choices: &[Choice],
+        actor: &str,
+        world: &World,
+    ) -> Vec<MenuItem> {
+        match step {
+            // Step 0: the lands the actor rules (can build on).
+            0 => ruled_lands(world, actor)
+                .into_iter()
+                .map(|(id, name)| MenuItem { label: name, value: id })
+                .collect(),
+            // Step 1: every building kind in the roster — construction is not
+            // land-specific. The price is shown so the player can see the cost.
+            _ => world
+                .resource::<BuildingDefs>()
+                .0
+                .iter()
+                .map(|(id, d)| MenuItem {
+                    label: format!("{}  ({}g)", d.name, d.construction_price),
+                    value: id.clone(),
+                })
+                .collect(),
+        }
+    }
+
+    fn execute(&self, choices: &[Choice], actor: &str, world: &mut World) {
+        let Some(land_id) = choices.get(0).map(|c| c.value.as_str()) else {
+            return;
+        };
+        let Some(def_id) = choices.get(1).map(|c| c.value.as_str()) else {
+            return;
+        };
+        construct(world, actor, land_id, def_id);
+    }
+}
+
+/// The validated go-ahead: the entities and numbers [`construct`] mutates with.
 struct Go {
     actor_e: Entity,
     land_e: Entity,
@@ -65,12 +121,7 @@ fn validate(world: &World, actor: &str, land_id: &str, def_id: &str) -> Result<G
 
 /// Construct `def_id` on `land_id` for `actor`. Validates, pays, spawns, and
 /// logs. See the module docs for the rules.
-pub(super) fn construct_building(
-    world: &mut World,
-    actor: &str,
-    land_id: &str,
-    def_id: &str,
-) {
+fn construct(world: &mut World, actor: &str, land_id: &str, def_id: &str) {
     let go = match validate(world, actor, land_id, def_id) {
         Ok(g) => g,
         Err(msg) => return note(world, format!("cannot build on {land_id}: {msg}")),

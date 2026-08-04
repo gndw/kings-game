@@ -6,6 +6,7 @@ use kings_game::ecs;
 use kings_game::resources::chronicle::Chronicles;
 use kings_game::resources::date::Date;
 use kings_game::schedules::OnMonth;
+use kings_game::commands::CommandRegistry;
 use kings_game::ui;
 use kings_game::ui::command_menu::CommandMenu;
 use kings_game::updates;
@@ -80,6 +81,7 @@ fn main() -> Result<()> {
         .insert_resource(calendar)
         .insert_resource(border)
         .insert_resource(CommandMenu::default())
+        .insert_resource(CommandRegistry::default())
         .insert_resource(Time::<Fixed>::from_hz(hz))
         .add_systems(
             Startup,
@@ -95,6 +97,9 @@ fn main() -> Result<()> {
             Update,
             (
                 input,
+                // `ui::command_menu::input` is exclusive, so it serialises
+                // ahead of `ui::command_menu::update` on `CommandMenu` —
+                // no `.chain()` needed inside the outer tuple.
                 ui::command_menu::input,
                 ui::command_menu::update,
                 ui::map::update_input,

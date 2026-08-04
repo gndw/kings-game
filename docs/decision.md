@@ -128,3 +128,36 @@ read-only *definition* per building kind stays a resource roster
   `def_id` or `land_id` no longer resolves — the same repair-not-refuse policy.
 - **Spawn order** gains a buildings step after lands and before kingdoms, so
   `OnLand` resolves to an entity that already exists.
+
+## Player commands are self-describing (`Command` trait + `CommandRegistry`)
+
+Each player command is a struct implementing a `Command` trait that owns its
+rules (validation), its UI (a fixed run of selection steps reading the world),
+and its effect (`execute`). The command palette drives *any* registered
+command's steps the same way; the roster of commands it offers is the
+`CommandRegistry` resource.
+
+- **Why a trait + registry, not the earlier `Command` enum + `apply` dispatch:**
+  the enum/dispatch model hardwired the palette to one command's flow
+  (`Commands`→`Lands`→`Buildings`); adding a second command (e.g. *Destroy
+  Building*) would have forked the `Stage` enum and the palette's
+  navigate/render into per-command branches. A self-describing trait lets each
+  command define its own steps, and the palette stays generic — the menu code is
+  unchanged by new commands. This overturns the prior "no trait, no registry"
+  note in `commands.rs`: those now earn their keep, because the palette is
+  generic over commands and the registry is the natural seam for a plugin/mod to
+  register more before `App::run`.
+- **`step_items` takes `&World`, not `&mut World`:** it is a read, and keeping
+  it immutable lets the menu recompute the list from a shared borrow. The
+  helpers (`ruled_lands`, `buildings_on_land`) therefore walk the relationship
+  targets (`Holds`, `BuildingsOn`) via `World::get` rather than `World::query`
+  (which needs `&mut World`).
+- **`Arc<dyn Command>` in the registry:** so the palette can hand a command to
+  `execute` (which needs `&mut World`) without holding the registry's borrow —
+  clone the `Arc`, drop the borrow, then mutate. Commands are immutable
+  definitions, so shared ownership via `Arc` is natural.
+- **List computed in the exclusive `input`, rendered by the non-exclusive
+  `update`:** `step_items` needs `&World`, which only an exclusive system gets.
+  So `input` recomputes the current list into the `CommandMenu` resource;
+  `update` reads that stored list (it can't take `&World`). `input`→`update` is
+  chained so the just-opened list shows the same frame.

@@ -149,8 +149,10 @@ shape; this is the *what*.
   `Game::running()` gates the tick.
 - The static `Resource`s (`Border`, `Calendar`, `Date`, `BuildingDefs`) and the
   `Chronicles` log are seeded in `main`; `Registry` is seeded by `populate`. The
-  command palette's open/stage/cursor state is the `CommandMenu` resource
-  (`ui/command_menu.rs`), also seeded in `main`.
+  command palette's open/active-command/step/cursor state is the `CommandMenu`
+  resource (`ui/command_menu.rs`), seeded in `main`; the roster of commands it
+  offers is the `CommandRegistry` resource (`commands/core.rs`), also seeded in
+  `main`.
 - **`ctx::step`** is an exclusive `&mut World` free function: selection movement
   by direction heuristic over land holdings (no adjacency graph — see the
   `ponytail:` note; revisit if picks feel wrong).
@@ -185,36 +187,51 @@ Lives in `updates/` and `schedules.rs`.
 
 ## Player commands
 
-Lives in `commands/`. The *first* mutation path driven by player input
-(prior input only navigated the selection and set sim speed). A `Command` enum
-is *what to do* (`ConstructBuilding { land_id, def_id }`, …); the *who* (a
-character id) and the command go to `apply`, an exclusive `&mut World` free
-function in the style of `ctx::step` (it mixes component mutation with resource
-reads).
+Lives in `commands/`. The first mutation path driven by player input (prior
+input only navigated the selection and set sim speed). A [`Command`] trait type
+is *what to do* — and it is **self-describing**: each command owns its rules
+(validation), its UI (a fixed run of selection steps that read the world), and
+its effect (`execute`). The *who* (a character id) is passed to both
+`step_items` and `execute`, so the same path serves the player now and AI /
+networked peers later. `execute` is the one `&mut World` touch per command, in
+the style of `ctx::step`.
 
-- **Layout:** `commands.rs` (root: the `Command` enum, `apply` dispatch, shared
-  id/chronicle helpers) + one submodule per command (`construct_building.rs`).
-  The input path that *builds* a command is the palette in `ui/command_menu.rs`
-  (see UI) — there is no key handler in `commands/`.
-- **Extending** = add a `Command` variant + an arm in `apply` + a submodule per
-  command. No trait, no registry — those earn their keep only when
-  modders add commands at runtime, which the compiled game does not.
-- **One issuer now (the player); queue deferred.** The command palette
-  (`ui::command_menu`) builds a `Command` from the player's picks and calls
-  `apply` immediately in an exclusive `Update` system. A `CommandQueue` drained
-  per tick is the obvious next step if a second issuer arrives (AI, replay,
-  multiplayer); not built speculatively.
-- **`ConstructBuilding`** validates (def exists in `BuildingDefs`; actor's kingdom — via
-  `Leads` — equals the land's `HeldBy`, i.e. they rule it; gold ≥
+- **Layout:** `commands.rs` (root + re-exports) + `commands/core.rs` (the
+  `Command` trait, `MenuItem`/`Choice`, the `CommandRegistry` resource, and the
+  shared id/chronicle/ruled-lands helpers) + one submodule per command
+  (`construct_building.rs`, `destroy_building.rs`). The input path that *drives*
+  a command's steps is the palette in `ui/command_menu.rs` (see UI) — there is no
+  key handler in `commands/`.
+- **Extending** = a new struct implementing `Command` (its steps + rules +
+  effect) + one `register` line in `CommandRegistry::default`. No palette edits:
+  the menu is command-agnostic, driving any registered command's steps the same
+  way. The registry is a `Resource`, so a plugin/mod could push more before
+  `App::run`.
+- **Self-describing steps.** A command declares `step_count`; `step_items(step,
+  choices, actor, &World)` returns the selectable rows for that step, where later
+  steps see the earlier picks in `choices` (e.g. *Destroy Building* lists the
+  buildings standing on the land picked at step 0). The menu recomputes the list
+  in its exclusive `input` (the only path with `&World`) and stores it on the
+  `CommandMenu` resource for the non-exclusive `update` to render.
+- **One issuer now (the player); queue deferred.** The command palette builds
+  the choices from the player's picks and calls the command's `execute`
+  immediately in an exclusive `Update` system. A `CommandQueue` drained per tick
+  is the obvious next step if a second issuer arrives (AI, replay, multiplayer);
+  not built speculatively.
+- **`ConstructBuilding`** validates (def exists in `BuildingDefs`; actor's
+  kingdom — via `Leads` — equals the land's `HeldBy`, i.e. they rule it; gold ≥
   `construction_price`, no debt), then spawns the same bundle `populate` uses
   (`StringId`/`Building`/`BuildingOf`/`OnLand`), registers the id in `Registry`,
   deducts gold, and appends a chronicle line on success *and* every rejection.
   `recompute_yields` already runs each `FixedUpdate`, so the new building's
   gold/levy flows next tick with no wiring.
+- **`DestroyBuilding`** (the inverse) validates the actor rules the land and the
+  building is `OnLand` it, then despawns the instance + deregisters its id.
+  Despawning auto-removes it from the land's `BuildingsOn` (the relationship
+  hook); `recompute_yields` drops its yield next tick.
 - **Runtime building id** is a v4 UUID drawn from the seeded `SimRng` (not OS
   entropy), keeping the one-entropy-source invariant; format-only, no `uuid`
-  crate. (The player now picks the building kind in the palette, so there is no
-  seeded random pick anymore.)
+  crate.
 
 ## Input
 
@@ -225,7 +242,7 @@ update the `FixedUpdate` timestep. `ui::map::update_input` (exclusive) handles
 arrow keys → `ctx::step` → move the selection, but yields the arrows to the
 palette while it is open. `ui::command_menu::input` (exclusive) opens the
 spotlight-style command palette on `c` and navigates it (arrows + enter +
-Esc); on the final pick it calls `commands::apply`.
+Esc); the final step's pick hands the accumulated choices to the picked command's `execute`.
 
 ## UI
 
@@ -260,12 +277,16 @@ asset-loaded sprites.
     hint.
 - **Command palette** (`ui/command_menu.rs`): a spotlight-style modal — a
   centered window over a dimmed backdrop, lifted above the panels with
-  `GlobalZIndex`. A `CommandMenu` resource holds `open`/stage/cursor; `c` opens
-  it, arrows move the cursor, `enter` drills in (command → a land you rule → a
-  building kind), `esc` closes. `update` toggles the overlay and rebuilds the
-  list rows only when the stage/cursor changes (the legend's cache idea). The
-  final pick builds a `Command` and calls `commands::apply`. While open it owns
-  `esc` and the arrows, so `app::input` and `ui::map::update_input` read its
+  `GlobalZIndex`. A `CommandMenu` resource holds `open`/active-command/step/
+  cursor plus the cached on-screen list and title; `c` opens it, arrows move the
+  cursor, `enter` drills into the picked command's own steps, `esc` closes. It is
+  **command-agnostic**: it drives *any* registered command's steps the same way.
+  The exclusive `input` recomputes the current step's list via the command's
+  `step_items` (the one path with `&World`) and stores it on the resource; the
+  non-exclusive `update` just renders that stored list, rebuilding rows only when
+  `(command, step, cursor)` changes (the legend's cache idea). The final step's
+  pick hands the accumulated choices to the command's `execute`. While open it
+  owns `esc` and the arrows, so `app::input` and `ui::map::update_input` read its
   `open` flag and yield them.
 
 ## Key invariants (things that will bite you if broken)
@@ -293,9 +314,10 @@ asset-loaded sprites.
 |---|---|
 | `src/main.rs` | arg parse, load mods, build `App`, register systems/schedules, `run` |
 | `src/app.rs` | `Game` resource, `Ctx` wrapper, `speed`, `input` |
-| `src/commands.rs` | module root: `Command` enum, `apply` dispatch, re-exports |
-| `src/commands/core.rs` | dispatch + shared id (`next_id`) + chronicle (`note`) helpers |
+| `src/commands.rs` | module root + re-exports (`Command`, `CommandRegistry`, `Choice`, `MenuItem`) |
+| `src/commands/core.rs` | the `Command` trait, `CommandRegistry`, `MenuItem`/`Choice`, shared helpers (`next_id`, `note`, `ruled_lands`) |
 | `src/commands/construct_building.rs` | the `ConstructBuilding` command (validate + spawn + pay) |
+| `src/commands/destroy_building.rs` | the `DestroyBuilding` command (validate + despawn + deregister) |
 | `src/ctx.rs` | `Ctx` (session state: rng, player id, selection), `startup`, selection `step` |
 | `src/content.rs` | `Content`, per-kind structs, `parse_file`, `merge`, `validate` |
 | `src/state.rs` | `StateFile`, `merge_state`, `reconcile` |

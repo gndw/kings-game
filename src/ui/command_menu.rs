@@ -1,68 +1,63 @@
 //! The command palette: a spotlight-style modal that launches player commands.
 //!
-//! Press **C** to open. The command list is navigated with up/down; **Enter**
-//! drills in (command → a land you rule → a building kind → builds). **Escape**
-//! closes. While open it captures the arrows (so the map selection doesn't
-//! move) and Escape (so the game doesn't quit) — both gated by reading
-//! [`CommandMenu::open`] from `app::input` and `ui::map::update_input`.
+//! Press **C** to open (or **B**/**D** from the legend to jump straight into
+//! the selected land's construct/destroy step). The top-level list shows every registered
+//! [`Command`](crate::commands::Command); up/down moves, **Enter** drills into
+//! the picked command's own selection steps, and the final step's pick runs its
+//! effect. **Escape** closes. While open it captures the arrows (so the map
+//! selection doesn't move) and Escape (so the game doesn't quit) — both gated
+//! by reading [`CommandMenu::open`] from `app::input` and `ui::map::update_input`.
 //!
-//! The palette builds a [`Command`] and routes it through [`apply`], the same
-//! exclusive path the old key-B handler used, so validation and chronicle
-//! logging are unchanged.
-//!
-//! [`apply`]: crate::commands::apply
+//! The palette is command-agnostic: it drives *any* registered command's steps
+//! the same way, so adding a command needs no change here. [`input`] computes
+//! the on-screen item list (each command's steps read the world, so it needs
+//! `&World`, which only an exclusive system gets) and stores it on
+//! [`CommandMenu`]; [`update`] just renders that stored list, rebuilding rows
+//! only when the step/cursor moves.
 
 use super::{FONT, TITLE};
 use crate::app::Game;
-use crate::commands::{Command, apply};
-use crate::ecs::{HeldBy, LandName, Leads, Registry, StringId};
-use crate::resources::buildings::BuildingDefs;
+use crate::commands::{Choice, CommandRegistry, MenuItem};
 use bevy::input::ButtonInput;
 use bevy::input::keyboard::KeyCode;
 use bevy::prelude::*;
 
 /// The palette's state. Only [`CommandMenu::open`] is read outside this module
-/// (by `app::input` and `ui::map::update_input`, to yield `esc`/arrows).
+/// (by `app::input` and `ui::map::update_input`, to yield `esc`/arrows). The
+/// rest is driven generically off the [`CommandRegistry`].
 #[derive(Resource)]
 pub struct CommandMenu {
     pub open: bool,
-    stage: Stage,
+    /// The command being navigated (index into the registry), or `None` at the
+    /// top-level command list.
+    command: Option<usize>,
+    /// The current step within the active command.
+    step: usize,
+    /// The cursor row.
     index: usize,
-    /// The land chosen at the [`Stage::Lands`] step, carried into
-    /// [`Stage::Buildings`].
-    land_id: Option<String>,
+    /// The item picked at each completed step.
+    choices: Vec<Choice>,
+    /// The on-screen list for the current `(command, step)`, recomputed by
+    /// [`input`] whenever the player moves. Stored here so the non-exclusive
+    /// [`update`] can render it without `&World`.
+    items: Vec<MenuItem>,
+    /// The window title for the current `(command, step)`, same lifecycle.
+    title: String,
 }
 
 impl Default for CommandMenu {
     fn default() -> Self {
-        CommandMenu { open: false, stage: Stage::Commands, index: 0, land_id: None }
-    }
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum Stage {
-    /// The top-level command list.
-    Commands,
-    /// Pick a land to build on.
-    Lands,
-    /// Pick a building kind.
-    Buildings,
-}
-
-impl Stage {
-    fn title(self) -> &'static str {
-        match self {
-            Stage::Commands => "Command",
-            Stage::Lands => "Select a land",
-            Stage::Buildings => "Select a building",
+        CommandMenu {
+            open: false,
+            command: None,
+            step: 0,
+            index: 0,
+            choices: Vec::new(),
+            items: Vec::new(),
+            title: String::new(),
         }
     }
 }
-
-/// The commands on the top-level list, in display order. Index 0 is
-/// `ConstructBuilding`. Adding one = a line here + its [`Stage::Commands`]
-/// `Enter` arm.
-const COMMANDS: &[&str] = &["Construct Building"];
 
 #[derive(Component)]
 pub struct MenuRoot;
@@ -162,93 +157,51 @@ fn item(c: &mut ChildSpawnerCommands, label: &str, selected: bool) {
     ));
 }
 
-/// The lands the player rules (can build on): player → `Leads` → kingdom →
-/// lands whose `HeldBy` is that kingdom, in spawn (content) order. The same
-/// walk `ui::map` and `ui::legend` do for "own holdings".
-fn own_holdings(
-    registry: &Registry,
-    game: &Game,
-    leads: &Query<&Leads>,
-    lands: &Query<(&StringId, &LandName, &HeldBy)>,
-) -> Vec<(String, String)> {
-    let kingdom = registry
-        .get(&game.ctx.player_character_id)
-        .and_then(|pe| leads.get(pe).ok())
-        .map(|l| l.kingdom());
-    lands
-        .iter()
-        .filter(|(_, _, held)| Some(held.0) == kingdom)
-        .map(|(sid, name, _)| (sid.0.clone(), name.0.clone()))
-        .collect()
-}
-
-/// Toggle the overlay and rebuild the list only when the stage/cursor moves;
-/// identical (stage, index) frames leave the rows alone (the legend's table
-/// cache idea).
-#[allow(clippy::type_complexity)]
+/// Render the stored list: toggle the overlay and rebuild the rows only when
+/// `(command, step, index)` moves (the legend's table cache idea). Reads the
+/// list [`input`] stored on the resource, not the world.
 pub fn update(
     menu: Res<CommandMenu>,
-    game: Res<Game>,
-    registry: Res<Registry>,
-    defs: Res<BuildingDefs>,
-    leads: Query<&Leads>,
-    lands: Query<(&StringId, &LandName, &HeldBy)>,
     mut root: Single<&mut Node, With<MenuRoot>>,
     mut title: Single<&mut Text, With<MenuTitle>>,
     list: Single<Entity, With<MenuList>>,
     mut commands: Commands,
-    mut cache: Local<Option<(Stage, usize)>>,
+    mut cache: Local<Option<(Option<usize>, usize, usize)>>,
 ) {
     root.display = if menu.open { Display::Flex } else { Display::None };
     if !menu.open {
         *cache = None;
         return;
     }
-    let key = (menu.stage, menu.index);
+    let key = (menu.command, menu.step, menu.index);
     if *cache == Some(key) {
         return;
     }
     *cache = Some(key);
 
-    title.0 = menu.stage.title().to_string();
-    commands
-        .entity(*list)
-        .despawn_children()
-        .with_children(|c| match menu.stage {
-            Stage::Commands => {
-                for (i, name) in COMMANDS.iter().enumerate() {
-                    item(c, *name, i == menu.index);
-                }
+    title.0 = menu.title.clone();
+    let items = &menu.items;
+    let index = menu.index;
+    commands.entity(*list).despawn_children().with_children(|c| {
+        // ponytail: no step-back navigation. An empty step is a dead end until
+        // the player escapes; add Back/Bksp if commands grow multi-step paths.
+        if items.is_empty() {
+            item(c, "(nothing to choose)", false);
+        } else {
+            for (i, mi) in items.iter().enumerate() {
+                item(c, &mi.label, i == index);
             }
-            Stage::Lands => {
-                let rows = own_holdings(&registry, &game, &leads, &lands);
-                if rows.is_empty() {
-                    item(c, "(no lands you rule)", false);
-                } else {
-                    for (i, (_, name)) in rows.iter().enumerate() {
-                        item(c, name, i == menu.index);
-                    }
-                }
-            }
-            Stage::Buildings => {
-                if defs.0.is_empty() {
-                    item(c, "(no buildings defined)", false);
-                } else {
-                    for (i, def) in defs.0.values().enumerate() {
-                        item(c, &format!("{}  ({}g)", def.name, def.construction_price), i == menu.index);
-                    }
-                }
-            }
-        });
+        }
+    });
 }
 
-/// Exclusive: open on **C**, navigate the list, dispatch on the final
-/// **Enter**. Exclusive because the last step calls [`apply`], an `&mut World`
-/// free function.
-///
-/// [`apply`]: crate::commands::apply
+/// Exclusive: open on **C** (or jump straight into a land command via the
+/// legend's **B**/**D** hotkeys), navigate, dispatch on the final **Enter**.
+/// Exclusive because it computes the on-screen list via `&World` (each command
+/// decides its own steps/queries) and the last step calls the command's
+/// `execute`, an `&mut World` method.
 pub fn input(world: &mut World) {
-    let (toggle, up, down, enter, escape) = {
+    let (toggle, up, down, enter, escape, build, destroy) = {
         let keys = world.resource::<ButtonInput<KeyCode>>();
         (
             keys.just_pressed(KeyCode::KeyC),
@@ -256,93 +209,225 @@ pub fn input(world: &mut World) {
             keys.just_pressed(KeyCode::ArrowDown),
             keys.just_pressed(KeyCode::Enter),
             keys.just_pressed(KeyCode::Escape),
+            keys.just_pressed(KeyCode::KeyB),
+            keys.just_pressed(KeyCode::KeyD),
         )
     };
-    let open = world.resource::<CommandMenu>().open;
-    if !open {
+
+    if !world.resource::<CommandMenu>().open {
         if toggle {
-            let mut m = world.resource_mut::<CommandMenu>();
-            m.open = true;
-            m.stage = Stage::Commands;
-            m.index = 0;
-            m.land_id = None;
+            open_menu(world, None, 0, Vec::new());
+        } else if build {
+            open_land_action(world, true);
+        } else if destroy {
+            open_land_action(world, false);
         }
         return;
     }
+
     if escape {
         close(world);
         return;
     }
-    let stage = world.resource::<CommandMenu>().stage;
+
     if up || down {
-        let len = match stage {
-            Stage::Commands => COMMANDS.len(),
-            Stage::Lands => own_holdings_world(world).len(),
-            Stage::Buildings => world.resource::<BuildingDefs>().0.len(),
-        };
+        let len = current_items(world).len();
         if len > 0 {
             let idx = world.resource::<CommandMenu>().index;
-            let next = if up { (idx + len - 1) % len } else { (idx + 1) % len };
+            let next = if up {
+                (idx + len - 1) % len
+            } else {
+                (idx + 1) % len
+            };
             world.resource_mut::<CommandMenu>().index = next;
+        }
+        refresh(world);
+        return;
+    }
+
+    if enter {
+        pick(world);
+        // `pick` closes the menu on the final step; only refresh if it stayed open.
+        if world.resource::<CommandMenu>().open {
+            refresh(world);
+        }
+    }
+}
+
+/// Record the picked item and either advance to the next step or, on the last
+/// step, hand the accumulated choices to the command's `execute`.
+fn pick(world: &mut World) {
+    let command = world.resource::<CommandMenu>().command;
+
+    // Top-level: choose a command, drop into its first step.
+    if command.is_none() {
+        let idx = world.resource::<CommandMenu>().index;
+        let count = world.resource::<CommandRegistry>().commands.len();
+        if idx < count {
+            let mut m = world.resource_mut::<CommandMenu>();
+            m.command = Some(idx);
+            m.step = 0;
+            m.index = 0;
+            m.choices.clear();
         }
         return;
     }
-    if enter {
-        match stage {
-            Stage::Commands => {
-                let idx = world.resource::<CommandMenu>().index;
-                if idx < COMMANDS.len() {
-                    let mut m = world.resource_mut::<CommandMenu>();
-                    m.stage = Stage::Lands;
-                    m.index = 0;
-                }
-            }
-            Stage::Lands => {
-                let idx = world.resource::<CommandMenu>().index;
-                if let Some((id, _)) = own_holdings_world(world).into_iter().nth(idx) {
-                    let mut m = world.resource_mut::<CommandMenu>();
-                    m.land_id = Some(id);
-                    m.stage = Stage::Buildings;
-                    m.index = 0;
-                }
-            }
-            Stage::Buildings => {
-                let idx = world.resource::<CommandMenu>().index;
-                let land_id = world.resource::<CommandMenu>().land_id.clone();
-                let actor = world.resource::<Game>().ctx.player_character_id.clone();
-                let def_id = world
-                    .resource::<BuildingDefs>()
-                    .0
-                    .get_index(idx)
-                    .map(|(k, _)| k.clone());
-                let (Some(land_id), Some(def_id)) = (land_id, def_id) else {
-                    return;
-                };
-                close(world);
-                apply(world, &actor, Command::ConstructBuilding { land_id, def_id });
-            }
-        }
+
+    // Within a command: record the picked item.
+    let item = {
+        let items = current_items(world);
+        let idx = world.resource::<CommandMenu>().index;
+        items.into_iter().nth(idx)
+    };
+    let Some(item) = item else {
+        return;
+    };
+
+    let ci = command.unwrap();
+    let step_count = world.resource::<CommandRegistry>().commands[ci].step_count();
+    let step = world.resource::<CommandMenu>().step;
+    world.resource_mut::<CommandMenu>().choices.push(Choice {
+        label: item.label,
+        value: item.value,
+    });
+
+    if step + 1 < step_count {
+        let mut m = world.resource_mut::<CommandMenu>();
+        m.step += 1;
+        m.index = 0;
+    } else {
+        // Final step: hand the choices to the command. Clone the `Arc` first so
+        // the registry's borrow is dropped before `execute` takes `&mut World`.
+        let cmd = world.resource::<CommandRegistry>().commands[ci].clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let choices = world.resource::<CommandMenu>().choices.clone();
+        close(world);
+        cmd.execute(&choices, &actor, world);
+    }
+}
+
+/// Recompute the on-screen list + title for the current `(command, step)` and
+/// clamp the cursor into range.
+fn refresh(world: &mut World) {
+    let items = current_items(world);
+    let len = items.len();
+    let title = current_title(world);
+    let mut m = world.resource_mut::<CommandMenu>();
+    m.items = items;
+    m.title = title;
+    if len > 0 && m.index >= len {
+        m.index = len - 1;
+    }
+}
+
+/// The selectable items on screen now: the top-level command names, or the
+/// active command's current step.
+fn current_items(world: &World) -> Vec<MenuItem> {
+    let (command, step) = {
+        let m = world.resource::<CommandMenu>();
+        (m.command, m.step)
+    };
+    let choices = world.resource::<CommandMenu>().choices.clone();
+    let actor = world.resource::<Game>().ctx.player_character_id.clone();
+    let registry = world.resource::<CommandRegistry>();
+    match command {
+        None => registry
+            .commands
+            .iter()
+            .map(|c| MenuItem {
+                label: c.name().to_string(),
+                value: String::new(),
+            })
+            .collect(),
+        Some(i) => match registry.commands.get(i) {
+            Some(cmd) => cmd.step_items(step, &choices, &actor, world),
+            None => Vec::new(),
+        },
+    }
+}
+
+/// The window title for the current `(command, step)`.
+fn current_title(world: &World) -> String {
+    let m = world.resource::<CommandMenu>();
+    match m.command {
+        None => "Command".to_string(),
+        Some(i) => world
+            .resource::<CommandRegistry>()
+            .commands
+            .get(i)
+            .map(|c| c.step_title(m.step).to_string())
+            .unwrap_or_else(|| "Command".to_string()),
     }
 }
 
 fn close(world: &mut World) {
     let mut m = world.resource_mut::<CommandMenu>();
     m.open = false;
-    m.stage = Stage::Commands;
+    m.command = None;
+    m.step = 0;
     m.index = 0;
-    m.land_id = None;
+    m.choices.clear();
 }
 
-/// `&mut World` mirror of [`own_holdings`] for the exclusive input path (which
-/// can't take `Query` system params).
-fn own_holdings_world(world: &mut World) -> Vec<(String, String)> {
-    let kingdom = world
-        .resource::<Registry>()
-        .get(&world.resource::<Game>().ctx.player_character_id)
-        .and_then(|pe| world.get::<Leads>(pe).map(|l| l.kingdom()));
-    let mut q = world.query::<(&StringId, &LandName, &HeldBy)>();
-    q.iter(world)
-        .filter(|(_, _, held)| Some(held.0) == kingdom)
-        .map(|(sid, name, _)| (sid.0.clone(), name.0.clone()))
-        .collect()
+/// Open the palette into `command` at `step` with `choices` already made. Used
+/// by the **C** top-level open (`command = None`, step 0) and the legend's
+/// **B**/**D** hotkeys (`command = Some(i)`, step 1, land pre-picked).
+fn open_menu(world: &mut World, command: Option<usize>, step: usize, choices: Vec<Choice>) {
+    {
+        let mut m = world.resource_mut::<CommandMenu>();
+        m.open = true;
+        m.command = command;
+        m.step = step;
+        m.index = 0;
+        m.choices = choices;
+    }
+    refresh(world);
+}
+
+/// Find a command in the registry by its display name. ponytail: coupling the
+/// hotkey to the display name is fine while names are the canonical id; add a
+/// stable command id if a mod ships a renamed variant of a base command.
+fn find_command(world: &World, name: &str) -> Option<usize> {
+    world
+        .resource::<CommandRegistry>()
+        .commands
+        .iter()
+        .position(|c| c.name() == name)
+}
+
+/// Open a land command (Construct/Destroy Building) straight to its building
+/// step with the selected land pre-picked, skipping the command list and the
+/// land step — the legend's **B**/**D** hotkeys. Fires only when the player
+/// rules the selected land; otherwise the menu stays closed.
+fn open_land_action(world: &mut World, construct: bool) {
+    let name = if construct {
+        "Construct Building"
+    } else {
+        "Destroy Building"
+    };
+    let Some(ci) = find_command(world, name) else {
+        return;
+    };
+    let (actor, land_id) = {
+        let game = world.resource::<Game>();
+        (
+            game.ctx.player_character_id.clone(),
+            game.ctx.selected_land_id.clone(),
+        )
+    };
+    let Some(land_id) = land_id else {
+        return;
+    };
+    if !crate::commands::rules_land(world, &actor, &land_id) {
+        return;
+    }
+    open_menu(
+        world,
+        Some(ci),
+        1,
+        vec![Choice {
+            label: land_id.clone(),
+            value: land_id,
+        }],
+    );
 }

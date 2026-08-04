@@ -3,8 +3,8 @@
 use super::{FONT, TITLE};
 use crate::app::Game;
 use crate::ecs::{
-    BuildingOf, BuildingsOn, CharacterAge, CharacterName, Holds, HouseName, HouseOf, LandName,
-    LedBy, Registry, Seat, StringId,
+    BuildingOf, BuildingsOn, CharacterAge, CharacterName, HeldBy, Holds, HouseName, HouseOf,
+    LandName, LedBy, Leads, Registry, Seat, StringId,
 };
 use crate::resources::buildings::BuildingDefs;
 use bevy::prelude::*;
@@ -16,6 +16,10 @@ pub struct LegendInfo;
 /// are rebuilt by [`update`] only when the selection or building roster changes.
 #[derive(Component)]
 pub struct LegendBuildings;
+/// Context actions for the selected land (build/destroy …). A column container
+/// rebuilt by [`update`] only when the selection or its rulership changes.
+#[derive(Component)]
+pub struct LegendActions;
 
 /// Faint rule between the two sections.
 const DIVIDER: Color = Color::srgba(0.5, 0.5, 0.5, 0.6);
@@ -86,6 +90,39 @@ pub(super) fn spawn(col: &mut ChildSpawnerCommands, panel: Color) {
                 ..default()
             },
         ));
+        // Section divider + ACTIONS: context actions for the selected land.
+        p.spawn((
+            Node {
+                width: percent(100),
+                height: px(1),
+                margin: UiRect::vertical(px(6)),
+                ..default()
+            },
+            BackgroundColor(DIVIDER),
+        ));
+        p.spawn((
+            Text::new("ACTIONS"),
+            TextFont::from_font_size(FONT),
+            TextColor(TITLE),
+        ));
+        p.spawn((
+            Node {
+                width: percent(100),
+                height: px(1),
+                margin: UiRect::vertical(px(6)),
+                ..default()
+            },
+            BackgroundColor(DIVIDER),
+        ));
+        p.spawn((
+            LegendActions,
+            Node {
+                width: percent(100),
+                flex_direction: FlexDirection::Column,
+                row_gap: px(1),
+                ..default()
+            },
+        ));
     });
 }
 
@@ -124,6 +161,25 @@ fn row(p: &mut ChildSpawnerCommands, name: &str, gold: &str, levy: &str) {
                 ..default()
             },
         ));
+    });
+}
+
+/// One ACTIONS row: a hotkey (in the title colour so it reads as a key) next
+/// to the action label.
+fn action_row(p: &mut ChildSpawnerCommands, hotkey: &str, label: &str) {
+    p.spawn(Node {
+        width: percent(100),
+        flex_direction: FlexDirection::Row,
+        column_gap: px(6),
+        ..default()
+    })
+    .with_children(|r| {
+        r.spawn((
+            Text::new(hotkey.to_string()),
+            TextFont::from_font_size(FONT),
+            TextColor(TITLE),
+        ));
+        r.spawn((Text::new(label.to_string()), TextFont::from_font_size(FONT)));
     });
 }
 
@@ -173,6 +229,7 @@ pub fn update(
     defs: Res<BuildingDefs>,
     mut info: Single<&mut Text, (With<LegendInfo>, Without<LegendBuildings>)>,
     container: Single<Entity, With<LegendBuildings>>,
+    actions: Single<Entity, With<LegendActions>>,
     // ponytail: cache key in a Local so identical selections don't respawn the
     // table every frame; it flips only on a new land or a changed building set.
     mut key: Local<Option<String>>,
@@ -183,21 +240,21 @@ pub fn update(
     chars: Query<(&CharacterName, &CharacterAge)>,
     house_of: Query<&HouseOf>,
     houses: Query<&HouseName>,
+    leads: Query<&Leads>,
+    held_by: Query<&HeldBy>,
 ) {
-    // Nothing selected, or a selected id the world doesn't have: blank both.
-    let Some(id) = game.ctx.selected_land_id.clone() else {
+    // Nothing selected, or a selected id the world doesn't resolve to a land:
+    // blank everything (info, buildings, actions).
+    let Some((id, land_e, (land, on))) = game
+        .ctx
+        .selected_land_id
+        .as_ref()
+        .and_then(|id| registry.get(id).map(|e| (id.clone(), e)))
+        .and_then(|(id, e)| lands.get(e).ok().map(|ld| (id, e, ld)))
+    else {
         info.0.clear();
         rebuild(&mut commands, *container, &mut key, None, &[], None);
-        return;
-    };
-    let Some(land_e) = registry.get(&id) else {
-        info.0.clear();
-        rebuild(&mut commands, *container, &mut key, None, &[], None);
-        return;
-    };
-    let Ok((land, on)) = lands.get(land_e) else {
-        info.0.clear();
-        rebuild(&mut commands, *container, &mut key, None, &[], None);
+        commands.entity(*actions).despawn_children();
         return;
     };
 
@@ -266,4 +323,29 @@ pub fn update(
         )
     };
     rebuild(&mut commands, *container, &mut key, cur_key, &rows, total);
+
+    // Section 3: ACTIONS — context actions for the selected land. Only lands
+    // the player rules have any (build/destroy), so gate on rulership. The
+    // list is ≤2 rows, so rebuilding every frame is cheap and avoids another
+    // `Local` cache param (Bevy's `IntoSystem` for free fns caps at 16).
+    let player_rules = registry
+        .get(&game.ctx.player_character_id)
+        .and_then(|pe| leads.get(pe).ok())
+        .map(|l| l.kingdom())
+        .zip(held_by.get(land_e).ok().map(|h| h.0))
+        .map(|(pk, lk)| pk == lk)
+        .unwrap_or(false);
+    commands.entity(*actions).despawn_children();
+    commands.entity(*actions).with_children(|p| {
+        if player_rules {
+            action_row(p, "b", "Construct Building");
+            action_row(p, "d", "Destroy Building");
+        } else {
+            p.spawn((
+                Text::new("(none)"),
+                TextFont::from_font_size(FONT),
+                TextColor(Color::srgba(0.5, 0.5, 0.5, 0.7)),
+            ));
+        }
+    });
 }

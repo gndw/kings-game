@@ -240,11 +240,15 @@ asset-loaded sprites.
   holdings tinted green, and a waving pennant (`flag.rs`) on the selection.
 - **Panels** each own a marker `Component` (`LegendInfo`, `LegendBuildings`,
   `Chronicle`, `ResourceBar`, `Status`) and an `update` system that reads the
-  world through `Query`/`Res` and writes into a `Single<&mut Text>`:
+  world through `Query`/`Res` and writes into a `Single<&mut Text>`. The one
+  exception is `LegendBuildings`, a column *container*: `update` holds a
+  `Single<Entity, With<LegendBuildings>>` and rebuilds its child rows only when
+  a `Local` cache key (selection + building roster) changes — not every frame.
   - `legend` — the selected land, split into two sections separated by a thin
     divider node: section 1 (`LegendInfo`) holds id/name and the holder kingdom
-    + ruler (name, house, age); section 2 (`LegendBuildings`) holds the
-    per-building and total gold/levy.
+    + ruler (name, house, age); section 2 (`LegendBuildings`) is a 3-column
+    table — name (left, fills) / gold (right) / levy (right), one row per
+    building, then a thin rule and a `total` row in the same layout.
   - `chronicle` — last 30 lines of the `Chronicles` resource.
   - `resource` — the player's name, house, gold, yield/mo, levy.
   - `status` — `[PAUSED]`/`[RUNNING]`, the `Date`, current speed.

@@ -4,14 +4,25 @@
 use super::flag;
 use super::startup::RIGHT_BAR;
 use crate::app::Game;
-use crate::ecs::{CharacterLeads, KingdomHolds, LandBorders, LandHolding, Registry, StringId};
+use crate::ecs::{
+    BuildingOf, CharacterLeads, KingdomHolds, LandBorders, LandHasBuildings, LandHolding,
+    LandName, Registry, StringId,
+};
 use crate::resources::border::Border;
+use crate::resources::buildings::BuildingDefs;
 use bevy::camera::ScalingMode;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
+use bevy::sprite::Anchor;
 use std::collections::HashSet;
 
 const HOLDING_RADIUS: f32 = 12.0;
+
+/// Marker on the `Text2d` entity we spawn in [`startup`] for a land's name +
+/// yield, so [`update_draw`] can find the label for a given land and refresh
+/// the yield line.
+#[derive(Component)]
+pub struct LandLabel(pub Entity);
 /// Gap between the horizontal lines that stand in for a polygon fill.
 // ponytail: fixed world-space step, like everything else here — the camera
 // never zooms, so it can't go coarse on screen.
@@ -50,7 +61,8 @@ fn fill(gizmos: &mut Gizmos, poly: &[(f64, f64)], color: Color) {
     }
 }
 
-/// Camera framed on the whole map.
+/// Camera framed on the whole map; also spawns one `Text2d` label per land,
+/// just below the holding circle.
 ///
 /// Pan/zoom hook in here: change `Transform::translation` to pan,
 /// `OrthographicProjection::scale` to zoom (Bevy 0.19 multiplies the projection
@@ -58,7 +70,13 @@ fn fill(gizmos: &mut Gizmos, poly: &[(f64, f64)], color: Color) {
 /// centre). The `viewport_origin` shift centres the rendered area on the left
 /// `(1 - RIGHT_BAR)` slice of the window so the map lands beside the
 /// right-hand UI column instead of under it.
-pub fn startup(mut commands: Commands, border: Res<Border>) {
+pub fn startup(
+    mut commands: Commands,
+    border: Res<Border>,
+    // populate has already run by the time Startup schedules, so the land
+    // entities exist and this query resolves.
+    lands: Query<(Entity, &LandName, &LandHolding)>,
+) {
     let (x0, x1, y0, y1) = border.bounds();
     commands.spawn((
         Camera2d,
@@ -80,6 +98,28 @@ pub fn startup(mut commands: Commands, border: Res<Border>) {
         }),
         Transform::from_xyz(((x0 + x1) / 2.0) as f32, ((y0 + y1) / 2.0) as f32, 0.0),
     ));
+    // One world-space label per land, just below the holding circle. Spawned
+    // once in Startup so update_draw stays gizmo-only and the labels don't get
+    // respawned every frame. The name is the first line; update_draw appends
+    // the yield line below it.
+    for (land_e, name, holding) in &lands {
+        commands.spawn((
+            Text2d::new(name.0.clone()),
+            TextFont::from_font_size(18.0),
+            TextColor(Color::Srgba(css::WHITE)),
+            // Centre each line within its own bounding box so the two lines
+            // stack as a centred column under the holding, not a ragged
+            // left-aligned one.
+            TextLayout::new(Justify::Center, LineBreak::WordBoundary),
+            Anchor::TOP_CENTER,
+            LandLabel(land_e),
+            Transform::from_xyz(
+                holding.0.0 as f32,
+                holding.0.1 as f32 - HOLDING_RADIUS - 4.0,
+                1.0,
+            ),
+        ));
+    }
 }
 
 /// Arrow keys move the selection to the neighbouring land in that direction.
@@ -115,6 +155,32 @@ pub fn update_input(world: &mut World) {
     }
 }
 
+/// Sum a single land's buildings into `(gold, levy)`. The same
+/// `gold_profit - gold_upkeep` and `levy` walk as
+/// [`sum_kingdom_yield`](crate::updates::yields::sum_kingdom_yield) but
+/// scoped to one land, so the map label can show the per-land total.
+fn sum_land_yield(
+    land_e: Entity,
+    land_has_buildings: &Query<&LandHasBuildings>,
+    building_of: &Query<&BuildingOf>,
+    defs: &BuildingDefs,
+) -> (i64, u64) {
+    let Ok(land_has_buildings) = land_has_buildings.get(land_e) else {
+        return (0, 0);
+    };
+    let (mut gold, mut levy) = (0i64, 0u64);
+    for b_e in land_has_buildings.iter() {
+        let Ok(building_of) = building_of.get(b_e) else {
+            continue;
+        };
+        if let Some(d) = defs.get(&building_of.0) {
+            gold += d.gold_profit as i64 - d.gold_upkeep as i64;
+            levy += d.levy as u64;
+        }
+    }
+    (gold, levy)
+}
+
 /// World border, land outlines, holdings, and the selected land's flag.
 pub fn update_draw(
     mut gizmos: Gizmos,
@@ -122,10 +188,15 @@ pub fn update_draw(
     registry: Res<Registry>,
     border: Res<Border>,
     time: Res<Time>,
+    defs: Res<BuildingDefs>,
     character_leads: Query<&CharacterLeads>,
     kingdom_holds: Query<&KingdomHolds>,
     lands: Query<(&StringId, &LandBorders, &LandHolding)>,
     string_ids: Query<&StringId>,
+    land_has_buildings: Query<&LandHasBuildings>,
+    building_of: Query<&BuildingOf>,
+    land_names: Query<&LandName>,
+    mut labels: Query<(&LandLabel, &mut Text2d)>,
 ) {
     let b = &*border;
     gizmos.rect_2d(
@@ -194,5 +265,14 @@ pub fn update_draw(
         if is_sel {
             flag::draw(&mut gizmos, holding, time.elapsed_secs());
         }
+    }
+
+    // Refresh each land label's second line (per-land total yield). The name
+    // was baked in at startup; the yield only changes on construct/destroy,
+    // but a per-frame walk is cheap and keeps the code branch-free.
+    for (label, mut text) in &mut labels {
+        let name = land_names.get(label.0).map(|n| n.0.as_str()).unwrap_or("");
+        let (gold, levy) = sum_land_yield(label.0, &land_has_buildings, &building_of, &defs);
+        text.0 = format!("{name}\n({gold:+}g/m {levy:+})");
     }
 }

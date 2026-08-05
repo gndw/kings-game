@@ -279,7 +279,9 @@ asset-loaded sprites.
   the bottom. `RIGHT_BAR = 0.3` is shared with the camera so the map lands beside
   the column, not under it.
 - **Map** (`ui/map.rs`): camera (`Startup`) framed on the whole `Border` with an
-  `AutoMin` projection so the island never distorts and never pans.
+  `AutoMin` projection so the island never distorts and never pans. The same
+  `startup` also spawns one `Text2d` label per land just below the holding
+  circle (land entities already exist — `populate` runs before `Startup`).
   `update_draw` draws the world border, each land's outline (gizmos draw lines
   only, so the fill is a **scanline** routine handling the map's concave
   shapes), holdings as circles, the selected land in yellow over its

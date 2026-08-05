@@ -171,12 +171,27 @@ Lives in `updates/` and `schedules.rs`.
   `input` from `speed(&calendar.speeds, speed_idx)` — simulated days per real
   second.
 - **The economy is Rust, not a script:**
-  - `recompute_yields` (`updates/yields.rs`) — runs in `Startup` (so the opening
-    screen shows what a realm renders) and `FixedUpdate`. One pass over the
-    relationship graph per character: `character → Leads → kingdom → Holds →
-    lands → BuildingsOn → BuildingOf → BuildingDefs`, summing `gold_profit - gold_upkeep` into
-    `CharacterGoldYield` and `levy` into `CharacterLevy`. `Option<&Leads>` walks
-    every character so a non-ruler is zeroed, not left stale.
+  - `recompute_yields` (`updates/yields.rs`) — runs in `Startup` (so the
+    opening screen shows what a realm renders). After that the construct
+    and destroy commands trigger a custom [`OnBuildingUpdated`]
+    (`updates/yields.rs`) event (`kind = 1 = constructed` /
+    `3 = destroyed`; `2 = updated` is reserved for future code paths that
+    move a building or hot-swap its definition) straight after their
+    structural change; its `On<OnBuildingUpdated>` observer walks
+    `land → HeldBy → kingdom → LedBy → leader`, runs the shared
+    [`sum_kingdom_yield`] helper over
+    `kingdom → Holds → lands → BuildingsOn → BuildingOf → BuildingDefs`,
+    and writes that one character's [`CharacterGoldYield`] and
+    [`CharacterLevy`]. The event fires *after* the relationship hook has
+    settled `BuildingsOn` (construct → hook adds; destroy → hook pulls),
+    so `sum_kingdom_yield` always sees authoritative data.
+  - `ui::resource::update` runs in `PostUpdate` (one of Bevy's built-in
+    schedules, strictly after `Update` finishes), so the bar's read against
+    `CharacterGoldYield` happens on the same frame as the event-driven
+    write rather than the next. Other UI systems (`map::update_input/draw`,
+    `legend::update`, `chronicle::update`, `status::update`, etc.) stay in
+    `Update` — the bar is the one that has to react to ECS writes from
+    `Update`'s event-driven recompute.
   - `payout` (`updates/payout.rs`) — runs in `OnMonth`. Pays every leader
     (entities carrying `Leads`) their `CharacterGoldYield` into `CharacterGold`.
     Signed both places: debt and losses are real, no floor.

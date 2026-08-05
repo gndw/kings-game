@@ -3,10 +3,10 @@
 //!
 //! All immutable reads happen in [`validate`] (against `&World`); all
 //! `&mut World` happens in [`construct`], never tangled. On success it spawns
-//! the same bundle [`crate::ecs::populate`] uses, so a built building is
-//! indistinguishable from an authored one — and [`recompute_yields`] already
-//! runs each `FixedUpdate`, so the new building's gold/levy flows next tick
-//! with no wiring.
+//! the same bundle [`crate::ecs::populate`] uses, then fires the
+//! `OnBuildingUpdated` event so
+//! [`on_building_updated`](crate::updates::yields::on_building_updated)
+//! re-sums the realm while `BuildingsOn` is already authoritative.
 //!
 //! [`recompute_yields`]: crate::updates::yields::recompute_yields
 
@@ -132,7 +132,9 @@ fn construct(world: &mut World, actor: &str, land_id: &str, def_id: &str) {
         gold.0 -= go.price as i64;
     }
 
-    // Spawn the instance. `recompute_yields` picks its gold/levy up next tick.
+    // Spawn the instance — the relationship hook lands the new building in
+    // the land's `BuildingsOn` synchronously. Then ask the yield observer to
+    // re-sum this kingdom's holdings now that the data is authoritative.
     let id = next_id(world);
     let eid = world
         .spawn((
@@ -143,6 +145,11 @@ fn construct(world: &mut World, actor: &str, land_id: &str, def_id: &str) {
         ))
         .id();
     world.resource_mut::<Registry>().insert(id, eid);
+    world.trigger(crate::updates::yields::OnBuildingUpdated {
+        building: eid,
+        land: go.land_e,
+        r#type: crate::updates::yields::BUILDING_CONSTRUCTED,
+    });
 
     note(world, format!("built {} on {}", go.def_name, land_id));
 }

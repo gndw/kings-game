@@ -93,13 +93,17 @@ fn main() -> Result<()> {
                 updates::yields::recompute_yields,
             ),
         )
+        // The construct / destroy commands (and any future code path that
+        // mutates a building's kingdom-graph footprint) trigger
+        // `OnBuildingUpdated`. The observer walks
+        // `land → HeldBy → kingdom → LedBy → leader` and writes the new yield.
+        // `ui::resource::update` sits in `PostUpdate` so its read lands on the
+        // same frame as the observer's write.
+        .add_observer(updates::yields::on_building_updated)
         .add_systems(
             Update,
             (
                 input,
-                // `ui::command_menu::input` is exclusive, so it serialises
-                // ahead of `ui::command_menu::update` on `CommandMenu` —
-                // no `.chain()` needed inside the outer tuple.
                 ui::command_menu::input,
                 ui::command_menu::update,
                 ui::map::update_input,
@@ -107,10 +111,13 @@ fn main() -> Result<()> {
                 ui::legend::update,
                 ui::actions::update,
                 ui::chronicle::update,
-                ui::resource::update,
                 ui::status::update,
+                // Ponytail: keep debug systems last so they don't displace
+                // gameplay systems in the schedule.
+                kings_game::debug::dump_characters,
             ),
         )
+        .add_systems(PostUpdate, ui::resource::update)
         .add_systems(
             FixedUpdate,
             updates::advance_date::advance.run_if(|g: Res<Game>| g.running()),

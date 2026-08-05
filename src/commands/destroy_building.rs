@@ -1,10 +1,11 @@
 //! The destroy-building command: tear down a building instance standing on a
 //! land the actor rules. The inverse of [`super::construct_building`].
 //!
-//! Despawning the entity auto-removes it from the land's
-//! [`BuildingsOn`](crate::ecs::BuildingsOn) (the relationship hook), and
-//! [`recompute_yields`] runs each `FixedUpdate`, so the lost building's
-//! gold/levy drops out next tick with no wiring.
+//! Despawning the entity auto-pulls it from the land's
+//! [`BuildingsOn`](crate::ecs::BuildingsOn) (the relationship hook); we then
+//! fire `OnBuildingUpdated` so
+//! [`on_building_updated`](crate::updates::yields::on_building_updated)
+//! re-sums the realm against the post-hook `BuildingsOn`.
 //!
 //! [`recompute_yields`]: crate::updates::yields::recompute_yields
 
@@ -124,9 +125,15 @@ fn destroy(world: &mut World, actor: &str, land_id: &str, building_id: &str) {
         .and_then(|of| world.resource::<BuildingDefs>().get(&of.0).map(|d| d.name.clone()))
         .unwrap_or_else(|| building_id.to_string());
 
-    // Despawn + deregister. `OnLand`'s hook removes it from the land's
-    // `BuildingsOn`; `recompute_yields` drops its yield next tick.
+    // Despawn + deregister. `OnLand`'s hook pulls the building out of the
+    // land's `BuildingsOn` synchronously, so the yield observer can re-sum
+    // authoritative data on the next line.
     world.entity_mut(b_e).despawn();
+    world.trigger(crate::updates::yields::OnBuildingUpdated {
+        building: b_e,
+        land: land_e,
+        r#type: crate::updates::yields::BUILDING_DESTROYED,
+    });
     world.resource_mut::<Registry>().by_id.remove(building_id);
 
     note(world, format!("destroyed {} on {}", def_name, land_id));

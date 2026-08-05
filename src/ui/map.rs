@@ -4,7 +4,7 @@
 use super::flag;
 use super::startup::RIGHT_BAR;
 use crate::app::Game;
-use crate::ecs::{CharacterLeads, KingdomHolds, Land, LandBorders, LandHolding, LandName, Registry, StringId};
+use crate::ecs::{CharacterLeads, KingdomHolds, LandBorders, LandHolding, LandName, Registry, StringId};
 use crate::resources::border::Border;
 use bevy::camera::ScalingMode;
 use bevy::color::palettes::css;
@@ -13,7 +13,7 @@ use std::collections::HashSet;
 
 const HOLDING_RADIUS: f32 = 4.0;
 /// Vertical gap between the holding circle and its land name label.
-const LABEL_GAP: f32 = 2.0;
+const LABEL_GAP: f32 = 20.0;
 /// Gap between the horizontal lines that stand in for a polygon fill.
 // ponytail: fixed world-space step, like everything else here — the camera
 // never zooms, so it can't go coarse on screen.
@@ -73,23 +73,6 @@ pub fn startup(mut commands: Commands, border: Res<Border>) {
     ));
 }
 
-/// One text label per land, just below the holding circle. Spawned once —
-/// names don't change, so there's no work to do per frame.
-pub fn spawn_labels(
-    mut commands: Commands,
-    lands: Query<(&LandName, &LandHolding), With<Land>>,
-) {
-    for (name, holding) in &lands {
-        let (x, y) = holding.0;
-        commands.spawn((
-            Text2d::new(name.0.clone()),
-            TextFont::from_font_size(super::FONT),
-            TextColor(css::WHITE.into()),
-            Transform::from_xyz(x as f32, y as f32 - HOLDING_RADIUS - LABEL_GAP, 0.0),
-        ));
-    }
-}
-
 /// Arrow keys move the selection to the neighbouring land in that direction.
 /// Exclusive: selection stepping reads many lands and writes the player's
 /// selection, all through the one [`World`].
@@ -132,7 +115,7 @@ pub fn update_draw(
     time: Res<Time>,
     character_leads: Query<&CharacterLeads>,
     kingdom_holds: Query<&KingdomHolds>,
-    lands: Query<(&StringId, &LandBorders, &LandHolding)>,
+    lands: Query<(&StringId, &LandBorders, &LandHolding, &LandName)>,
     string_ids: Query<&StringId>,
 ) {
     let b = &*border;
@@ -140,6 +123,12 @@ pub fn update_draw(
         Isometry2d::from_xy(((b.x0 + b.x1) / 2.0) as f32, ((b.y1 + b.y0) / 2.0) as f32),
         Vec2::new((b.x1 - b.x0) as f32, (b.y1 - b.y0) as f32),
         css::BLUE,
+    );
+    // Sea wash inside the border, drawn before the lands so polygons cover it.
+    fill(
+        &mut gizmos,
+        &[(b.x0, b.y0), (b.x1, b.y0), (b.x1, b.y1), (b.x0, b.y1)],
+        css::BLUE.with_alpha(0.01).into(),
     );
 
     let sel = game.ctx.selected_land_id.as_deref();
@@ -157,13 +146,14 @@ pub fn update_draw(
         .unwrap_or_default();
 
     // Lands in spawn order: one archetype, so `Query` yields content order.
-    let lands_vec: Vec<(String, Vec<(f64, f64)>, (f64, f64))> = lands
+    let lands_vec: Vec<(String, Vec<(f64, f64)>, (f64, f64), String)> = lands
         .iter()
-        .map(|(string_id, land_borders, land_holding)| {
+        .map(|(string_id, land_borders, land_holding, land_name)| {
             (
                 string_id.0.clone(),
                 land_borders.0.clone(),
                 land_holding.0,
+                land_name.0.clone(),
             )
         })
         .collect();
@@ -179,9 +169,12 @@ pub fn update_draw(
         } else {
             (css::WHITE, Srgba::rgb(0.59, 0.29, 0.0))
         };
-        if own.contains(&land.0) {
-            fill(&mut gizmos, &land.1, css::GREEN.with_alpha(0.1).into());
-        }
+        let land_color = if own.contains(&land.0) {
+            Srgba::rgb(0.012, 0.435, 0.165).into()
+        } else {
+            Srgba::rgb(0.322, 0.208, 0.165).into()
+        };
+        fill(&mut gizmos, &land.1, land_color);
         gizmos.linestrip_2d(
             land.1.iter().map(|&(x, y)| Vec2::new(x as f32, y as f32)),
             outline,
@@ -197,5 +190,20 @@ pub fn update_draw(
         if is_sel {
             flag::draw(&mut gizmos, holding, time.elapsed_secs());
         }
+        // Land name: drawn through the gizmo pipeline so it shares the
+        // INFINITY sort key the renderer hardcodes in `bevy_gizmos_render`;
+        // world-space `Text2d` would land below the gizmos and disappear.
+        // ponytail: ASCII only — `gizmos.text_2d` ships a stroke font for the
+        // 32-126 range. Mods that want more should swap in a texture font.
+        gizmos.text_2d(
+            Isometry2d::from_translation(Vec2::new(
+                land.2.0 as f32,
+                land.2.1 as f32 - HOLDING_RADIUS - LABEL_GAP,
+            )),
+            &land.3,
+            super::MAP_FONT_SIZE,
+            Vec2::new(0.0, -0.5),
+            css::WHITE,
+        );
     }
 }

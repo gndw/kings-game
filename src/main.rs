@@ -89,7 +89,6 @@ fn main() -> Result<()> {
                 Ctx::startup,
                 ui::startup::startup,
                 ui::map::startup,
-                ui::map::spawn_labels,
                 ui::command_menu::startup,
                 updates::yields::recompute_yields,
             ),

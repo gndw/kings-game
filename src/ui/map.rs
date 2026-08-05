@@ -4,16 +4,14 @@
 use super::flag;
 use super::startup::RIGHT_BAR;
 use crate::app::Game;
-use crate::ecs::{CharacterLeads, KingdomHolds, LandBorders, LandHolding, LandName, Registry, StringId};
+use crate::ecs::{CharacterLeads, KingdomHolds, LandBorders, LandHolding, Registry, StringId};
 use crate::resources::border::Border;
 use bevy::camera::ScalingMode;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 use std::collections::HashSet;
 
-const HOLDING_RADIUS: f32 = 4.0;
-/// Vertical gap between the holding circle and its land name label.
-const LABEL_GAP: f32 = 20.0;
+const HOLDING_RADIUS: f32 = 12.0;
 /// Gap between the horizontal lines that stand in for a polygon fill.
 // ponytail: fixed world-space step, like everything else here — the camera
 // never zooms, so it can't go coarse on screen.
@@ -53,20 +51,31 @@ fn fill(gizmos: &mut Gizmos, poly: &[(f64, f64)], color: Color) {
 }
 
 /// Camera framed on the whole map.
+///
+/// Pan/zoom hook in here: change `Transform::translation` to pan,
+/// `OrthographicProjection::scale` to zoom (Bevy 0.19 multiplies the projection
+/// area by `scale`, so the visible world shrinks/grows around the projection's
+/// centre). The `viewport_origin` shift centres the rendered area on the left
+/// `(1 - RIGHT_BAR)` slice of the window so the map lands beside the
+/// right-hand UI column instead of under it.
 pub fn startup(mut commands: Commands, border: Res<Border>) {
     let (x0, x1, y0, y1) = border.bounds();
     commands.spawn((
         Camera2d,
         // AutoMin keeps the whole map visible whatever the window shape, so the
-        // island never distorts — the viewport maths the terminal needed is free here.
-        // Widened and pushed left so the map lands beside the chronicle, not under
-        // it: the camera renders the whole window, the panels just sit on top.
+        // island never distorts — the viewport maths the terminal needed is free
+        // here. Widened and pushed left so the map lands beside the chronicle,
+        // not under it: the camera renders the whole window, the panels just sit
+        // on top.
         Projection::from(OrthographicProjection {
             scaling_mode: ScalingMode::AutoMin {
                 min_width: ((x1 - x0) * 1.05) as f32 / (1.0 - RIGHT_BAR),
                 min_height: ((y1 - y0) * 1.05) as f32,
             },
             viewport_origin: Vec2::new((1.0 - RIGHT_BAR) / 2.0, 0.5),
+            // 30% zoom-in (objects appear ~43% bigger). Pan/zoom wiring later
+            // mutates this instead of `Transform::translation`.
+            scale: 0.7,
             ..OrthographicProjection::default_2d()
         }),
         Transform::from_xyz(((x0 + x1) / 2.0) as f32, ((y0 + y1) / 2.0) as f32, 0.0),
@@ -115,7 +124,7 @@ pub fn update_draw(
     time: Res<Time>,
     character_leads: Query<&CharacterLeads>,
     kingdom_holds: Query<&KingdomHolds>,
-    lands: Query<(&StringId, &LandBorders, &LandHolding, &LandName)>,
+    lands: Query<(&StringId, &LandBorders, &LandHolding)>,
     string_ids: Query<&StringId>,
 ) {
     let b = &*border;
@@ -146,15 +155,10 @@ pub fn update_draw(
         .unwrap_or_default();
 
     // Lands in spawn order: one archetype, so `Query` yields content order.
-    let lands_vec: Vec<(String, Vec<(f64, f64)>, (f64, f64), String)> = lands
+    let lands_vec: Vec<(String, Vec<(f64, f64)>, (f64, f64))> = lands
         .iter()
-        .map(|(string_id, land_borders, land_holding, land_name)| {
-            (
-                string_id.0.clone(),
-                land_borders.0.clone(),
-                land_holding.0,
-                land_name.0.clone(),
-            )
+        .map(|(string_id, land_borders, land_holding)| {
+            (string_id.0.clone(), land_borders.0.clone(), land_holding.0)
         })
         .collect();
     // Selected land last, so it draws over its neighbours.
@@ -170,9 +174,9 @@ pub fn update_draw(
             (css::WHITE, Srgba::rgb(0.59, 0.29, 0.0))
         };
         let land_color = if own.contains(&land.0) {
-            Srgba::rgb(0.012, 0.435, 0.165).into()
+            Srgba::rgb(0.012, 0.435, 0.165).with_alpha(0.1).into()
         } else {
-            Srgba::rgb(0.322, 0.208, 0.165).into()
+            Srgba::rgb(0.322, 0.208, 0.165).with_alpha(0.1).into()
         };
         fill(&mut gizmos, &land.1, land_color);
         gizmos.linestrip_2d(
@@ -190,20 +194,5 @@ pub fn update_draw(
         if is_sel {
             flag::draw(&mut gizmos, holding, time.elapsed_secs());
         }
-        // Land name: drawn through the gizmo pipeline so it shares the
-        // INFINITY sort key the renderer hardcodes in `bevy_gizmos_render`;
-        // world-space `Text2d` would land below the gizmos and disappear.
-        // ponytail: ASCII only — `gizmos.text_2d` ships a stroke font for the
-        // 32-126 range. Mods that want more should swap in a texture font.
-        gizmos.text_2d(
-            Isometry2d::from_translation(Vec2::new(
-                land.2.0 as f32,
-                land.2.1 as f32 - HOLDING_RADIUS - LABEL_GAP,
-            )),
-            &land.3,
-            super::MAP_FONT_SIZE,
-            Vec2::new(0.0, -0.5),
-            css::WHITE,
-        );
     }
 }

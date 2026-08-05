@@ -3,11 +3,11 @@
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 
-const POLE: f32 = 28.0;
-const CLOTH_W: f32 = 18.0;
-const CLOTH_H: f32 = 10.0;
-const ROWS: usize = 6; // even, so a row lands on the widest point
-const SEGS: usize = 6;
+const POLE: f32 = 64.0;
+const CLOTH_W: f32 = 36.0;
+const CLOTH_H: f32 = 36.0;
+const ROWS: usize = 12; // even, so a row lands on the widest point
+const SEGS: usize = 12;
 
 /// Sideways offset of the cloth `t` (0 at the pole, 1 at the fly end) at `phase`
 /// seconds. Slack grows with `t`, so the pole edge stays put and the tip whips.

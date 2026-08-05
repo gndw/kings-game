@@ -279,14 +279,13 @@ asset-loaded sprites.
   the bottom. `RIGHT_BAR = 0.3` is shared with the camera so the map lands beside
   the column, not under it.
 - **Map** (`ui/map.rs`): camera (`Startup`) framed on the whole `Border` with an
-  `AutoMin` projection so the island never distorts and never pans. `update_draw`
-  draws the world border, each land's outline (gizmos draw lines only, so the
-  fill is a **scanline** routine handling the map's concave shapes), holdings as
-  circles, the selected land in yellow over its neighbours, the player's own
-  holdings tinted green, and a waving pennant (`flag.rs`) on the selection.
-  `spawn_labels` runs once at startup and drops a `Text2d` entity per land just
-  below its holding circle, so the player can read land names off the map
-  without inspecting the legend.
+  `AutoMin` projection so the island never distorts and never pans.
+  `update_draw` draws the world border, each land's outline (gizmos draw lines
+  only, so the fill is a **scanline** routine handling the map's concave
+  shapes), holdings as circles, the selected land in yellow over its
+  neighbours, the player's own holdings tinted green, and a waving pennant
+  (`flag.rs`) on the selection. Pan/zoom will hook into the existing camera
+  (translate the `Transform`, scale `OrthographicProjection::scale`).
 - **Panels** each own a marker `Component` (`LegendInfo`, `LegendBuildings`,
   `LegendActions`, `Chronicle`, `ResourceBar`, `Status`) and an `update` system
   that reads the world through `Query`/`Res` and writes into a `Single<&mut Text>`.

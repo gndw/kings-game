@@ -6,5 +6,5 @@
 // (`*.state.ron` is the exception — that's the mutable half; see
 // start.state.ron.)
 (
-    border: (x0: -1000, y0: -880, x1: 3580, y1: 2620),
+    border: (x0: -500, y0: -380, x1: 3080, y1: 2120),
 )

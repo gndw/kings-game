@@ -107,17 +107,22 @@ fn main() -> Result<()> {
                 ui::command_menu::input,
                 ui::command_menu::update,
                 ui::map::update_input,
-                ui::map::update_draw,
-                ui::legend::update,
-                ui::actions::update,
-                ui::chronicle::update,
-                ui::status::update,
                 // Ponytail: keep debug systems last so they don't displace
                 // gameplay systems in the schedule.
                 kings_game::debug::dump_characters,
             ),
         )
-        .add_systems(PostUpdate, ui::resource::update)
+        .add_systems(
+            PostUpdate,
+            (
+                ui::resource::update,
+                ui::map::update_draw,
+                ui::legend::update,
+                ui::actions::update,
+                ui::chronicle::update,
+                ui::status::update
+            )
+        )
         .add_systems(
             FixedUpdate,
             updates::advance_date::advance.run_if(|g: Res<Game>| g.running()),

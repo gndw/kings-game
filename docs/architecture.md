@@ -110,19 +110,22 @@ shape; this is the *what*.
   then touch the entity.
 
 - **Bevy-native relationships** (`#[relationship]` / `#[relationship_target]`),
-  hook-maintained, no manual reverse insert:
-  - `LedBy` (on kingdom) ↔ `Leads` (on leader character) — one-to-one. Read the
-    reverse via `Leads::kingdom()`.
-  - `HeldBy` (on land) ↔ `Holds` (on kingdom, `Vec<Entity>`) — a land declares
-    its kingdom; the kingdom's `Holds` auto-fills. Iterate via
-    `RelationshipTarget::iter`.
-  - `OnLand` (on building) ↔ `BuildingsOn` (on land, `Vec<Entity>`) — a
-    building declares its land; the land's `BuildingsOn` auto-fills. Iterate via
-    `RelationshipTarget::iter`.
-  - Plain (non-relationship) entity links: `HouseOf` (character→house), `Seat`
-    (kingdom→capital land), `BuildingOf` (building→definition id, a string
-    looked up against the `BuildingDefs` resource — not an entity link, since
-    definitions are a roster, not entities).
+  hook-maintained, no manual reverse insert. Every link is named
+  `<Attached-to><Verb-or-preposition><Target>` so the component name tells
+  you which entity it sits on:
+  - `KingdomLedBy` (on kingdom) ↔ `CharacterLeads` (on leader character) —
+    one-to-one. Read the reverse via `CharacterLeads::kingdom()`.
+  - `LandHeldBy` (on land) ↔ `KingdomHolds` (on kingdom, `Vec<Entity>`) — a
+    land declares its kingdom; the kingdom's `KingdomHolds` auto-fills.
+    Iterate via `RelationshipTarget::iter`.
+  - `BuildingOnLand` (on building) ↔ `LandHasBuildings` (on land,
+    `Vec<Entity>`) — a building declares its land; the land's
+    `LandHasBuildings` auto-fills. Iterate via `RelationshipTarget::iter`.
+  - Plain (non-relationship) entity links: `CharacterOfHouse`
+    (character→house), `KingdomSeat` (kingdom→capital land), `BuildingOf`
+    (building→definition id, a string looked up against the `BuildingDefs`
+    resource — not an entity link, since definitions are a roster, not
+    entities).
 
 - **`populate(world, content)`** (`ecs/ecs.rs`) builds the world **once** from
   merged+reconciled content, called from `main` before `App::run`. Spawn order is
@@ -130,7 +133,8 @@ shape; this is the *what*.
   relationship resolves to an entity that already exists. `reconcile` has
   already pruned dangling refs, so the `filter_map`s here guard logic, not bad
   data. The building *definition* roster leaves as the `BuildingDefs` resource;
-  each building *instance* becomes an entity related to its land via `OnLand`.
+  each building *instance* becomes an entity related to its land via
+  `BuildingOnLand`.
 
 - **Read order is Bevy archetype order**, which within one archetype is spawn
   order. Each kind is a single archetype, so a `Query` over `(&StringId, &Land)`
@@ -140,7 +144,8 @@ shape; this is the *what*.
 
 - **`Ctx`** (`ctx.rs`) holds only what isn't an entity: `seed`, the `SimRng`
   behind an `Arc<Mutex<>>`, `player_character_id`, and `selected_land_id` (set
-  on `Startup` to the player's own seat via `Leads`→`Seat`). The chronicle log
+  on `Startup` to the player's own seat via `CharacterLeads`→`KingdomSeat`).
+  The chronicle log
   is not here — it is the separate `Chronicles` resource. Gold/levy are
   **not** here — every character has their own components and the player is
   only distinguished by the id.
@@ -178,13 +183,13 @@ Lives in `updates/` and `schedules.rs`.
     `3 = destroyed`; `2 = updated` is reserved for future code paths that
     move a building or hot-swap its definition) straight after their
     structural change; its `On<OnBuildingUpdated>` observer walks
-    `land → HeldBy → kingdom → LedBy → leader`, runs the shared
+    `land → LandHeldBy → kingdom → KingdomLedBy → leader`, runs the shared
     [`sum_kingdom_yield`] helper over
-    `kingdom → Holds → lands → BuildingsOn → BuildingOf → BuildingDefs`,
-    and writes that one character's [`CharacterGoldYield`] and
-    [`CharacterLevy`]. The event fires *after* the relationship hook has
-    settled `BuildingsOn` (construct → hook adds; destroy → hook pulls),
-    so `sum_kingdom_yield` always sees authoritative data.
+    `kingdom → KingdomHolds → lands → LandHasBuildings → BuildingOf →
+    BuildingDefs`, and writes that one character's [`CharacterGoldYield`]
+    and [`CharacterLevy`]. The event fires *after* the relationship hook
+    has settled `LandHasBuildings` (construct → hook adds; destroy → hook
+    pulls), so `sum_kingdom_yield` always sees authoritative data.
   - `ui::resource::update` runs in `PostUpdate` (one of Bevy's built-in
     schedules, strictly after `Update` finishes), so the bar's read against
     `CharacterGoldYield` happens on the same frame as the event-driven
@@ -193,7 +198,8 @@ Lives in `updates/` and `schedules.rs`.
     `Update` — the bar is the one that has to react to ECS writes from
     `Update`'s event-driven recompute.
   - `payout` (`updates/payout.rs`) — runs in `OnMonth`. Pays every leader
-    (entities carrying `Leads`) their `CharacterGoldYield` into `CharacterGold`.
+    (entities carrying `CharacterLeads`) their `CharacterGoldYield` into
+    `CharacterGold`.
     Signed both places: debt and losses are real, no floor.
 - **No Rhai right now.** The README's *Scripts* section describes a Rhai hook
   surface (`on_startup`/`on_day`/`on_month`); it was pulled out during the ECS
@@ -234,16 +240,18 @@ the style of `ctx::step`.
   is the obvious next step if a second issuer arrives (AI, replay, multiplayer);
   not built speculatively.
 - **`ConstructBuilding`** validates (def exists in `BuildingDefs`; actor's
-  kingdom — via `Leads` — equals the land's `HeldBy`, i.e. they rule it; gold ≥
-  `construction_price`, no debt), then spawns the same bundle `populate` uses
-  (`StringId`/`Building`/`BuildingOf`/`OnLand`), registers the id in `Registry`,
-  deducts gold, and appends a chronicle line on success *and* every rejection.
-  `recompute_yields` already runs each `FixedUpdate`, so the new building's
-  gold/levy flows next tick with no wiring.
-- **`DestroyBuilding`** (the inverse) validates the actor rules the land and the
-  building is `OnLand` it, then despawns the instance + deregisters its id.
-  Despawning auto-removes it from the land's `BuildingsOn` (the relationship
-  hook); `recompute_yields` drops its yield next tick.
+  kingdom — via `CharacterLeads` — equals the land's `LandHeldBy`, i.e. they
+  rule it; gold ≥ `construction_price`, no debt), then spawns the same bundle
+  `populate` uses
+  (`StringId`/`Building`/`BuildingOf`/`BuildingOnLand`), registers the id in
+  `Registry`, deducts gold, and appends a chronicle line on success *and*
+  every rejection. `recompute_yields` already runs each `FixedUpdate`, so the
+  new building's gold/levy flows next tick with no wiring.
+- **`DestroyBuilding`** (the inverse) validates the actor rules the land and
+  the building is `BuildingOnLand` it, then despawns the instance +
+  deregisters its id. Despawning auto-removes it from the land's
+  `LandHasBuildings` (the relationship hook); `recompute_yields` drops its
+  yield next tick.
 - **Runtime building id** is a v4 UUID drawn from the seeded `SimRng` (not OS
   entropy), keeping the one-entropy-source invariant; format-only, no `uuid`
   crate.
@@ -321,7 +329,8 @@ asset-loaded sprites.
 - **Read order = archetype order = spawn order = content order.** Anything that
   needs stable iteration order relies on each kind being a single archetype.
 - **Relationships are hook-maintained.** Set the single-`Entity` side
-  (`LedBy`/`HeldBy`); never hand-edit the reverse (`Leads`/`Holds`).
+  (`KingdomLedBy`/`LandHeldBy`/`BuildingOnLand`); never hand-edit the reverse
+  (`CharacterLeads`/`KingdomHolds`/`LandHasBuildings`).
 - **Definition refs are fatal; state refs are repaired.** Don't move
   `validate`'s checks into `reconcile` or vice versa — they encode different
   policies (broken mod vs old save).

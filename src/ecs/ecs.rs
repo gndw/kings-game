@@ -9,14 +9,14 @@ use bevy::ecs::world::World;
 use bevy::prelude::{Component, Entity, Resource};
 use std::collections::HashMap;
 
-use super::building::{Building, BuildingOf, OnLand};
+use super::building::{Building, BuildingOf, BuildingOnLand};
 use super::character::{
     Character, CharacterAge, CharacterGold, CharacterGoldYield, CharacterLevy, CharacterName,
-    HouseOf,
+    CharacterOfHouse,
 };
 use super::house::{House, HouseName};
-use super::kingdom::{Kingdom, LedBy, Seat};
-use super::land::{HeldBy, Land, LandBorders, LandHolding, LandName};
+use super::kingdom::{Kingdom, KingdomLedBy, KingdomSeat};
+use super::land::{Land, LandBorders, LandHeldBy, LandHolding, LandName};
 
 /// The id an entity is known by in RON data and save files. Every game entity
 /// has one; the Rhai surface (`ctx.gold("char-tywin")`, …) is built on it.
@@ -95,7 +95,7 @@ pub fn populate(world: &mut World, content: Content) {
                 CharacterGoldYield(c.gold_yield),
             ));
             if let Some(he) = house_e {
-                ec.insert(HouseOf(he));
+                ec.insert(CharacterOfHouse(he));
             }
             ec.id()
         };
@@ -116,9 +116,9 @@ pub fn populate(world: &mut World, content: Content) {
         world.resource_mut::<Registry>().insert(id, eid);
     }
 
-    // Buildings: one entity per built instance. Spawned after lands so `OnLand`
-    // resolves to an entity that already exists; the land's `BuildingsOn` is
-    // auto-maintained by the relationship hook.
+    // Buildings: one entity per built instance. Spawned after lands so
+    // `BuildingOnLand` resolves to an entity that already exists; the land's
+    // `LandHasBuildings` is auto-maintained by the relationship hook.
     for (id, b) in content.buildings.into_iter() {
         let Some(land_e) = world.resource::<Registry>().get(&b.land_id) else {
             continue;
@@ -128,7 +128,7 @@ pub fn populate(world: &mut World, content: Content) {
                 StringId(id.clone()),
                 Building,
                 BuildingOf(b.def_id),
-                OnLand(land_e),
+                BuildingOnLand(land_e),
             ))
             .id();
         world.resource_mut::<Registry>().insert(id, eid);
@@ -147,20 +147,21 @@ pub fn populate(world: &mut World, content: Content) {
         let eid = {
             let mut ec = world.spawn((StringId(id.clone()), Kingdom));
             if let Some(le) = leader {
-                ec.insert(LedBy(le));
+                ec.insert(KingdomLedBy(le));
             }
             if let Some(se) = seat {
-                ec.insert(Seat(se));
+                ec.insert(KingdomSeat(se));
             }
             ec.id()
         };
-        // Each land declares the kingdom holding it; `Holds` on the kingdom is
-        // auto-maintained by the relationship hook.
+        // Each land declares the kingdom holding it; `KingdomHolds` on the
+        // kingdom is auto-maintained by the relationship hook.
         for &le in &holds {
-            world.entity_mut(le).insert(HeldBy(eid));
+            world.entity_mut(le).insert(LandHeldBy(eid));
         }
-        // `LedBy` is a Bevy relationship: its hook auto-maintains `Leads` on the
-        // leader, so there is no manual reverse insert here.
+        // `KingdomLedBy` is a Bevy relationship: its hook auto-maintains
+        // `CharacterLeads` on the leader, so there is no manual reverse insert
+        // here.
         world.resource_mut::<Registry>().insert(id, eid);
     }
 }

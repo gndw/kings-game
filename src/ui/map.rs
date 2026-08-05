@@ -4,7 +4,7 @@
 use super::flag;
 use super::startup::RIGHT_BAR;
 use crate::app::Game;
-use crate::ecs::{Holds, LandBorders, LandHolding, Leads, Registry, StringId};
+use crate::ecs::{CharacterLeads, KingdomHolds, LandBorders, LandHolding, Registry, StringId};
 use crate::resources::border::Border;
 use bevy::camera::ScalingMode;
 use bevy::color::palettes::css;
@@ -111,27 +111,28 @@ pub fn update_draw(
     registry: Res<Registry>,
     border: Res<Border>,
     time: Res<Time>,
-    leads: Query<&Leads>,
-    holds_q: Query<&Holds>,
+    character_leads: Query<&CharacterLeads>,
+    kingdom_holds: Query<&KingdomHolds>,
     lands: Query<(&StringId, &LandBorders, &LandHolding)>,
     string_ids: Query<&StringId>,
 ) {
     let b = &*border;
     gizmos.rect_2d(
-        Isometry2d::from_xy(((b.x0 + b.x1) / 2.0) as f32, ((b.y0 + b.y1) / 2.0) as f32),
+        Isometry2d::from_xy(((b.x0 + b.x1) / 2.0) as f32, ((b.y1 + b.y0) / 2.0) as f32),
         Vec2::new((b.x1 - b.x0) as f32, (b.y1 - b.y0) as f32),
         css::BLUE,
     );
 
     let sel = game.ctx.selected_land_id.as_deref();
-    // The player's own holdings, via the reverse Leads link.
+    // The player's own holdings, via the reverse CharacterLeads link.
     let own: HashSet<String> = registry
         .get(&game.ctx.player_character_id)
-        .and_then(|pe| leads.get(pe).ok())
-        .and_then(|kl| holds_q.get(kl.kingdom()).ok())
-        .map(|h| {
-            h.iter()
-                .filter_map(|le| string_ids.get(le).ok().map(|s| s.0.clone()))
+        .and_then(|pe| character_leads.get(pe).ok())
+        .and_then(|character_leads| kingdom_holds.get(character_leads.kingdom()).ok())
+        .map(|kingdom_holds| {
+            kingdom_holds
+                .iter()
+                .filter_map(|le| string_ids.get(le).ok().map(|string_id| string_id.0.clone()))
                 .collect()
         })
         .unwrap_or_default();
@@ -139,7 +140,13 @@ pub fn update_draw(
     // Lands in spawn order: one archetype, so `Query` yields content order.
     let lands_vec: Vec<(String, Vec<(f64, f64)>, (f64, f64))> = lands
         .iter()
-        .map(|(sid, borders, holding)| (sid.0.clone(), borders.0.clone(), holding.0))
+        .map(|(string_id, land_borders, land_holding)| {
+            (
+                string_id.0.clone(),
+                land_borders.0.clone(),
+                land_holding.0,
+            )
+        })
         .collect();
     // Selected land last, so it draws over its neighbours.
     let order = lands_vec

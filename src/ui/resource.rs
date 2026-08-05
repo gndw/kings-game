@@ -3,7 +3,10 @@
 
 use super::FONT;
 use crate::app::Game;
-use crate::ecs::{CharacterGold, CharacterGoldYield, CharacterLevy, CharacterName, HouseName, HouseOf, Registry};
+use crate::ecs::{
+    CharacterGold, CharacterGoldYield, CharacterLevy, CharacterName, CharacterOfHouse, HouseName,
+    Registry,
+};
 use bevy::prelude::*;
 
 /// Named `ResourceBar`, not `Resource` — that one is Bevy's trait.
@@ -31,7 +34,7 @@ pub fn update(
     registry: Res<Registry>,
     mut bar: Single<&mut Text, With<ResourceBar>>,
     chars: Query<(&CharacterName, &CharacterGold, &CharacterGoldYield, &CharacterLevy)>,
-    house_of: Query<&HouseOf>,
+    character_of_house: Query<&CharacterOfHouse>,
     houses: Query<&HouseName>,
 ) {
     // A map that doesn't contain the player leaves the bar blank rather than
@@ -40,21 +43,27 @@ pub fn update(
         bar.0 = String::new();
         return;
     };
-    let Ok((ch, gold, gold_yield, levy)) = chars.get(player_e) else {
+    let Ok((character_name, character_gold, character_gold_yield, character_levy)) =
+        chars.get(player_e)
+    else {
         bar.0 = String::new();
         return;
     };
-    let house = house_of
+    let house = character_of_house
         .get(player_e)
         .ok()
-        .and_then(|ho| houses.get(ho.0).ok())
-        .map(|h| h.0.clone())
+        .and_then(|character_of_house| houses.get(character_of_house.0).ok())
+        .map(|house_name| house_name.0.clone())
         .unwrap_or_default();
     // The monthly income the gold script last published — it owns the rule, so
     // a mod that changes how income is figured changes this number with it.
     // Signed both places: a realm can run at a loss and a ruler can be in debt.
     bar.0 = format!(
         "{} of {}     {} gold ({:+}/mo)     {} levy",
-        ch.0, house, gold.0, gold_yield.0, levy.0
+        character_name.0,
+        house,
+        character_gold.0,
+        character_gold_yield.0,
+        character_levy.0
     );
 }

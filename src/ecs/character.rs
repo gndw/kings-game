@@ -2,16 +2,16 @@
 //!
 //! A character carries the [`Character`] marker plus [`CharacterName`],
 //! [`CharacterAge`], [`CharacterGold`], [`CharacterLevy`],
-//! [`CharacterGoldYield`], a [`HouseOf`] link to their house, and — if they
-//! rule — a [`Leads`] link to their kingdom.
+//! [`CharacterGoldYield`], a [`CharacterOfHouse`] link to their house, and — if
+//! they rule — a [`CharacterLeads`] link to their kingdom.
 
-use super::kingdom::LedBy;
+use super::kingdom::KingdomLedBy;
 use bevy::ecs::entity::Entity;
 use bevy::prelude::Component;
 
-/// A person. Their house is [`HouseOf`]; name in [`CharacterName`], age in
-/// [`CharacterAge`], treasury in [`CharacterGold`], troops in [`CharacterLevy`],
-/// monthly yield in [`CharacterGoldYield`].
+/// A person. Their house is [`CharacterOfHouse`]; name in [`CharacterName`],
+/// age in [`CharacterAge`], treasury in [`CharacterGold`], troops in
+/// [`CharacterLevy`], monthly yield in [`CharacterGoldYield`].
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Character;
 
@@ -19,9 +19,10 @@ pub struct Character;
 #[derive(Component, Debug, Clone)]
 pub struct CharacterName(pub String);
 
-/// Which house a character belongs to. Points at a [`House`](super::House) entity.
+/// Which house a character belongs to. Points at a [`House`](super::House)
+/// entity.
 #[derive(Component, Debug, Clone, Copy)]
-pub struct HouseOf(pub Entity);
+pub struct CharacterOfHouse(pub Entity);
 
 /// A character's age, in years.
 #[derive(Component, Debug, Clone, Copy, Default)]
@@ -40,17 +41,17 @@ pub struct CharacterLevy(pub u64);
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct CharacterGoldYield(pub i64);
 
-/// The kingdom a character leads — the auto-maintained reverse of [`LedBy`],
-/// for O(1) character→kingdom lookup. Read-only: set [`LedBy`] on the kingdom
-/// and Bevy's hook keeps this in sync.
+/// The kingdom a character leads — the auto-maintained reverse of
+/// [`KingdomLedBy`], for O(1) character→kingdom lookup. Read-only: set
+/// [`KingdomLedBy`] on the kingdom and Bevy's hook keeps this in sync.
 ///
 /// One-to-one (single `Entity`): a character leads at most one kingdom. If a
-/// second kingdom claims the same leader, Bevy drops the older [`LedBy`].
+/// second kingdom claims the same leader, Bevy drops the older [`KingdomLedBy`].
 #[derive(Component, Debug)]
-#[relationship_target(relationship = LedBy)]
-pub struct Leads(Entity);
+#[relationship_target(relationship = KingdomLedBy)]
+pub struct CharacterLeads(Entity);
 
-impl Leads {
+impl CharacterLeads {
     /// The kingdom this character leads.
     pub fn kingdom(&self) -> Entity {
         self.0

@@ -1,13 +1,13 @@
 //! Building entities: the individual built structures standing in a land.
 //!
 //! A building carries the [`Building`] marker, a [`BuildingOf`] link to its
-//! definition (the read-only roster entry that holds its stats), and an
-//! [`OnLand`] relationship to the land it stands on — whose reverse
-//! [`BuildingsOn`](super::land::BuildingsOn) is auto-maintained.
+//! definition (the read-only roster entry that holds its stats), and a
+//! [`BuildingOnLand`] relationship to the land it stands on — whose reverse
+//! [`LandHasBuildings`](super::land::LandHasBuildings) is auto-maintained.
 
 use bevy::ecs::entity::Entity;
 use bevy::prelude::Component;
-use super::land::BuildingsOn;
+use super::land::LandHasBuildings;
 
 /// A built building instance. No data of its own here: which kind of building it
 /// is lives in [`BuildingOf`] (a definition id), and its stats are looked up in
@@ -23,7 +23,7 @@ pub struct BuildingOf(pub String);
 
 /// The land a building stands on. Points at a [`Land`](super::Land) entity. A
 /// Bevy relationship component: inserting it auto-maintains
-/// [`BuildingsOn`](super::land::BuildingsOn) on the land.
+/// [`LandHasBuildings`](super::land::LandHasBuildings) on the land.
 #[derive(Component, Debug, Clone, Copy)]
-#[relationship(relationship_target = BuildingsOn)]
-pub struct OnLand(pub Entity);
+#[relationship(relationship_target = LandHasBuildings)]
+pub struct BuildingOnLand(pub Entity);

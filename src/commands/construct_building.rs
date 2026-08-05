@@ -6,12 +6,15 @@
 //! the same bundle [`crate::ecs::populate`] uses, then fires the
 //! `OnBuildingUpdated` event so
 //! [`on_building_updated`](crate::updates::yields::on_building_updated)
-//! re-sums the realm while `BuildingsOn` is already authoritative.
+//! re-sums the realm while `LandHasBuildings` is already authoritative.
 //!
 //! [`recompute_yields`]: crate::updates::yields::recompute_yields
 
 use super::core::{Choice, Command, MenuItem, next_id, note, ruled_lands};
-use crate::ecs::{Building, BuildingOf, CharacterGold, HeldBy, Leads, OnLand, Registry, StringId};
+use crate::ecs::{
+    Building, BuildingOf, BuildingOnLand, CharacterGold, CharacterLeads, LandHeldBy, Registry,
+    StringId,
+};
 use crate::resources::buildings::BuildingDefs;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
@@ -82,8 +85,8 @@ struct Go {
 }
 
 /// Check the rules against a snapshot (`&World`): the def exists, the actor
-/// rules the land (their kingdom — via [`Leads`] — equals the land's
-/// [`HeldBy`]), and they can afford the `construction_price`. Returns the
+/// rules the land (their kingdom — via [`CharacterLeads`] — equals the land's
+/// [`LandHeldBy`]), and they can afford the `construction_price`. Returns the
 /// go-ahead or a rejection reason.
 fn validate(world: &World, actor: &str, land_id: &str, def_id: &str) -> Result<Go, String> {
     let registry = world.resource::<Registry>();
@@ -99,14 +102,21 @@ fn validate(world: &World, actor: &str, land_id: &str, def_id: &str) -> Result<G
         .ok_or_else(|| format!("no land `{land_id}`"))?;
 
     // Rule check: the actor leads the kingdom that holds the land.
-    let actor_k = world.get::<Leads>(actor_e).map(|l| l.kingdom());
-    let land_k = world.get::<HeldBy>(land_e).map(|h| h.0);
+    let actor_k = world
+        .get::<CharacterLeads>(actor_e)
+        .map(|character_leads| character_leads.kingdom());
+    let land_k = world
+        .get::<LandHeldBy>(land_e)
+        .map(|land_held_by| land_held_by.0);
     if actor_k.is_none() || actor_k != land_k {
         return Err("you don't rule that land".into());
     }
 
     // Afford: no building into debt (boring default; flip to allow debt).
-    let gold = world.get::<CharacterGold>(actor_e).map(|g| g.0).unwrap_or(0);
+    let gold = world
+        .get::<CharacterGold>(actor_e)
+        .map(|character_gold| character_gold.0)
+        .unwrap_or(0);
     if gold < def.construction_price as i64 {
         return Err(format!("need {} gold", def.construction_price));
     }
@@ -128,20 +138,20 @@ fn construct(world: &mut World, actor: &str, land_id: &str, def_id: &str) {
     };
 
     // Pay.
-    if let Some(mut gold) = world.get_mut::<CharacterGold>(go.actor_e) {
-        gold.0 -= go.price as i64;
+    if let Some(mut character_gold) = world.get_mut::<CharacterGold>(go.actor_e) {
+        character_gold.0 -= go.price as i64;
     }
 
     // Spawn the instance — the relationship hook lands the new building in
-    // the land's `BuildingsOn` synchronously. Then ask the yield observer to
-    // re-sum this kingdom's holdings now that the data is authoritative.
+    // the land's `LandHasBuildings` synchronously. Then ask the yield observer
+    // to re-sum this kingdom's holdings now that the data is authoritative.
     let id = next_id(world);
     let eid = world
         .spawn((
             StringId(id.clone()),
             Building,
             BuildingOf(def_id.to_string()),
-            OnLand(go.land_e),
+            BuildingOnLand(go.land_e),
         ))
         .id();
     world.resource_mut::<Registry>().insert(id, eid);

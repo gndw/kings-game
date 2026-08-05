@@ -3,7 +3,8 @@
 
 use crate::app::Game;
 use crate::ecs::{
-    BuildingOf, CharacterGoldYield, CharacterLevy, Holds, HeldBy, Leads, LedBy, BuildingsOn,
+    BuildingOf, CharacterGoldYield, CharacterLeads, CharacterLevy, KingdomHolds, KingdomLedBy,
+    LandHasBuildings, LandHeldBy,
 };
 use crate::resources::buildings::BuildingDefs;
 use bevy::prelude::*;
@@ -29,30 +30,30 @@ pub const BUILDING_UPDATED: u8 = 2;
 pub const BUILDING_DESTROYED: u8 = 3;
 
 /// Sum the realm's holdings into `(gold, levy)`. Walks
-/// `kingdom → Holds → lands → BuildingsOn → BuildingOf → BuildingDefs` once;
-/// `gold_profit - gold_upkeep` accumulates into gold, `levy` accumulates into
-/// troops. Pure — no character iteration, shared by [`recompute_yields`] and
-/// the dirty-yield observer.
+/// `kingdom → KingdomHolds → lands → LandHasBuildings → BuildingOf →
+/// BuildingDefs` once; `gold_profit - gold_upkeep` accumulates into gold,
+/// `levy` accumulates into troops. Pure — no character iteration, shared by
+/// [`recompute_yields`] and the dirty-yield observer.
 fn sum_kingdom_yield(
     kingdom_e: Entity,
-    kingdoms: &Query<&Holds>,
-    lands: &Query<&BuildingsOn>,
-    buildings: &Query<&BuildingOf>,
+    kingdom_holds: &Query<&KingdomHolds>,
+    land_has_buildings: &Query<&LandHasBuildings>,
+    building_of: &Query<&BuildingOf>,
     defs: &BuildingDefs,
 ) -> (i64, u64) {
-    let Ok(holds) = kingdoms.get(kingdom_e) else {
+    let Ok(kingdom_holds) = kingdom_holds.get(kingdom_e) else {
         return (0, 0);
     };
     let (mut gold, mut levy) = (0i64, 0u64);
-    for land_e in holds.iter() {
-        let Ok(on) = lands.get(land_e) else {
+    for land_e in kingdom_holds.iter() {
+        let Ok(land_has_buildings) = land_has_buildings.get(land_e) else {
             continue;
         };
-        for b_e in on.iter() {
-            let Ok(of) = buildings.get(b_e) else {
+        for b_e in land_has_buildings.iter() {
+            let Ok(building_of) = building_of.get(b_e) else {
                 continue;
             };
-            if let Some(d) = defs.get(&of.0) {
+            if let Some(d) = defs.get(&building_of.0) {
                 gold += d.gold_profit as i64 - d.gold_upkeep as i64;
                 levy += d.levy as u64;
             }
@@ -64,22 +65,32 @@ fn sum_kingdom_yield(
 /// Recompute every character's `gold_yield` and `levy` from their holdings: a
 /// leader's realm summed via [`sum_kingdom_yield`]; everyone else zeroed.
 /// Runs in `Startup` so the opening screen already shows what a realm renders.
-/// `Option<&Leads>` walks every character so a non-ruler is zeroed, not left
-/// stale. After startup the construct/destroy commands trigger
+/// `Option<&CharacterLeads>` walks every character so a non-ruler is zeroed,
+/// not left stale. After startup the construct/destroy commands trigger
 /// [`OnBuildingUpdated`] for per-realm updates.
 pub fn recompute_yields(
-    mut characters: Query<(Option<&Leads>, &mut CharacterGoldYield, &mut CharacterLevy)>,
-    kingdoms: Query<&Holds>,
-    lands: Query<&BuildingsOn>,
-    buildings: Query<&BuildingOf>,
+    mut characters: Query<
+        (Option<&CharacterLeads>, &mut CharacterGoldYield, &mut CharacterLevy),
+    >,
+    kingdom_holds: Query<&KingdomHolds>,
+    land_has_buildings: Query<&LandHasBuildings>,
+    building_of: Query<&BuildingOf>,
     defs: Res<BuildingDefs>,
 ) {
-    for (leads, mut gold_yield, mut levy) in &mut characters {
-        let (g, l) = leads
-            .map(|l| sum_kingdom_yield(l.kingdom(), &kingdoms, &lands, &buildings, &defs))
+    for (character_leads, mut character_gold_yield, mut character_levy) in &mut characters {
+        let (g, l) = character_leads
+            .map(|character_leads| {
+                sum_kingdom_yield(
+                    character_leads.kingdom(),
+                    &kingdom_holds,
+                    &land_has_buildings,
+                    &building_of,
+                    &defs,
+                )
+            })
             .unwrap_or((0, 0));
-        gold_yield.0 = g;
-        levy.0 = l;
+        character_gold_yield.0 = g;
+        character_levy.0 = l;
     }
 }
 
@@ -88,32 +99,40 @@ pub fn recompute_yields(
 /// observer for [`OnBuildingUpdated`]; called via
 /// `world.trigger(OnBuildingUpdated { building, land, r#type: ... })`
 /// straight after the relevant structural change settles the relationship
-/// hooks, so `BuildingsOn` is already authoritative.
+/// hooks, so `LandHasBuildings` is already authoritative.
 pub fn on_building_updated(
     trigger: On<OnBuildingUpdated>,
     game: Option<Res<Game>>,
-    held_by: Query<&HeldBy>,
-    led_by: Query<&LedBy>,
-    mut chars: Query<(&mut CharacterGoldYield, &mut CharacterLevy)>,
-    kingdoms: Query<&Holds>,
-    lands: Query<&BuildingsOn>,
-    buildings: Query<&BuildingOf>,
+    land_held_by: Query<&LandHeldBy>,
+    kingdom_led_by: Query<&KingdomLedBy>,
+    mut character_gold_yields: Query<(&mut CharacterGoldYield, &mut CharacterLevy)>,
+    kingdom_holds: Query<&KingdomHolds>,
+    land_has_buildings: Query<&LandHasBuildings>,
+    building_of: Query<&BuildingOf>,
     defs: Res<BuildingDefs>,
 ) {
     if game.is_none() {
         return;
     }
     let land_e = trigger.event().land;
-    let Ok(&HeldBy(kingdom_e)) = held_by.get(land_e) else {
+    let Ok(&LandHeldBy(kingdom_e)) = land_held_by.get(land_e) else {
         return;
     };
-    let Ok(&LedBy(leader_e)) = led_by.get(kingdom_e) else {
+    let Ok(&KingdomLedBy(leader_e)) = kingdom_led_by.get(kingdom_e) else {
         return;
     };
-    let Ok((mut gy, mut lv)) = chars.get_mut(leader_e) else {
+    let Ok((mut character_gold_yield, mut character_levy)) =
+        character_gold_yields.get_mut(leader_e)
+    else {
         return;
     };
-    let (g, l) = sum_kingdom_yield(kingdom_e, &kingdoms, &lands, &buildings, &defs);
-    gy.0 = g;
-    lv.0 = l;
+    let (g, l) = sum_kingdom_yield(
+        kingdom_e,
+        &kingdom_holds,
+        &land_has_buildings,
+        &building_of,
+        &defs,
+    );
+    character_gold_yield.0 = g;
+    character_levy.0 = l;
 }

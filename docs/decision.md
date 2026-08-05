@@ -26,37 +26,40 @@ log lives in its own `Chronicles` resource; `Game` wraps `Ctx` as a `Resource`.
   still needed; `Registry` is a resource on the App world.
 - **Deleted:** `EntityIndex`, the read-model snapshot structs
   (`LandData`/`BuildingData`/… — the UI reads directly now), and the O(n)
-  kingdom scans (replaced by the auto-maintained `Leads` component for O(1)
-  character→kingdom lookup).
+  kingdom scans (replaced by the auto-maintained `CharacterLeads` component for
+  O(1) character→kingdom lookup).
 
-## Character↔kingdom leader link is Bevy-native (`LedBy`/`Leads`)
+## Character↔kingdom leader link is Bevy-native (`KingdomLedBy`/`CharacterLeads`)
 
-The kingdom→leader link is a Bevy `#[relationship]` component `LedBy` (on the
-kingdom, single `Entity`, source of truth) paired with the auto-maintained
-`#[relationship_target]` `Leads` (on the leader character). Inserting `LedBy`
-on a kingdom has Bevy's hook keep `Leads` on the leader in sync — no manual
-reverse insert, no drift.
+The kingdom→leader link is a Bevy `#[relationship]` component `KingdomLedBy`
+(on the kingdom, single `Entity`, source of truth) paired with the
+auto-maintained `#[relationship_target]` `CharacterLeads` (on the leader
+character). Inserting `KingdomLedBy` on a kingdom has Bevy's hook keep
+`CharacterLeads` on the leader in sync — no manual reverse insert, no drift.
 
 - **One-to-one** (the target holds a single `Entity`): a character leads at
   most one kingdom; if a second kingdom claims the same leader, Bevy drops the
-  older `LedBy`.
-- **Naming:** `LedBy` mirrors Bevy's `LikedBy`; `Leads` is the read-only
-  reverse. The manual `KingdomLedBy` reverse component is gone.
+  older `KingdomLedBy`.
+- **Naming:** `<Attached-to><Verb-or-preposition><Target>`, so the name tells
+  you which entity the component sits on. `KingdomLedBy` puts the verb after
+  the kingdom (mirroring Bevy's `LikedBy`); `CharacterLeads` puts the verb after
+  the character. The manual `KingdomLedBy` reverse component is gone.
 
-## Kingdom↔lands link is Bevy-native (`HeldBy`/`Holds`)
+## Kingdom↔lands link is Bevy-native (`LandHeldBy`/`KingdomHolds`)
 
-The kingdom→holdings link is a Bevy `#[relationship]` component `HeldBy`
+The kingdom→holdings link is a Bevy `#[relationship]` component `LandHeldBy`
 (on each **land**, single `Entity`, source of truth) paired with the
-auto-maintained `#[relationship_target]` `Holds` (`Vec<Entity>`) on the
-kingdom. A land declares its kingdom; Bevy's hook keeps the kingdom's `Holds`
-in sync — no manual `Vec`, no drift.
+auto-maintained `#[relationship_target]` `KingdomHolds` (`Vec<Entity>`) on the
+kingdom. A land declares its kingdom; Bevy's hook keeps the kingdom's
+`KingdomHolds` in sync — no manual `Vec`, no drift.
 
 - **Direction flipped from the old model:** the data has kingdoms listing
   `land_ids`, but the relationship's single-`Entity` side lives on the land, so
-  `populate` inserts `HeldBy(kingdom)` per land rather than a `Holds` Vec on the
-  kingdom.
-- **Naming:** `HeldBy` (land) / `Holds` (kingdom), the same active/passive
-  mirror as `LedBy`/`Leads`. Reads go through `RelationshipTarget::iter`
+  `populate` inserts `LandHeldBy(kingdom)` per land rather than a
+  `KingdomHolds` Vec on the kingdom.
+- **Naming:** same `<Attached-to><Verb-or-preposition><Target>` rule as the
+  leader link — `LandHeldBy` (land, single `Entity`) / `KingdomHolds`
+  (kingdom, `Vec<Entity>`). Reads go through `RelationshipTarget::iter`
   (in `bevy::prelude`), which yields owned `Entity`.
 
 ## ECS components split to one field each
@@ -105,29 +108,31 @@ Each *built building* is its own entity, not a string id on the land. The
 read-only *definition* per building kind stays a resource roster
 (`BuildingDefs`/`BuildingDef`, renamed from `Buildings`/`Building` and moved to
 `building_definitions.ron`); a building *instance* entity carries
-`BuildingOf(def_id)` to reach its stats and an `OnLand` relationship to its land.
+`BuildingOf(def_id)` to reach its stats and a `BuildingOnLand` relationship to
+its land.
 
 - **Why entities, not the old `Built(Vec<String>)`:** the task asked for
   buildings to be addressable ECS entities with a relationship to the land, so
   construction/destruction, per-instance state (health, level, …), and scripting
   by instance id all have somewhere to live. Keeping `Built` alongside would be
   duplicated state — the architecture's single-source-of-truth rule rules that
-  out, so `Built` is removed and the land's `BuildingsOn` target (the
-  auto-maintained reverse of `OnLand`) replaces it.
+  out, so `Built` is removed and the land's `LandHasBuildings` target (the
+  auto-maintained reverse of `BuildingOnLand`) replaces it.
 - **Definition roster stays a resource.** Stats (profit, upkeep, levy,
   `construction_price`) are shared and read-only across every instance of a
   kind; copying them onto each entity would duplicate definition data and break
   the definition/state split. So a building entity holds the *def id* and looks
   the stats up, exactly as `Built`'s ids once did — just from the entity side.
-- **Direction mirrors `HeldBy`/`Holds`:** the building is the child declaring its
-  land (`OnLand`, single `Entity`, source of truth); the land's `BuildingsOn`
-  auto-fills. Same active/passive mirror as the land↔kingdom link.
+- **Direction mirrors `LandHeldBy`/`KingdomHolds`:** the building is the child
+  declaring its land (`BuildingOnLand`, single `Entity`, source of truth); the
+  land's `LandHasBuildings` auto-fills. Same active/passive mirror as the
+  land↔kingdom link.
 - **Instances are state-only,** like `Kingdom`: a `buildings:` section in
   `*.state.ron` is an id-keyed overlay (`merge_state` id-replaces, since a save
   holds the full set of what's built), and `reconcile` drops any instance whose
   `def_id` or `land_id` no longer resolves — the same repair-not-refuse policy.
 - **Spawn order** gains a buildings step after lands and before kingdoms, so
-  `OnLand` resolves to an entity that already exists.
+  `BuildingOnLand` resolves to an entity that already exists.
 
 ## Player commands are self-describing (`Command` trait + `CommandRegistry`)
 
@@ -150,7 +155,8 @@ command's steps the same way; the roster of commands it offers is the
 - **`step_items` takes `&World`, not `&mut World`:** it is a read, and keeping
   it immutable lets the menu recompute the list from a shared borrow. The
   helpers (`ruled_lands`, `buildings_on_land`) therefore walk the relationship
-  targets (`Holds`, `BuildingsOn`) via `World::get` rather than `World::query`
+  targets (`KingdomHolds`, `LandHasBuildings`) via `World::get` rather than
+  `World::query`
   (which needs `&mut World`).
 - **`Arc<dyn Command>` in the registry:** so the palette can hand a command to
   `execute` (which needs `&mut World`) without holding the registry's borrow —

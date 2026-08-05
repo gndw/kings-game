@@ -1,11 +1,12 @@
 //! Land entities: the map's territories.
 //!
 //! A land carries the [`Land`] marker plus [`LandName`], [`LandBorders`],
-//! [`LandHolding`], a [`HeldBy`] link to the kingdom that holds it, and a
-//! [`BuildingsOn`] collection auto-maintained from each building's [`OnLand`].
+//! [`LandHolding`], a [`LandHeldBy`] link to the kingdom that holds it, and a
+//! [`LandHasBuildings`] collection auto-maintained from each building's
+//! [`BuildingOnLand`](super::building::BuildingOnLand).
 
-use super::building::OnLand;
-use super::kingdom::Holds;
+use super::building::BuildingOnLand;
+use super::kingdom::KingdomHolds;
 use bevy::ecs::entity::Entity;
 use bevy::prelude::Component;
 
@@ -28,14 +29,14 @@ pub struct LandHolding(pub (f64, f64));
 
 /// The kingdom that holds a land. Points at a [`Kingdom`](super::Kingdom)
 /// entity. A Bevy relationship component: inserting it auto-maintains
-/// [`Holds`] on the kingdom.
+/// [`KingdomHolds`] on the kingdom.
 #[derive(Component, Debug, Clone, Copy)]
-#[relationship(relationship_target = Holds)]
-pub struct HeldBy(pub Entity);
+#[relationship(relationship_target = KingdomHolds)]
+pub struct LandHeldBy(pub Entity);
 
 /// The buildings standing in a land — the auto-maintained reverse of
-/// [`OnLand`](super::building::OnLand). Read-only: set [`OnLand`] on each
-/// building and Bevy's hook keeps this in sync.
+/// [`BuildingOnLand`](super::building::BuildingOnLand). Read-only: set
+/// [`BuildingOnLand`] on each building and Bevy's hook keeps this in sync.
 #[derive(Component, Debug, Default)]
-#[relationship_target(relationship = OnLand)]
-pub struct BuildingsOn(Vec<Entity>);
+#[relationship_target(relationship = BuildingOnLand)]
+pub struct LandHasBuildings(Vec<Entity>);

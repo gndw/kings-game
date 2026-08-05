@@ -5,7 +5,7 @@
 //! lives in `crate::resources`.
 
 use crate::app::Game;
-use crate::ecs::{LandHolding, Leads, Registry, Seat, StringId};
+use crate::ecs::{CharacterLeads, KingdomSeat, LandHolding, Registry, StringId};
 use crate::rng::SimRng;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
@@ -47,25 +47,25 @@ impl Ctx {
     }
 
     /// Resolve the opening selection: the player's own capital, via their
-    /// kingdom's [`Seat`]. Runs in the `Startup` schedule, after
+    /// kingdom's [`KingdomSeat`]. Runs in the `Startup` schedule, after
     /// [`crate::ecs::populate`] has spawned the entities. Left `None` if the
     /// player leads no kingdom with a seat.
     pub fn startup(
         mut game: ResMut<Game>,
         registry: Res<Registry>,
-        leads: Query<&Leads>,
-        seats: Query<&Seat>,
+        character_leads: Query<&CharacterLeads>,
+        kingdom_seats: Query<&KingdomSeat>,
         string_ids: Query<&StringId>,
     ) {
         let Some(player_e) = registry.get(&game.ctx.player_character_id) else {
             return;
         };
-        game.ctx.selected_land_id = leads
+        game.ctx.selected_land_id = character_leads
             .get(player_e)
             .ok()
-            .and_then(|l| seats.get(l.kingdom()).ok())
-            .and_then(|s| string_ids.get(s.0).ok())
-            .map(|s| s.0.clone());
+            .and_then(|character_leads| kingdom_seats.get(character_leads.kingdom()).ok())
+            .and_then(|kingdom_seat| string_ids.get(kingdom_seat.0).ok())
+            .map(|string_id| string_id.0.clone());
     }
 }
 
@@ -85,18 +85,18 @@ pub fn step(world: &mut World, from_id: &str, dir: (f64, f64)) -> Option<String>
     let origin = world.get::<LandHolding>(from_e)?.0;
     let mut q = world.query::<(Entity, &StringId, &LandHolding)>();
     let mut best: Option<(f64, String)> = None;
-    for (e, sid, l) in q.iter(world) {
+    for (e, string_id, land_holding) in q.iter(world) {
         if e == from_e {
             continue;
         }
-        let (dx, dy) = (l.0.0 - origin.0, l.0.1 - origin.1);
+        let (dx, dy) = (land_holding.0.0 - origin.0, land_holding.0.1 - origin.1);
         let along = dx * dir.0 + dy * dir.1;
         // Perpendicular component: how far off-axis the candidate sits.
         let perp = (dx * dir.1 - dy * dir.0).abs();
         if along > perp {
             let score = along + perp * 2.0;
             if best.as_ref().map_or(true, |(bs, _)| score < *bs) {
-                best = Some((score, sid.0.clone()));
+                best = Some((score, string_id.0.clone()));
             }
         }
     }

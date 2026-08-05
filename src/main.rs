@@ -96,9 +96,9 @@ fn main() -> Result<()> {
         // The construct / destroy commands (and any future code path that
         // mutates a building's kingdom-graph footprint) trigger
         // `OnBuildingUpdated`. The observer walks
-        // `land → HeldBy → kingdom → LedBy → leader` and writes the new yield.
-        // `ui::resource::update` sits in `PostUpdate` so its read lands on the
-        // same frame as the observer's write.
+        // `land → LandHeldBy → kingdom → KingdomLedBy → leader` and writes the
+        // new yield. `ui::resource::update` sits in `PostUpdate` so its read
+        // lands on the same frame as the observer's write.
         .add_observer(updates::yields::on_building_updated)
         .add_systems(
             Update,

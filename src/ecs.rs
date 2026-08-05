@@ -10,15 +10,17 @@
 //! - **House** entities: [`StringId`], [`House`], [`HouseName`].
 //! - **Character** entities: [`StringId`], [`Character`], [`CharacterName`],
 //!   [`CharacterAge`], [`CharacterGold`], [`CharacterLevy`],
-//!   [`CharacterGoldYield`], [`HouseOf`], maybe [`Leads`].
+//!   [`CharacterGoldYield`], [`CharacterOfHouse`], maybe [`CharacterLeads`].
 //! - **Land** entities: [`StringId`], [`Land`], [`LandName`], [`LandBorders`],
-//!   [`LandHolding`], maybe [`HeldBy`], plus a [`BuildingsOn`] collection
-//!   auto-maintained from each building's [`OnLand`].
-//! - **Kingdom** entities: [`StringId`], [`Kingdom`], [`LedBy`],
-//!   [`Seat`], [`Holds`] (auto-maintained from each land's [`HeldBy`]).
+//!   [`LandHolding`], maybe [`LandHeldBy`], plus a [`LandHasBuildings`]
+//!   collection auto-maintained from each building's [`BuildingOnLand`].
+//! - **Kingdom** entities: [`StringId`], [`Kingdom`], [`KingdomLedBy`],
+//!   [`KingdomSeat`], [`KingdomHolds`] (auto-maintained from each land's
+//!   [`LandHeldBy`]).
 //! - **Building** entities: [`StringId`], [`Building`], [`BuildingOf`] (a
 //!   definition id into the [`BuildingDefs`](crate::resources::buildings::BuildingDefs)
-//!   roster), [`OnLand`] (whose reverse [`BuildingsOn`] sits on the land).
+//!   roster), [`BuildingOnLand`] (whose reverse [`LandHasBuildings`] sits on
+//!   the land).
 //!
 //! Building *definitions* are not entities — they are a read-only roster held
 //! as the [`BuildingDefs`](crate::resources::buildings::BuildingDefs) resource;

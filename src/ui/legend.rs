@@ -4,8 +4,8 @@
 use super::{FONT, TITLE};
 use crate::app::Game;
 use crate::ecs::{
-    BuildingOf, BuildingsOn, CharacterAge, CharacterName, Holds, HouseName, HouseOf, LandName,
-    LedBy, Registry, Seat, StringId,
+    BuildingOf, CharacterAge, CharacterName, CharacterOfHouse, HouseName, KingdomHolds,
+    KingdomLedBy, KingdomSeat, LandHasBuildings, LandName, Registry, StringId,
 };
 use crate::resources::buildings::BuildingDefs;
 use bevy::prelude::*;
@@ -178,17 +178,17 @@ pub fn update(
     // table every frame; it flips only on a new land or a changed building set.
     mut key: Local<Option<String>>,
     mut commands: Commands,
-    lands: Query<(&LandName, &BuildingsOn)>,
-    buildings: Query<&BuildingOf>,
-    kingdoms: Query<(&StringId, &Holds, Option<&Seat>, Option<&LedBy>)>,
+    lands: Query<(&LandName, &LandHasBuildings)>,
+    building_of: Query<&BuildingOf>,
+    kingdoms: Query<(&StringId, &KingdomHolds, Option<&KingdomSeat>, Option<&KingdomLedBy>)>,
     chars: Query<(&CharacterName, &CharacterAge)>,
-    house_of: Query<&HouseOf>,
+    character_of_house: Query<&CharacterOfHouse>,
     houses: Query<&HouseName>,
 ) {
     // Nothing selected, or a selected id the world doesn't resolve to a land:
     // blank the info/buildings (actions live in their own system and resolve
     // their own selection state — they self-clear to `(none)` when unselected).
-    let Some((id, land_e, (land, on))) = game
+    let Some((id, land_e, (land_name, land_has_buildings))) = game
         .ctx
         .selected_land_id
         .as_ref()
@@ -201,24 +201,30 @@ pub fn update(
     };
 
     // Section 1: id, land, kingdom detail.
-    let mut inf = format!("id:{id}\nname:{}", land.0);
-    if let Some((k_sid, _holds, seat, leader)) =
-        kingdoms.iter().find(|(_, h, _, _)| h.iter().any(|e| e == land_e))
+    let mut inf = format!("id:{id}\nname:{}", land_name.0);
+    if let Some((kingdom_string_id, _, kingdom_seat, kingdom_led_by)) = kingdoms
+        .iter()
+        .find(|(_, kingdom_holds, _, _)| kingdom_holds.iter().any(|e| e == land_e))
     {
-        inf.push_str(&format!("\nkingdom:{}", k_sid.0));
-        if seat.is_some_and(|s| s.0 == land_e) {
+        inf.push_str(&format!("\nkingdom:{}", kingdom_string_id.0));
+        if kingdom_seat.is_some_and(|kingdom_seat| kingdom_seat.0 == land_e) {
             inf.push_str(" (seat)");
         }
-        if let Some(leader) = leader
-            && let Ok((ch, cs)) = chars.get(leader.0)
+        if let Some(kingdom_led_by) = kingdom_led_by
+            && let Ok((character_name, character_age)) = chars.get(kingdom_led_by.0)
         {
-            let house = house_of
-                .get(leader.0)
+            let house = character_of_house
+                .get(kingdom_led_by.0)
                 .ok()
-                .and_then(|ho| houses.get(ho.0).ok())
-                .map(|h| h.0.clone())
+                .and_then(|character_of_house| {
+                    houses.get(character_of_house.0).ok()
+                })
+                .map(|house_name| house_name.0.clone())
                 .unwrap_or_default();
-            inf.push_str(&format!("\nruler:{} of {} ({})", ch.0, house, cs.0));
+            inf.push_str(&format!(
+                "\nruler:{} of {} ({})",
+                character_name.0, house, character_age.0
+            ));
         }
     }
     info.0 = inf;
@@ -230,15 +236,15 @@ pub fn update(
     // The key tracks selection + the building roster on it (def ids in order);
     // it changes when the land or its building set does.
     let mut sig = String::new();
-    for b_e in on.iter() {
-        let Some(of) = buildings.get(b_e).ok() else {
+    for b_e in land_has_buildings.iter() {
+        let Some(building_of) = building_of.get(b_e).ok() else {
             continue;
         };
         if !sig.is_empty() {
             sig.push(',');
         }
-        sig.push_str(&of.0);
-        let Some(d) = defs.get(&of.0) else {
+        sig.push_str(&building_of.0);
+        let Some(d) = defs.get(&building_of.0) else {
             continue;
         };
         gold += d.gold_profit as i64 - d.gold_upkeep as i64;

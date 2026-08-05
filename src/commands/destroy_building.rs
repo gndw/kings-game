@@ -2,15 +2,17 @@
 //! land the actor rules. The inverse of [`super::construct_building`].
 //!
 //! Despawning the entity auto-pulls it from the land's
-//! [`BuildingsOn`](crate::ecs::BuildingsOn) (the relationship hook); we then
-//! fire `OnBuildingUpdated` so
+//! [`LandHasBuildings`](crate::ecs::LandHasBuildings) (the relationship hook);
+//! we then fire `OnBuildingUpdated` so
 //! [`on_building_updated`](crate::updates::yields::on_building_updated)
-//! re-sums the realm against the post-hook `BuildingsOn`.
+//! re-sums the realm against the post-hook `LandHasBuildings`.
 //!
 //! [`recompute_yields`]: crate::updates::yields::recompute_yields
 
 use super::core::{Choice, Command, MenuItem, note, ruled_lands};
-use crate::ecs::{BuildingOf, BuildingsOn, HeldBy, Leads, OnLand, Registry, StringId};
+use crate::ecs::{
+    BuildingOf, BuildingOnLand, CharacterLeads, LandHasBuildings, LandHeldBy, Registry, StringId,
+};
 use crate::resources::buildings::BuildingDefs;
 use bevy::ecs::world::World;
 use bevy::prelude::RelationshipTarget;
@@ -70,26 +72,28 @@ impl Command for DestroyBuilding {
 }
 
 /// `(building_instance_id, "Name  (destroy)")` for every building standing on
-/// `land_id`, in the land's [`BuildingsOn`] order. The instance id is the value
-/// the command hands back to [`destroy`]. Walks the relationship target with
-/// `world::get` so it stays a `&World` read (`world::query` needs `&mut World`).
+/// `land_id`, in the land's [`LandHasBuildings`] order. The instance id is the
+/// value the command hands back to [`destroy`]. Walks the relationship target
+/// with `world::get` so it stays a `&World` read (`world::query` needs `&mut
+/// World`).
 fn buildings_on_land(world: &World, land_id: &str) -> Vec<(String, String)> {
     let Some(land_e) = world.resource::<Registry>().get(land_id) else {
         return Vec::new();
     };
-    let Some(on) = world.get::<BuildingsOn>(land_e) else {
+    let Some(land_has_buildings) = world.get::<LandHasBuildings>(land_e) else {
         return Vec::new();
     };
     let defs = world.resource::<BuildingDefs>();
-    on.iter()
+    land_has_buildings
+        .iter()
         .filter_map(|b_e| {
-            let sid = world.get::<StringId>(b_e)?;
-            let of = world.get::<BuildingOf>(b_e)?;
-            let label = match defs.get(&of.0) {
+            let string_id = world.get::<StringId>(b_e)?;
+            let building_of = world.get::<BuildingOf>(b_e)?;
+            let label = match defs.get(&building_of.0) {
                 Some(d) => format!("{}  (destroy)", d.name),
-                None => format!("{}  (destroy)", of.0),
+                None => format!("{}  (destroy)", building_of.0),
             };
-            Some((sid.0.clone(), label))
+            Some((string_id.0.clone(), label))
         })
         .collect()
 }
@@ -106,8 +110,12 @@ fn destroy(world: &mut World, actor: &str, land_id: &str, building_id: &str) {
     };
 
     // Rule check: the actor leads the kingdom that holds the land.
-    let actor_k = world.get::<Leads>(actor_e).map(|l| l.kingdom());
-    let land_k = world.get::<HeldBy>(land_e).map(|h| h.0);
+    let actor_k = world
+        .get::<CharacterLeads>(actor_e)
+        .map(|character_leads| character_leads.kingdom());
+    let land_k = world
+        .get::<LandHeldBy>(land_e)
+        .map(|land_held_by| land_held_by.0);
     if actor_k.is_none() || actor_k != land_k {
         return note(world, format!("cannot destroy on {land_id}: you don't rule that land"));
     }
@@ -115,19 +123,28 @@ fn destroy(world: &mut World, actor: &str, land_id: &str, building_id: &str) {
     let Some(b_e) = world.resource::<Registry>().get(building_id) else {
         return note(world, format!("cannot destroy on {land_id}: no such building"));
     };
-    if world.get::<OnLand>(b_e).map(|o| o.0) != Some(land_e) {
+    if world
+        .get::<BuildingOnLand>(b_e)
+        .map(|building_on_land| building_on_land.0)
+        != Some(land_e)
+    {
         return note(world, format!("cannot destroy on {land_id}: building not on that land"));
     }
 
     // Def name for the log, looked up before the despawn drops the component.
     let def_name = world
         .get::<BuildingOf>(b_e)
-        .and_then(|of| world.resource::<BuildingDefs>().get(&of.0).map(|d| d.name.clone()))
+        .and_then(|building_of| {
+            world
+                .resource::<BuildingDefs>()
+                .get(&building_of.0)
+                .map(|d| d.name.clone())
+        })
         .unwrap_or_else(|| building_id.to_string());
 
-    // Despawn + deregister. `OnLand`'s hook pulls the building out of the
-    // land's `BuildingsOn` synchronously, so the yield observer can re-sum
-    // authoritative data on the next line.
+    // Despawn + deregister. `BuildingOnLand`'s hook pulls the building out of
+    // the land's `LandHasBuildings` synchronously, so the yield observer can
+    // re-sum authoritative data on the next line.
     world.entity_mut(b_e).despawn();
     world.trigger(crate::updates::yields::OnBuildingUpdated {
         building: b_e,

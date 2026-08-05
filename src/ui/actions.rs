@@ -4,7 +4,7 @@
 
 use super::{FONT, TITLE};
 use crate::app::Game;
-use crate::ecs::{HeldBy, Leads, Registry};
+use crate::ecs::{CharacterLeads, LandHeldBy, Registry};
 use bevy::prelude::*;
 
 /// Column container for the actions list. Rebuilt by [`update`] every frame.
@@ -69,8 +69,8 @@ fn action_row(p: &mut ChildSpawnerCommands, hotkey: &str, label: &str) {
 fn player_rules(
     game: &Game,
     registry: &Registry,
-    leads: &Query<&Leads>,
-    held_by: &Query<&HeldBy>,
+    character_leads: &Query<&CharacterLeads>,
+    land_held_by: &Query<&LandHeldBy>,
 ) -> bool {
     let Some(land_e) = game
         .ctx
@@ -82,9 +82,12 @@ fn player_rules(
     };
     let player_kingdom = registry
         .get(&game.ctx.player_character_id)
-        .and_then(|pe| leads.get(pe).ok())
-        .map(|l| l.kingdom());
-    let land_kingdom = held_by.get(land_e).ok().map(|h| h.0);
+        .and_then(|pe| character_leads.get(pe).ok())
+        .map(|character_leads| character_leads.kingdom());
+    let land_kingdom = land_held_by
+        .get(land_e)
+        .ok()
+        .map(|land_held_by| land_held_by.0);
     matches!(
         (player_kingdom, land_kingdom),
         (Some(pk), Some(lk)) if pk == lk
@@ -96,12 +99,12 @@ fn player_rules(
 pub fn update(
     game: Res<Game>,
     registry: Res<Registry>,
-    leads: Query<&Leads>,
-    held_by: Query<&HeldBy>,
+    character_leads: Query<&CharacterLeads>,
+    land_held_by: Query<&LandHeldBy>,
     container: Single<Entity, With<LegendActions>>,
     mut commands: Commands,
 ) {
-    let ruled = player_rules(&game, &registry, &leads, &held_by);
+    let ruled = player_rules(&game, &registry, &character_leads, &land_held_by);
     commands.entity(*container).despawn_children();
     commands.entity(*container).with_children(|p| {
         if ruled {

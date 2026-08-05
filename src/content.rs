@@ -124,7 +124,7 @@ impl Content {
 
 /// One land: pure geometry (definition). What stands on a land is no longer a
 /// field here — each built building is its own entity, related to the land via
-/// `ecs::OnLand` (the instances live in [`Content::buildings`]).
+/// `ecs::BuildingOnLand` (the instances live in [`Content::buildings`]).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Land {
@@ -183,7 +183,8 @@ pub struct Character {
 /// One built building instance: which definition it is an instance of, and
 /// which land it stands on. State-only (what's built changes in play and
 /// belongs in a save), like [`Kingdom`]. Spawned as an entity by
-/// [`crate::ecs::populate`].
+/// [`crate::ecs::populate`] and related to its land via
+/// [`BuildingOnLand`](crate::ecs::BuildingOnLand).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Building {

@@ -284,6 +284,9 @@ asset-loaded sprites.
   fill is a **scanline** routine handling the map's concave shapes), holdings as
   circles, the selected land in yellow over its neighbours, the player's own
   holdings tinted green, and a waving pennant (`flag.rs`) on the selection.
+  `spawn_labels` runs once at startup and drops a `Text2d` entity per land just
+  below its holding circle, so the player can read land names off the map
+  without inspecting the legend.
 - **Panels** each own a marker `Component` (`LegendInfo`, `LegendBuildings`,
   `LegendActions`, `Chronicle`, `ResourceBar`, `Status`) and an `update` system
   that reads the world through `Query`/`Res` and writes into a `Single<&mut Text>`.

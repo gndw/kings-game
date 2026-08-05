@@ -4,7 +4,7 @@
 use super::flag;
 use super::startup::RIGHT_BAR;
 use crate::app::Game;
-use crate::ecs::{CharacterLeads, KingdomHolds, LandBorders, LandHolding, Registry, StringId};
+use crate::ecs::{CharacterLeads, KingdomHolds, Land, LandBorders, LandHolding, LandName, Registry, StringId};
 use crate::resources::border::Border;
 use bevy::camera::ScalingMode;
 use bevy::color::palettes::css;
@@ -12,6 +12,8 @@ use bevy::prelude::*;
 use std::collections::HashSet;
 
 const HOLDING_RADIUS: f32 = 4.0;
+/// Vertical gap between the holding circle and its land name label.
+const LABEL_GAP: f32 = 2.0;
 /// Gap between the horizontal lines that stand in for a polygon fill.
 // ponytail: fixed world-space step, like everything else here — the camera
 // never zooms, so it can't go coarse on screen.
@@ -69,6 +71,23 @@ pub fn startup(mut commands: Commands, border: Res<Border>) {
         }),
         Transform::from_xyz(((x0 + x1) / 2.0) as f32, ((y0 + y1) / 2.0) as f32, 0.0),
     ));
+}
+
+/// One text label per land, just below the holding circle. Spawned once —
+/// names don't change, so there's no work to do per frame.
+pub fn spawn_labels(
+    mut commands: Commands,
+    lands: Query<(&LandName, &LandHolding), With<Land>>,
+) {
+    for (name, holding) in &lands {
+        let (x, y) = holding.0;
+        commands.spawn((
+            Text2d::new(name.0.clone()),
+            TextFont::from_font_size(super::FONT),
+            TextColor(css::WHITE.into()),
+            Transform::from_xyz(x as f32, y as f32 - HOLDING_RADIUS - LABEL_GAP, 0.0),
+        ));
+    }
 }
 
 /// Arrow keys move the selection to the neighbouring land in that direction.

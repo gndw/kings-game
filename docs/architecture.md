@@ -87,7 +87,8 @@ Lives in `mods/`, `content.rs`, `state.rs`, `resources/`.
   only between `load` and `populate`; afterwards the ECS owns everything.
 
 - **`resources/`** are the data shapes that become `Resource`s (not entities):
-  `Border`, `Calendar` (+`validate`), `Date` (the walking clock),
+  `Border`, `Calendar` (+`validate`, carries the starting `Date` too),
+  `Date` (the walking clock, seeded from `Calendar::start`),
   `BuildingDefs`/`BuildingDef` (read-only roster of building kinds), and
   `Chronicles` (the append-only chronicle log).
 
@@ -373,7 +374,7 @@ asset-loaded sprites.
 | `src/content.rs` | `Content`, per-kind structs, `parse_file`, `merge`, `validate` |
 | `src/state.rs` | `StateFile`, `merge_state`, `reconcile` |
 | `src/mods/mod.rs` | `load(dir)` — the two-pass orchestrator |
-| `src/resources/*` | `Border`, `Calendar`(+validate), `Date`, `BuildingDefs`/`BuildingDef` (kind roster), `Chronicles` (log) |
+| `src/resources/*` | `Border`, `Calendar`(+validate, carries `start`), `Date` (the walking clock), `BuildingDefs`/`BuildingDef` (kind roster), `Chronicles` (log) |
 | `src/ecs/ecs.rs` | `StringId`, `Registry`, `populate` |
 | `src/ecs/{house,character,land,building,kingdom}.rs` | components + relationships per kind |
 | `src/ecs.rs` | module root, re-exports, the component map |

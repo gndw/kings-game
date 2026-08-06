@@ -1,4 +1,5 @@
-// How long a month and a year are, and how fast the clock may run.
+// How long a month and a year are, how fast the clock may run, and the date
+// the world opens on.
 //
 // Every month is the same length and there are no leap days, so a year is
 // simply days_per_month * months_per_year — 360 days here. Both must be at
@@ -8,7 +9,15 @@
 // list, slowest first, and the game starts on the first entry. Add or remove
 // entries freely; no zeroes.
 //
+// `start` is the date the world opens on. 1066.1.1 — the year of the
+// Conquest — by default. Pick any year a mod likes.
+//
 // A mod that wants ten-day months ships a folder with just this file in it.
 (
-    calendar: (days_per_month: 30, months_per_year: 12, speeds: [1, 3, 6, 15]),
+    calendar: (
+        days_per_month: 30,
+        months_per_year: 12,
+        speeds: [1, 3, 6, 15],
+        start: (year: 1066, month: 1, day: 1),
+    ),
 )

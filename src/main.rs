@@ -4,7 +4,6 @@ use kings_game::app::{Game, input, speed};
 use kings_game::ctx::Ctx;
 use kings_game::ecs;
 use kings_game::resources::chronicle::Chronicles;
-use kings_game::resources::date::Date;
 use kings_game::schedules::OnMonth;
 use kings_game::commands::CommandRegistry;
 use kings_game::ui;
@@ -44,6 +43,7 @@ fn main() -> Result<()> {
     }
     let calendar = mods.content.calendar.clone();
     let border = mods.content.border;
+    let start = calendar.start;
 
     // Session state without the world; entities are spawned into the App world
     // below, and the opening selection resolves once they exist.
@@ -86,8 +86,8 @@ fn main() -> Result<()> {
     let game = Game::new(ctx);
     let hz = f64::from(speed(&calendar.speeds, game.speed_idx));
     app.insert_resource(game)
-        .insert_resource(Date::START)
-        .insert_resource(Chronicles(vec![format!("{} -- the chronicle begins.", Date::START)]))
+        .insert_resource(start)
+        .insert_resource(Chronicles(vec![format!("{start} -- the chronicle begins.")]))
         .insert_resource(calendar)
         .insert_resource(border)
         .insert_resource(CommandMenu::default())

@@ -1,7 +1,9 @@
-//! The calendar: how long a month and a year are, and the clock speeds. Comes
-//! from `calendar.ron`, so a mod can run ten-day months or a five-month year
-//! without a rebuild. An ECS resource, seeded from content in `main`.
+//! The calendar: how long a month and a year are, the clock speeds, and the
+//! date the world opens on. Comes from `calendar.ron`, so a mod can run
+//! ten-day months or a five-month year, or open the world on any year of its
+//! choosing, without a rebuild. An ECS resource, seeded from content in `main`.
 
+use super::date::Date;
 use anyhow::{Result, bail};
 use bevy::prelude::Resource;
 use serde::Deserialize;
@@ -17,6 +19,12 @@ pub struct Calendar {
     /// Simulated days per real second. Keys `1`–`4` select an entry directly;
     /// the game starts on the first entry (paused).
     pub speeds: Vec<u32>,
+    /// The date the world opens on. Carried as part of the calendar so a mod
+    /// can drop the realm onto any year; the tick then walks forward from
+    /// here. ponytail: not range-checked against `months_per_year` /
+    /// `days_per_month` here — a typo'd 30th day in a 29-day month is caught
+    /// on the first rollover, not at load. Validate if/when it bites.
+    pub start: Date,
 }
 
 impl Default for Calendar {
@@ -25,6 +33,7 @@ impl Default for Calendar {
             days_per_month: 30,
             months_per_year: 12,
             speeds: vec![8, 16, 32, 64],
+            start: Date::default(),
         }
     }
 }

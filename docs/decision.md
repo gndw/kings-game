@@ -53,10 +53,10 @@ auto-maintained `#[relationship_target]` `KingdomHolds` (`Vec<Entity>`) on the
 kingdom. A land declares its kingdom; Bevy's hook keeps the kingdom's
 `KingdomHolds` in sync — no manual `Vec`, no drift.
 
-- **Direction flipped from the old model:** the data has kingdoms listing
-  `land_ids`, but the relationship's single-`Entity` side lives on the land, so
-  `populate` inserts `LandHeldBy(kingdom)` per land rather than a
-  `KingdomHolds` Vec on the kingdom.
+- **Direction flipped from the old model:** the data has kingdoms listing a
+  single `land_id`, but the relationship's single-`Entity` side lives on the
+  land, so `populate` inserts `LandHeldBy(kingdom)` on the held land rather
+  than a `KingdomHolds` Vec on the kingdom.
 - **Naming:** same `<Attached-to><Verb-or-preposition><Target>` rule as the
   leader link — `LandHeldBy` (land, single `Entity`) / `KingdomHolds`
   (kingdom, `Vec<Entity>`). Reads go through `RelationshipTarget::iter`
@@ -214,3 +214,25 @@ and `Transform::translation` in place.
   asymptotically and would need a snap threshold plus fiddly `dt * rate`
   constants per field. The tween is also ~25 lines; the smoothing version is
   not noticeably shorter.
+
+## A kingdom holds exactly one land
+
+`Kingdom::land_ids: Vec<String>` is gone; the field is `land_id: String`. One
+kingdom rules exactly one land, by id.
+
+- **Why:** the gameplay we're actually modelling — one ruler over one territory
+  at a time, with war being the way a ruler gains a new land — is a 1:1 model.
+  The Vec carried no gameplay the 1:1 doesn't (a kingdom couldn't *act* across
+  its lands any differently), and the multi-land reconcile was paying
+  complexity for an empty abstraction.
+- **The Bevy relationship is unchanged.** `LandHeldBy(Entity)` on the land
+  (single, source of truth) and `KingdomHolds(Vec<Entity>)` (the auto-maintained
+  reverse) still work — the runtime Vec will simply always hold one entity.
+  Touching the Bevy shape to also be 1:1 is a separate, larger refactor with
+  its own payoff (an `Option<KingdomHolds>` lookup), and YAGNI says skip it
+  until a caller needs it.
+- **Data invariants tightened.** A kingdom's `seat_land_id` must equal its
+  `land_id`; `reconcile` repairs any drift. `seat_land_id` is kept on the struct
+  for now (other code still reads it), even though it duplicates `land_id`;
+  collapse it once nothing reads it.
+

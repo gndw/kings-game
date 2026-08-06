@@ -196,15 +196,16 @@ pub struct Building {
     pub land_id: String,
 }
 
-/// A realm: a ruler, a capital, and the lands it holds. Wholly state — there is
-/// no definition half — so a kingdom only exists once the state overlay adds it.
+/// A realm: a ruler, a capital, and the single land it holds. Wholly state —
+/// there is no definition half — so a kingdom only exists once the state overlay
+/// adds it.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Kingdom {
     pub id: String,
     pub leader_character_id: String,
     pub seat_land_id: String,
-    pub land_ids: Vec<String>,
+    pub land_id: String,
 }
 
 impl Content {

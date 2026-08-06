@@ -99,7 +99,8 @@ pub fn reconcile(content: &mut Content) -> Vec<String> {
         true
     });
 
-    // Kingdoms: keep only those with a real leader and real lands.
+    // Kingdoms: keep only those with a real leader and a real land; fix up
+    // `seat_land_id` so it always equals the held land.
     content.kingdoms.retain(|id, k| {
         if !known_chars.contains(k.leader_character_id.as_str()) {
             notes.push(format!(
@@ -108,28 +109,21 @@ pub fn reconcile(content: &mut Content) -> Vec<String> {
             ));
             return false;
         }
-        k.land_ids.retain(|l| {
-            let known = known_lands.contains(l.as_str());
-            if !known {
-                notes.push(format!("kingdom `{id}` drops unknown land `{l}`"));
-            }
-            known
-        });
-        match k.land_ids.first() {
-            None => {
-                notes.push(format!("dropped kingdom `{id}`: no lands left"));
-                false
-            }
-            Some(first) if !k.land_ids.contains(&k.seat_land_id) => {
-                notes.push(format!(
-                    "kingdom `{id}` seat `{}` is not one of its lands; moved to `{first}`",
-                    k.seat_land_id
-                ));
-                k.seat_land_id = first.clone();
-                true
-            }
-            _ => true,
+        if !known_lands.contains(k.land_id.as_str()) {
+            notes.push(format!(
+                "dropped kingdom `{id}`: unknown land `{}`",
+                k.land_id
+            ));
+            return false;
         }
+        if k.seat_land_id != k.land_id {
+            notes.push(format!(
+                "kingdom `{id}` seat `{}` is not its land; moved to `{}`",
+                k.seat_land_id, k.land_id
+            ));
+            k.seat_land_id = k.land_id.clone();
+        }
+        true
     });
 
     notes

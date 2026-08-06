@@ -134,16 +134,12 @@ pub fn populate(world: &mut World, content: Content) {
         world.resource_mut::<Registry>().insert(id, eid);
     }
 
-    // Kingdoms: state-only. Their leader, seat and holdings resolve to the
+    // Kingdoms: state-only. Their leader, seat and single land resolve to the
     // characters and lands spawned above.
     for (id, k) in content.kingdoms.into_iter() {
         let leader = world.resource::<Registry>().get(&k.leader_character_id);
         let seat = world.resource::<Registry>().get(&k.seat_land_id);
-        let holds: Vec<Entity> = k
-            .land_ids
-            .iter()
-            .filter_map(|lid| world.resource::<Registry>().get(lid))
-            .collect();
+        let land = world.resource::<Registry>().get(&k.land_id);
         let eid = {
             let mut ec = world.spawn((StringId(id.clone()), Kingdom));
             if let Some(le) = leader {
@@ -154,9 +150,9 @@ pub fn populate(world: &mut World, content: Content) {
             }
             ec.id()
         };
-        // Each land declares the kingdom holding it; `KingdomHolds` on the
+        // The land declares the kingdom holding it; `KingdomHolds` on the
         // kingdom is auto-maintained by the relationship hook.
-        for &le in &holds {
+        if let Some(le) = land {
             world.entity_mut(le).insert(LandHeldBy(eid));
         }
         // `KingdomLedBy` is a Bevy relationship: its hook auto-maintains

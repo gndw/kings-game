@@ -1,6 +1,6 @@
 //! The ACTIONS panel in the right-hand column: context actions for the
-//! selected land (build/destroy). Spawned by [`spawn`] between the legend
-//! and the chronicle, updated each frame by [`update`].
+//! selected land (build/destroy). Spawned by [`spawn`] between the buildings
+//! panel and the chronicle, updated each frame by [`update`].
 
 use super::{FONT, TITLE};
 use crate::app::Game;
@@ -12,7 +12,7 @@ use bevy::prelude::*;
 pub struct LegendActions;
 
 /// The ACTIONS panel: title + column container of build/destroy hotkeys.
-/// Spawned as a sibling panel between `legend` and `chronicle` in the
+/// Spawned as a sibling panel between `buildings` and `chronicle` in the
 /// right-hand column.
 pub(super) fn spawn(col: &mut ChildSpawnerCommands, panel: Color) {
     col.spawn((

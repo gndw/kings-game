@@ -5,8 +5,8 @@
 //! The *definitions* live here (one entry per building kind, shared across every
 //! instance); the *instances* standing in lands are ECS entities
 //! (see [`crate::ecs::building`]). A building entity carries the id of its
-//! definition in [`BuildingOf`](crate::ecs::BuildingOf); yields and the legend
-//! look the stats up here.
+//! definition in [`BuildingOf`](crate::ecs::BuildingOf); yields and the
+//! buildings panel look the stats up here.
 
 use bevy::prelude::Resource;
 use indexmap::IndexMap;

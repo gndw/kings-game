@@ -1,25 +1,21 @@
-//! The legend panel above the chronicle: information about the selected
-//! land and its buildings.
+//! The BUILDINGS panel in the right-hand column: the selected land's
+//! buildings as a 3-column table (name / gold / levy) with a totals row.
 
 use super::{FONT, TITLE};
 use crate::app::Game;
 use crate::ecs::{
-    BuildingConstructionDate, BuildingOf, BuildingStatus, CharacterAge, CharacterName,
-    CharacterOfHouse, HouseName, KingdomHold, KingdomLedBy, LandHasBuildings, LandName, Registry,
-    StringId, BUILDING_STATUS_ACTIVE, BUILDING_STATUS_BUILDING,
+    BuildingConstructionDate, BuildingOf, BuildingStatus, LandHasBuildings, Registry,
+    BUILDING_STATUS_ACTIVE, BUILDING_STATUS_BUILDING,
 };
 use crate::resources::buildings::BuildingDefs;
 use bevy::prelude::*;
 
-/// id / land / kingdom detail block.
-#[derive(Component)]
-pub struct LegendInfo;
 /// Buildings list and total yield block. A column container; its child rows
 /// are rebuilt by [`update`] only when the selection or building roster changes.
 #[derive(Component)]
 pub struct LegendBuildings;
 
-/// Faint rule between the two sections.
+/// Faint rule above the totals row.
 const DIVIDER: Color = Color::srgba(0.5, 0.5, 0.5, 0.6);
 /// Fixed widths so the gold and levy columns line up across rows.
 const GOLD_W: f32 = 48.0;
@@ -27,12 +23,15 @@ const LEVY_W: f32 = 40.0;
 /// Greyed-out colour for building rows that are still under construction.
 const BUILDING_GREY: Color = Color::srgba(0.55, 0.55, 0.55, 1.0);
 
-/// Fills the space the chronicle leaves in the right-hand column.
+/// The BUILDINGS panel: title + column container of building rows. Spawned
+/// as a sibling panel below `information` in the right-hand column.
 pub(super) fn spawn(col: &mut ChildSpawnerCommands, panel: Color) {
     col.spawn((
         BackgroundColor(panel),
         Node {
             width: percent(100),
+            // Grows to fill whatever `information` leaves in the column
+            // (buildings sits above `actions` + `chronicle`, which are pinned).
             flex_grow: 1.0,
             flex_direction: FlexDirection::Column,
             padding: UiRect::all(px(6)),
@@ -41,46 +40,10 @@ pub(super) fn spawn(col: &mut ChildSpawnerCommands, panel: Color) {
     ))
     .with_children(|p| {
         p.spawn((
-            Text::new("INFORMATION"),
-            TextFont::from_font_size(FONT),
-            TextColor(TITLE),
-        ));
-        p.spawn((
-            Node {
-                width: percent(100),
-                height: px(1),
-                margin: UiRect::vertical(px(6)),
-                ..default()
-            },
-            BackgroundColor(DIVIDER),
-        ));
-        p.spawn((LegendInfo, Text::new(""), TextFont::from_font_size(FONT)));
-        // Section divider: a thin rule with vertical margin.
-        p.spawn((
-            Node {
-                width: percent(100),
-                height: px(1),
-                margin: UiRect::vertical(px(6)),
-                ..default()
-            },
-            BackgroundColor(DIVIDER),
-        ));
-        p.spawn((
             Text::new("BUILDINGS"),
             TextFont::from_font_size(FONT),
             TextColor(TITLE),
         ));
-        p.spawn((
-            Node {
-                width: percent(100),
-                height: px(1),
-                margin: UiRect::vertical(px(6)),
-                ..default()
-            },
-            BackgroundColor(DIVIDER),
-        ));
-        // The per-building table: a column of rows, each split into
-        // name (left, fills) / gold (right) / levy (right).
         p.spawn((
             LegendBuildings,
             Node {
@@ -179,70 +142,37 @@ fn rebuild(
     });
 }
 
-#[allow(clippy::type_complexity)]
 pub fn update(
     game: Res<Game>,
     registry: Res<Registry>,
     defs: Res<BuildingDefs>,
-    mut info: Single<&mut Text, (With<LegendInfo>, Without<LegendBuildings>)>,
     container: Single<Entity, With<LegendBuildings>>,
     // ponytail: cache key in a Local so identical selections don't respawn the
     // table every frame; it flips only on a new land or a changed building set.
     mut key: Local<Option<String>>,
     mut commands: Commands,
-    lands: Query<(&LandName, &LandHasBuildings)>,
+    lands: Query<&LandHasBuildings>,
     building_of: Query<&BuildingOf>,
     building_status: Query<&BuildingStatus>,
     building_finish: Query<&BuildingConstructionDate>,
-    kingdoms: Query<(&StringId, &KingdomHold, Option<&KingdomLedBy>)>,
-    chars: Query<(&CharacterName, &CharacterAge)>,
-    character_of_house: Query<&CharacterOfHouse>,
-    houses: Query<&HouseName>,
 ) {
     // Nothing selected, or a selected id the world doesn't resolve to a land:
-    // blank the info/buildings (actions live in their own system and resolve
-    // their own selection state — they self-clear to `(none)` when unselected).
-    let Some((id, land_e, (land_name, land_has_buildings))) = game
+    // blank the buildings table. The information panel clears itself
+    // independently.
+    let Some((id, land_has_buildings)) = game
         .ctx
         .selected_land_id
         .as_ref()
         .and_then(|id| registry.get(id).map(|e| (id.clone(), e)))
-        .and_then(|(id, e)| lands.get(e).ok().map(|ld| (id, e, ld)))
+        .and_then(|(id, e)| lands.get(e).ok().map(|l| (id, l)))
     else {
-        info.0.clear();
         rebuild(&mut commands, *container, &mut key, None, &[], None);
         return;
     };
 
-    // Section 1: id, land, kingdom detail.
-    let mut inf = format!("id:{id}\nname:{}", land_name.0);
-    if let Some((kingdom_string_id, _, kingdom_led_by)) = kingdoms
-        .iter()
-        .find(|(_, kingdom_hold, _)| kingdom_hold.0 == land_e)
-    {
-        inf.push_str(&format!("\nkingdom:{} (seat)", kingdom_string_id.0));
-        if let Some(kingdom_led_by) = kingdom_led_by
-            && let Ok((character_name, character_age)) = chars.get(kingdom_led_by.0)
-        {
-            let house = character_of_house
-                .get(kingdom_led_by.0)
-                .ok()
-                .and_then(|character_of_house| {
-                    houses.get(character_of_house.0).ok()
-                })
-                .map(|house_name| house_name.0.clone())
-                .unwrap_or_default();
-            inf.push_str(&format!(
-                "\nruler:{} of {} ({})",
-                character_name.0, house, character_age.0
-            ));
-        }
-    }
-    info.0 = inf;
-
-    // Section 2: per-building yield and total — walk the land's building
-    // instances through to their definitions for the stats. Buildings still
-    // under construction (`status == BUILDING`) are listed in grey with
+    // Per-building yield and total — walk the land's building instances
+    // through to their definitions for the stats. Buildings still under
+    // construction (`status == BUILDING`) are listed in grey with
     // `Name (YYYY.MM.DD)`; `INACTIVE` buildings are listed with no yield
     // info. Only `ACTIVE` buildings contribute to the totals.
     let (mut gold, mut levy) = (0i64, 0u64);

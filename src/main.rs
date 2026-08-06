@@ -122,7 +122,8 @@ fn main() -> Result<()> {
                 // Ponytail: keep debug systems last so they don't displace
                 // gameplay systems in the schedule.
                 ui::resource::update,
-                ui::legend::update,
+                ui::information::update,
+                ui::buildings::update,
                 ui::chronicle::update,
                 ui::status::update,
                 kings_game::debug::dump_characters,

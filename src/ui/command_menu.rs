@@ -1,6 +1,6 @@
 //! The command palette: a spotlight-style modal that launches player commands.
 //!
-//! Press **C** to open (or **B**/**D** from the legend to jump straight into
+//! Press **C** to open (or **B**/**D** from the actions panel to jump straight into
 //! the selected land's construct/destroy step). The top-level list shows every registered
 //! [`Command`](crate::commands::Command); up/down moves, **Enter** drills into
 //! the picked command's own selection steps, and the final step's pick runs its
@@ -158,7 +158,7 @@ fn item(c: &mut ChildSpawnerCommands, label: &str, selected: bool) {
 }
 
 /// Render the stored list: toggle the overlay and rebuild the rows only when
-/// `(command, step, index)` moves (the legend's table cache idea). Reads the
+/// `(command, step, index)` moves (the buildings panel's table cache idea). Reads the
 /// list [`input`] stored on the resource, not the world.
 pub fn update(
     menu: Res<CommandMenu>,
@@ -196,7 +196,7 @@ pub fn update(
 }
 
 /// Exclusive: open on **C** (or jump straight into a land command via the
-/// legend's **B**/**D** hotkeys), navigate, dispatch on the final **Enter**.
+/// actions panel's **B**/**D** hotkeys), navigate, dispatch on the final **Enter**.
 /// Exclusive because it computes the on-screen list via `&World` (each command
 /// decides its own steps/queries) and the last step calls the command's
 /// `execute`, an `&mut World` method.
@@ -370,7 +370,7 @@ fn close(world: &mut World) {
 }
 
 /// Open the palette into `command` at `step` with `choices` already made. Used
-/// by the **C** top-level open (`command = None`, step 0) and the legend's
+/// by the **C** top-level open (`command = None`, step 0) and the actions panel's
 /// **B**/**D** hotkeys (`command = Some(i)`, step 1, land pre-picked).
 fn open_menu(world: &mut World, command: Option<usize>, step: usize, choices: Vec<Choice>) {
     {
@@ -397,7 +397,7 @@ fn find_command(world: &World, name: &str) -> Option<usize> {
 
 /// Open a land command (Construct/Destroy Building) straight to its building
 /// step with the selected land pre-picked, skipping the command list and the
-/// land step — the legend's **B**/**D** hotkeys. Fires only when the player
+/// land step — the actions panel's **B**/**D** hotkeys. Fires only when the player
 /// rules the selected land; otherwise the menu stays closed.
 fn open_land_action(world: &mut World, construct: bool) {
     let name = if construct {

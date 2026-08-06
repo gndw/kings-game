@@ -4,11 +4,12 @@
 //! `startup`.
 
 pub mod actions;
+pub mod buildings;
 pub mod camera;
 pub mod chronicle;
 pub mod command_menu;
 pub mod flag;
-pub mod legend;
+pub mod information;
 pub mod map;
 pub mod resource;
 pub mod startup;

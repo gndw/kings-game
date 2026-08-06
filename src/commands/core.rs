@@ -104,8 +104,8 @@ impl CommandRegistry {
 /// The land `actor` rules (can act on): actor → [`CharacterLeads`] → kingdom
 /// → its [`KingdomHold`] link (the auto-maintained reverse of the held land's
 /// [`LandHeldBy`]). Reads the relationship target with `world::get` so it
-/// stays a `&World` read (`world::query` needs `&mut World`); `ui::legend`
-/// reads the same target.
+/// stays a `&World` read (`world::query` needs `&mut World`); the buildings
+/// panel reads the same target.
 pub(super) fn ruled_lands(world: &World, actor: &str) -> Vec<(String, String)> {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return Vec::new();
@@ -127,7 +127,7 @@ pub(super) fn ruled_lands(world: &World, actor: &str) -> Vec<(String, String)> {
 
 /// True if `actor` rules `land_id` (their [`CharacterLeads`] kingdom is the
 /// land's [`LandHeldBy`] kingdom) — the predicate form of [`ruled_lands`], for
-/// gating context actions like the legend's build/destroy hotkeys.
+/// gating context actions like the actions panel's build/destroy hotkeys.
 pub fn rules_land(world: &World, actor: &str, land_id: &str) -> bool {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return false;

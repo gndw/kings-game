@@ -1,6 +1,6 @@
 //! The flex layout holding the text panels and the two full-width bars.
 
-use super::{GAP, actions, chronicle, legend, resource, status};
+use super::{GAP, actions, buildings, chronicle, information, resource, status};
 use bevy::prelude::*;
 
 pub(crate) const RIGHT_BAR: f32 = 0.3;
@@ -8,8 +8,8 @@ pub(crate) const RIGHT_BAR: f32 = 0.3;
 /// The two text panels.
 pub fn startup(mut commands: Commands) {
     // The old terminal layout, as a flex tree: the resource bar on top, a row
-    // holding the map and the right-hand column (legend / actions /
-    // chronicle), the status bar underneath.
+    // holding the map and the right-hand column (information / buildings /
+    // actions / chronicle), the status bar underneath.
     let panel = Color::srgba(0.1, 0.1, 0.1, 1.0);
     commands
         .spawn(Node {
@@ -39,7 +39,8 @@ pub fn startup(mut commands: Commands) {
                     ..default()
                 })
                 .with_children(|col| {
-                    legend::spawn(col, panel);
+                    information::spawn(col, panel);
+                    buildings::spawn(col, panel);
                     actions::spawn(col, panel);
                     chronicle::spawn(col, panel);
                 });

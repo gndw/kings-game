@@ -7,7 +7,7 @@
 //! [`BuildingStatus`] tracks whether it is `ACTIVE` (counted in yields),
 //! `INACTIVE` (silently ignored), or `BUILDING` (under construction, finishing
 //! at [`BuildingConstructionDate`]). Only `ACTIVE` buildings contribute to
-//! `sum_kingdom_yield` and to the legend's yield column.
+//! `sum_kingdom_yield` and to the buildings panel's yield column.
 
 use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;
@@ -52,6 +52,6 @@ pub struct BuildingStatus(pub u8);
 /// The date the building becomes `ACTIVE` (when present — only meaningful on
 /// `BUILDING` buildings). Set at construction time as
 /// `current_date + def.construction_time`; removed once the building flips to
-/// `ACTIVE`. The legend shows this on `BUILDING` rows in place of yield.
+/// `ACTIVE`. The buildings panel shows this on `BUILDING` rows in place of yield.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct BuildingConstructionDate(pub Date);

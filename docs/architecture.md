@@ -200,7 +200,8 @@ Lives in `updates/` and `schedules.rs`.
     schedules, strictly after `Update` finishes), so the bar's read against
     `CharacterGoldYield` happens on the same frame as the event-driven
     write rather than the next. Other UI systems (`map::update_input/draw`,
-    `legend::update`, `chronicle::update`, `status::update`, etc.) stay in
+    `information::update`, `buildings::update`, `chronicle::update`,
+    `status::update`, etc.) stay in
     `Update` — the bar is the one that has to react to ECS writes from
     `Update`'s event-driven recompute.
   - `payout` (`updates/payout.rs`) — runs in `OnMonth`. Pays every leader
@@ -283,7 +284,8 @@ asset-loaded sprites.
 
 - **Layout** (`ui/startup.rs`): a column flex tree — `resource` bar on top, a row
   holding the map (left, full remaining width) and the right-hand column
-  (`legend` over `actions` over `chronicle`, the latter pinned to 30% height),
+  (`information` over `buildings` over `actions` over `chronicle`, the latter
+  pinned to 30% height),
   `status` bar on
   the bottom. `RIGHT_BAR = 0.3` is shared with the camera so the map lands beside
   the column, not under it.
@@ -321,12 +323,15 @@ asset-loaded sprites.
   `LegendActions`: their `update` holds a `Single<Entity, With<…>>` and rebuilds
   child rows — buildings only when a `Local` cache key (selection + building
   roster) changes, actions every frame since the list is ≤2 rows.
-  - `legend` — the selected land, split into two sections separated by a thin
-    divider node: section 1 (`LegendInfo`) holds id/name and the holder kingdom
-    + ruler (name, house, age); section 2 (`LegendBuildings`) is a 3-column
-    table — name (left, fills) / gold (right) / levy (right), one row per
-    building, then a thin rule and a `total` row in the same layout.
-  - `actions` — its own panel between `legend` and `chronicle`: a title
+  - `information` — the selected land, in one panel: a title (`INFORMATION`)
+    + a `LegendInfo` text block holding id/name and the holder kingdom +
+    ruler (name, house, age). Its `update` clears the text on no selection.
+  - `buildings` — the selected land, in a sibling panel: a title
+    (`BUILDINGS`) + a `LegendBuildings` 3-column table — name (left, fills) /
+    gold (right) / levy (right), one row per building, then a thin rule and a
+    `total` row in the same layout. Its `update` clears the table on no
+    selection.
+  - `actions` — its own panel between `buildings` and `chronicle`: a title
     (`ACTIONS`) + a `LegendActions` column listing the player's build/destroy
     hotkeys if the player rules the selected land, else a `(none)` placeholder.
     `update` runs as its own system each frame.
@@ -343,7 +348,7 @@ asset-loaded sprites.
   The exclusive `input` recomputes the current step's list via the command's
   `step_items` (the one path with `&World`) and stores it on the resource; the
   non-exclusive `update` just renders that stored list, rebuilding rows only when
-  `(command, step, cursor)` changes (the legend's cache idea). The final step's
+  `(command, step, cursor)` changes (the buildings panel's cache idea). The final step's
   pick hands the accumulated choices to the command's `execute`. While open it
   owns `esc` and the arrows, so `app::input` and `ui::map::update_input` read its
   `open` flag and yield them.

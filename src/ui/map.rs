@@ -17,6 +17,19 @@ use bevy::sprite::Anchor;
 use std::collections::HashSet;
 
 const HOLDING_RADIUS: f32 = 12.0;
+/// World-space offset for the per-label black outline. At the camera's 0.7
+/// scale this is roughly a 1px border, just enough to lift the white text off
+/// the varied land fills without overpowering the names.
+const LABEL_BORDER_OFFSET: f32 = 1.5;
+/// Black-text offsets that form a four-direction outline around each label.
+/// `Text2d` has no built-in outline; the trick is to spawn one black copy at
+/// each cardinal direction behind the main white text.
+const LABEL_BORDER_SHADOWS: [(f32, f32); 4] = [
+    (LABEL_BORDER_OFFSET, 0.0),
+    (-LABEL_BORDER_OFFSET, 0.0),
+    (0.0, LABEL_BORDER_OFFSET),
+    (0.0, -LABEL_BORDER_OFFSET),
+];
 
 /// Gizmo config group dedicated to the per-land polygon outline. Uses a
 /// thinner 1.0px stroke (vs the default 2.0px) so the borders read as refined
@@ -83,21 +96,31 @@ pub fn startup(
     lands: Query<(Entity, &LandName, &LandHolding)>,
 ) {
     for (land_e, name, holding) in &lands {
+        let x = holding.0.0 as f32;
+        let y = holding.0.1 as f32 - HOLDING_RADIUS - 4.0;
+        // Black outline: four black copies of the text at cardinal offsets
+        // behind the main white text. `Text2dShadow` is a single drop shadow,
+        // not a real outline, so the border is faked with sibling entities.
+        for (dx, dy) in LABEL_BORDER_SHADOWS {
+            commands.spawn((
+                Text2d::new(name.0.clone()),
+                TextFont::from_font_size(18.0).with_font_weight(FontWeight::EXTRA_BOLD),
+                TextColor(Color::Srgba(css::BLACK)),
+                TextLayout::new(Justify::Center, LineBreak::WordBoundary),
+                Anchor::TOP_CENTER,
+                LandLabel(land_e),
+                Transform::from_xyz(x + dx, y + dy, 1.0),
+            ));
+        }
+        // Main label on top of the outline.
         commands.spawn((
             Text2d::new(name.0.clone()),
-            TextFont::from_font_size(18.0),
+            TextFont::from_font_size(18.0).with_font_weight(FontWeight::EXTRA_BOLD),
             TextColor(Color::Srgba(css::WHITE)),
-            // Centre each line within its own bounding box so the two lines
-            // stack as a centred column under the holding, not a ragged
-            // left-aligned one.
             TextLayout::new(Justify::Center, LineBreak::WordBoundary),
             Anchor::TOP_CENTER,
             LandLabel(land_e),
-            Transform::from_xyz(
-                holding.0.0 as f32,
-                holding.0.1 as f32 - HOLDING_RADIUS - 4.0,
-                1.0,
-            ),
+            Transform::from_xyz(x, y, 1.0),
         ));
     }
 }

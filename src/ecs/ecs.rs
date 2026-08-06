@@ -144,13 +144,13 @@ pub fn populate(world: &mut World, content: Content) {
             if let Some(le) = leader {
                 ec.insert(KingdomLedBy(le));
             }
+            // The kingdom declares the land it holds; `LandHeldBy` on the land
+            // is auto-maintained by the relationship hook.
+            if let Some(le) = land {
+                ec.insert(KingdomHold(le));
+            }
             ec.id()
         };
-        // The kingdom declares the land it holds; `LandHeldBy` on the land
-        // is auto-maintained by the relationship hook.
-        if let Some(le) = land {
-            world.entity_mut(eid).insert(KingdomHold(le));
-        }
         // `KingdomLedBy` is a Bevy relationship: its hook auto-maintains
         // `CharacterLeads` on the leader, so there is no manual reverse insert
         // here.

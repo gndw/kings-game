@@ -13,6 +13,10 @@ use bevy::prelude::*;
 /// land-unit. 3.0 = 200% of the bbox in each axis, i.e. the land takes the
 /// middle third of the visible area.
 const ZOOM_MARGIN: f64 = 3.0;
+/// Floor on the zoomed view's `min_w`/`min_h`. Even a tiny land won't zoom
+/// in past this — the camera still shows at least `MIN_ZOOM` world units on
+/// each axis, so the view stays readable on small lands.
+const MIN_ZOOM: f32 = 2000.0;
 /// The 0.7 default scale on the orthographic projection (30% zoom-in over a
 /// 1:1 view). Kept consistent across default and zoomed views so the
 /// transition doesn't pop.
@@ -133,8 +137,9 @@ fn compute_target(
             ((lx0 + lx1) / 2.0) as f32,
             ((ly0 + ly1) / 2.0) as f32,
         );
-        target.min_w = ((lx1 - lx0) * ZOOM_MARGIN) as f32 / (1.0 - RIGHT_BAR);
-        target.min_h = ((ly1 - ly0) * ZOOM_MARGIN) as f32;
+        // Clamp to MIN_ZOOM so very small lands don't zoom past readability.
+        target.min_w = (((lx1 - lx0) * ZOOM_MARGIN) as f32 / (1.0 - RIGHT_BAR)).max(MIN_ZOOM);
+        target.min_h = (((ly1 - ly0) * ZOOM_MARGIN) as f32).max(MIN_ZOOM);
     }
     target
 }

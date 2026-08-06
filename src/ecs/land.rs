@@ -1,12 +1,13 @@
 //! Land entities: the map's territories.
 //!
 //! A land carries the [`Land`] marker plus [`LandName`], [`LandBorders`],
-//! [`LandHolding`], a [`LandHeldBy`] link to the kingdom that holds it, and a
-//! [`LandHasBuildings`] collection auto-maintained from each building's
+//! [`LandHolding`], a [`LandHeldBy`] link to the kingdom that holds it (auto-
+//! maintained from the kingdom's [`KingdomHold`](super::kingdom::KingdomHold)),
+//! and a [`LandHasBuildings`] collection auto-maintained from each building's
 //! [`BuildingOnLand`](super::building::BuildingOnLand).
 
 use super::building::BuildingOnLand;
-use super::kingdom::KingdomHolds;
+use super::kingdom::KingdomHold;
 use bevy::ecs::entity::Entity;
 use bevy::prelude::Component;
 
@@ -27,12 +28,21 @@ pub struct LandBorders(pub Vec<(f64, f64)>);
 #[derive(Component, Debug, Clone, Copy)]
 pub struct LandHolding(pub (f64, f64));
 
-/// The kingdom that holds a land. Points at a [`Kingdom`](super::Kingdom)
-/// entity. A Bevy relationship component: inserting it auto-maintains
-/// [`KingdomHolds`] on the kingdom.
+/// The kingdom that holds a land — the auto-maintained reverse of
+/// [`KingdomHold`](super::kingdom::KingdomHold). One-to-one: a land is held by
+/// at most one kingdom. Read-only: set [`KingdomHold`] on a kingdom and Bevy's
+/// hook keeps this in sync. The field is private (Bevy requires it for
+/// `RelationshipTarget` correctness); read it via [`LandHeldBy::kingdom`].
 #[derive(Component, Debug, Clone, Copy)]
-#[relationship(relationship_target = KingdomHolds)]
-pub struct LandHeldBy(pub Entity);
+#[relationship_target(relationship = KingdomHold)]
+pub struct LandHeldBy(Entity);
+
+impl LandHeldBy {
+    /// The kingdom that holds this land.
+    pub fn kingdom(&self) -> Entity {
+        self.0
+    }
+}
 
 /// The buildings standing in a land — the auto-maintained reverse of
 /// [`BuildingOnLand`](super::building::BuildingOnLand). Read-only: set

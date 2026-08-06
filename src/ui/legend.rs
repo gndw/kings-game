@@ -4,8 +4,8 @@
 use super::{FONT, TITLE};
 use crate::app::Game;
 use crate::ecs::{
-    BuildingOf, CharacterAge, CharacterName, CharacterOfHouse, HouseName, KingdomHolds,
-    KingdomLedBy, KingdomSeat, LandHasBuildings, LandName, Registry, StringId,
+    BuildingOf, CharacterAge, CharacterName, CharacterOfHouse, HouseName, KingdomHold,
+    KingdomLedBy, LandHasBuildings, LandName, Registry, StringId,
 };
 use crate::resources::buildings::BuildingDefs;
 use bevy::prelude::*;
@@ -180,7 +180,7 @@ pub fn update(
     mut commands: Commands,
     lands: Query<(&LandName, &LandHasBuildings)>,
     building_of: Query<&BuildingOf>,
-    kingdoms: Query<(&StringId, &KingdomHolds, Option<&KingdomSeat>, Option<&KingdomLedBy>)>,
+    kingdoms: Query<(&StringId, &KingdomHold, Option<&KingdomLedBy>)>,
     chars: Query<(&CharacterName, &CharacterAge)>,
     character_of_house: Query<&CharacterOfHouse>,
     houses: Query<&HouseName>,
@@ -202,14 +202,11 @@ pub fn update(
 
     // Section 1: id, land, kingdom detail.
     let mut inf = format!("id:{id}\nname:{}", land_name.0);
-    if let Some((kingdom_string_id, _, kingdom_seat, kingdom_led_by)) = kingdoms
+    if let Some((kingdom_string_id, _, kingdom_led_by)) = kingdoms
         .iter()
-        .find(|(_, kingdom_holds, _, _)| kingdom_holds.iter().any(|e| e == land_e))
+        .find(|(_, kingdom_hold, _)| kingdom_hold.0 == land_e)
     {
-        inf.push_str(&format!("\nkingdom:{}", kingdom_string_id.0));
-        if kingdom_seat.is_some_and(|kingdom_seat| kingdom_seat.0 == land_e) {
-            inf.push_str(" (seat)");
-        }
+        inf.push_str(&format!("\nkingdom:{} (seat)", kingdom_string_id.0));
         if let Some(kingdom_led_by) = kingdom_led_by
             && let Ok((character_name, character_age)) = chars.get(kingdom_led_by.0)
         {

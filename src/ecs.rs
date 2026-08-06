@@ -12,11 +12,11 @@
 //!   [`CharacterAge`], [`CharacterGold`], [`CharacterLevy`],
 //!   [`CharacterGoldYield`], [`CharacterOfHouse`], maybe [`CharacterLeads`].
 //! - **Land** entities: [`StringId`], [`Land`], [`LandName`], [`LandBorders`],
-//!   [`LandHolding`], maybe [`LandHeldBy`], plus a [`LandHasBuildings`]
-//!   collection auto-maintained from each building's [`BuildingOnLand`].
+//!   [`LandHolding`], maybe [`LandHeldBy`] (auto-maintained from the holding
+//!   kingdom's [`KingdomHold`]), plus a [`LandHasBuildings`] collection
+//!   auto-maintained from each building's [`BuildingOnLand`].
 //! - **Kingdom** entities: [`StringId`], [`Kingdom`], [`KingdomLedBy`],
-//!   [`KingdomSeat`], [`KingdomHolds`] (auto-maintained from each land's
-//!   [`LandHeldBy`]).
+//!   [`KingdomHold`] (its single held land).
 //! - **Building** entities: [`StringId`], [`Building`], [`BuildingOf`] (a
 //!   definition id into the [`BuildingDefs`](crate::resources::buildings::BuildingDefs)
 //!   roster), [`BuildingOnLand`] (whose reverse [`LandHasBuildings`] sits on

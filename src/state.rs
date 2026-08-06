@@ -99,8 +99,7 @@ pub fn reconcile(content: &mut Content) -> Vec<String> {
         true
     });
 
-    // Kingdoms: keep only those with a real leader and a real land; fix up
-    // `seat_land_id` so it always equals the held land.
+    // Kingdoms: keep only those with a real leader and a real land.
     content.kingdoms.retain(|id, k| {
         if !known_chars.contains(k.leader_character_id.as_str()) {
             notes.push(format!(
@@ -115,13 +114,6 @@ pub fn reconcile(content: &mut Content) -> Vec<String> {
                 k.land_id
             ));
             return false;
-        }
-        if k.seat_land_id != k.land_id {
-            notes.push(format!(
-                "kingdom `{id}` seat `{}` is not its land; moved to `{}`",
-                k.seat_land_id, k.land_id
-            ));
-            k.seat_land_id = k.land_id.clone();
         }
         true
     });

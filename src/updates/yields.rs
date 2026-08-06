@@ -3,7 +3,7 @@
 
 use crate::app::Game;
 use crate::ecs::{
-    BuildingOf, CharacterGoldYield, CharacterLeads, CharacterLevy, KingdomHolds, KingdomLedBy,
+    BuildingOf, CharacterGoldYield, CharacterLeads, CharacterLevy, KingdomHold, KingdomLedBy,
     LandHasBuildings, LandHeldBy,
 };
 use crate::resources::buildings::BuildingDefs;
@@ -30,33 +30,28 @@ pub const BUILDING_UPDATED: u8 = 2;
 pub const BUILDING_DESTROYED: u8 = 3;
 
 /// Sum the realm's holdings into `(gold, levy)`. Walks
-/// `kingdom → KingdomHolds → lands → LandHasBuildings → BuildingOf →
+/// `kingdom → KingdomHold → land → LandHasBuildings → BuildingOf →
 /// BuildingDefs` once; `gold_profit - gold_upkeep` accumulates into gold,
 /// `levy` accumulates into troops. Pure — no character iteration, shared by
 /// [`recompute_yields`] and the dirty-yield observer.
 fn sum_kingdom_yield(
-    kingdom_e: Entity,
-    kingdom_holds: &Query<&KingdomHolds>,
+    kingdom_hold: &KingdomHold,
     land_has_buildings: &Query<&LandHasBuildings>,
     building_of: &Query<&BuildingOf>,
     defs: &BuildingDefs,
 ) -> (i64, u64) {
-    let Ok(kingdom_holds) = kingdom_holds.get(kingdom_e) else {
+    let land_e = kingdom_hold.0;
+    let Ok(land_has_buildings) = land_has_buildings.get(land_e) else {
         return (0, 0);
     };
     let (mut gold, mut levy) = (0i64, 0u64);
-    for land_e in kingdom_holds.iter() {
-        let Ok(land_has_buildings) = land_has_buildings.get(land_e) else {
+    for b_e in land_has_buildings.iter() {
+        let Ok(building_of) = building_of.get(b_e) else {
             continue;
         };
-        for b_e in land_has_buildings.iter() {
-            let Ok(building_of) = building_of.get(b_e) else {
-                continue;
-            };
-            if let Some(d) = defs.get(&building_of.0) {
-                gold += d.gold_profit as i64 - d.gold_upkeep as i64;
-                levy += d.levy as u64;
-            }
+        if let Some(d) = defs.get(&building_of.0) {
+            gold += d.gold_profit as i64 - d.gold_upkeep as i64;
+            levy += d.levy as u64;
         }
     }
     (gold, levy)
@@ -72,17 +67,17 @@ pub fn recompute_yields(
     mut characters: Query<
         (Option<&CharacterLeads>, &mut CharacterGoldYield, &mut CharacterLevy),
     >,
-    kingdom_holds: Query<&KingdomHolds>,
+    kingdom_holds: Query<&KingdomHold>,
     land_has_buildings: Query<&LandHasBuildings>,
     building_of: Query<&BuildingOf>,
     defs: Res<BuildingDefs>,
 ) {
     for (character_leads, mut character_gold_yield, mut character_levy) in &mut characters {
         let (g, l) = character_leads
-            .map(|character_leads| {
+            .and_then(|character_leads| kingdom_holds.get(character_leads.kingdom()).ok())
+            .map(|kingdom_hold| {
                 sum_kingdom_yield(
-                    character_leads.kingdom(),
-                    &kingdom_holds,
+                    kingdom_hold,
                     &land_has_buildings,
                     &building_of,
                     &defs,
@@ -106,7 +101,7 @@ pub fn on_building_updated(
     land_held_by: Query<&LandHeldBy>,
     kingdom_led_by: Query<&KingdomLedBy>,
     mut character_gold_yields: Query<(&mut CharacterGoldYield, &mut CharacterLevy)>,
-    kingdom_holds: Query<&KingdomHolds>,
+    kingdom_holds: Query<&KingdomHold>,
     land_has_buildings: Query<&LandHasBuildings>,
     building_of: Query<&BuildingOf>,
     defs: Res<BuildingDefs>,
@@ -115,9 +110,10 @@ pub fn on_building_updated(
         return;
     }
     let land_e = trigger.event().land;
-    let Ok(&LandHeldBy(kingdom_e)) = land_held_by.get(land_e) else {
+    let Ok(land_held_by) = land_held_by.get(land_e) else {
         return;
     };
+    let kingdom_e = land_held_by.kingdom();
     let Ok(&KingdomLedBy(leader_e)) = kingdom_led_by.get(kingdom_e) else {
         return;
     };
@@ -126,9 +122,11 @@ pub fn on_building_updated(
     else {
         return;
     };
+    let Ok(kingdom_hold) = kingdom_holds.get(kingdom_e) else {
+        return;
+    };
     let (g, l) = sum_kingdom_yield(
-        kingdom_e,
-        &kingdom_holds,
+        kingdom_hold,
         &land_has_buildings,
         &building_of,
         &defs,

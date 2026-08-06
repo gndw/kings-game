@@ -6,7 +6,7 @@
 use super::flag;
 use crate::app::Game;
 use crate::ecs::{
-    BuildingOf, CharacterLeads, KingdomHolds, LandBorders, LandHasBuildings, LandHolding,
+    BuildingOf, CharacterLeads, KingdomHold, LandBorders, LandHasBuildings, LandHolding,
     LandName, Registry, StringId,
 };
 use crate::resources::border::Border;
@@ -197,7 +197,7 @@ pub fn update_draw(
     time: Res<Time>,
     defs: Res<BuildingDefs>,
     character_leads: Query<&CharacterLeads>,
-    kingdom_holds: Query<&KingdomHolds>,
+    kingdom_holds: Query<&KingdomHold>,
     lands: Query<(&StringId, &LandBorders, &LandHolding)>,
     string_ids: Query<&StringId>,
     land_has_buildings: Query<&LandHasBuildings>,
@@ -224,12 +224,8 @@ pub fn update_draw(
         .get(&game.ctx.player_character_id)
         .and_then(|pe| character_leads.get(pe).ok())
         .and_then(|character_leads| kingdom_holds.get(character_leads.kingdom()).ok())
-        .map(|kingdom_holds| {
-            kingdom_holds
-                .iter()
-                .filter_map(|le| string_ids.get(le).ok().map(|string_id| string_id.0.clone()))
-                .collect()
-        })
+        .and_then(|kingdom_hold| string_ids.get(kingdom_hold.0).ok().map(|string_id| string_id.0.clone()))
+        .map(|id| HashSet::from([id]))
         .unwrap_or_default();
 
     // Lands in spawn order: one archetype, so `Query` yields content order.

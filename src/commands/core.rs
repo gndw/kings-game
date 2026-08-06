@@ -14,10 +14,10 @@ use std::sync::Arc;
 use super::construct_building::ConstructBuilding;
 use super::destroy_building::DestroyBuilding;
 use crate::app::Game;
-use crate::ecs::{CharacterLeads, KingdomHolds, LandHeldBy, LandName, Registry, StringId};
+use crate::ecs::{CharacterLeads, KingdomHold, LandHeldBy, LandName, Registry, StringId};
 use crate::resources::chronicle::Chronicles;
 use bevy::ecs::world::World;
-use bevy::prelude::{RelationshipTarget, Resource};
+use bevy::prelude::Resource;
 use rand::TryRng;
 
 /// One selectable row in a command's step list. `label` is what the player
@@ -101,11 +101,11 @@ impl CommandRegistry {
     }
 }
 
-/// The lands `actor` rules (can act on): actor → [`CharacterLeads`] → kingdom
-/// → its [`KingdomHolds`] collection (the auto-maintained reverse of each
-/// land's [`LandHeldBy`]). Walks the relationship targets with `world::get` so
-/// it stays a `&World` read (`world::query` needs `&mut World`); the same
-/// target `ui::legend` iterates.
+/// The land `actor` rules (can act on): actor → [`CharacterLeads`] → kingdom
+/// → its [`KingdomHold`] link (the auto-maintained reverse of the held land's
+/// [`LandHeldBy`]). Reads the relationship target with `world::get` so it
+/// stays a `&World` read (`world::query` needs `&mut World`); `ui::legend`
+/// reads the same target.
 pub(super) fn ruled_lands(world: &World, actor: &str) -> Vec<(String, String)> {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return Vec::new();
@@ -113,17 +113,16 @@ pub(super) fn ruled_lands(world: &World, actor: &str) -> Vec<(String, String)> {
     let Some(character_leads) = world.get::<CharacterLeads>(actor_e) else {
         return Vec::new();
     };
-    let Some(kingdom_holds) = world.get::<KingdomHolds>(character_leads.kingdom()) else {
+    let Some(kingdom_hold) = world.get::<KingdomHold>(character_leads.kingdom()) else {
         return Vec::new();
     };
-    kingdom_holds
-        .iter()
-        .filter_map(|land_e| {
-            let string_id = world.get::<StringId>(land_e)?;
-            let land_name = world.get::<LandName>(land_e)?;
-            Some((string_id.0.clone(), land_name.0.clone()))
-        })
-        .collect()
+    let (Some(string_id), Some(land_name)) = (
+        world.get::<StringId>(kingdom_hold.0),
+        world.get::<LandName>(kingdom_hold.0),
+    ) else {
+        return Vec::new();
+    };
+    vec![(string_id.0.clone(), land_name.0.clone())]
 }
 
 /// True if `actor` rules `land_id` (their [`CharacterLeads`] kingdom is the
@@ -141,7 +140,7 @@ pub fn rules_land(world: &World, actor: &str, land_id: &str) -> bool {
     };
     world
         .get::<LandHeldBy>(land_e)
-        .map(|land_held_by| land_held_by.0 == character_leads.kingdom())
+        .map(|land_held_by| land_held_by.kingdom() == character_leads.kingdom())
         .unwrap_or(false)
 }
 

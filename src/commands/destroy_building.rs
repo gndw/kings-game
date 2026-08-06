@@ -115,7 +115,7 @@ fn destroy(world: &mut World, actor: &str, land_id: &str, building_id: &str) {
         .map(|character_leads| character_leads.kingdom());
     let land_k = world
         .get::<LandHeldBy>(land_e)
-        .map(|land_held_by| land_held_by.0);
+        .map(|land_held_by| land_held_by.kingdom());
     if actor_k.is_none() || actor_k != land_k {
         return note(world, format!("cannot destroy on {land_id}: you don't rule that land"));
     }

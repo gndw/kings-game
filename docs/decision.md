@@ -45,22 +45,19 @@ character). Inserting `KingdomLedBy` on a kingdom has Bevy's hook keep
   the kingdom (mirroring Bevy's `LikedBy`); `CharacterLeads` puts the verb after
   the character. The manual `KingdomLedBy` reverse component is gone.
 
-## Kingdom↔lands link is Bevy-native (`LandHeldBy`/`KingdomHolds`)
+## Kingdom↔lands link is Bevy-native (`KingdomHold`/`LandHeldBy`)
 
-The kingdom→holdings link is a Bevy `#[relationship]` component `LandHeldBy`
-(on each **land**, single `Entity`, source of truth) paired with the
-auto-maintained `#[relationship_target]` `KingdomHolds` (`Vec<Entity>`) on the
-kingdom. A land declares its kingdom; Bevy's hook keeps the kingdom's
-`KingdomHolds` in sync — no manual `Vec`, no drift.
+The kingdom→holdings link is a Bevy `#[relationship]` component `KingdomHold`
+(on the kingdom, single `Entity`, source of truth) paired with the
+auto-maintained `#[relationship_target]` `LandHeldBy` (single `Entity`) on the
+held land. A kingdom declares its held land; Bevy's hook keeps the land's
+`LandHeldBy` in sync — no manual reverse insert, no drift.
 
-- **Direction flipped from the old model:** the data has kingdoms listing a
-  single `land_id`, but the relationship's single-`Entity` side lives on the
-  land, so `populate` inserts `LandHeldBy(kingdom)` on the held land rather
-  than a `KingdomHolds` Vec on the kingdom.
 - **Naming:** same `<Attached-to><Verb-or-preposition><Target>` rule as the
-  leader link — `LandHeldBy` (land, single `Entity`) / `KingdomHolds`
-  (kingdom, `Vec<Entity>`). Reads go through `RelationshipTarget::iter`
-  (in `bevy::prelude`), which yields owned `Entity`.
+  leader link — `KingdomHold` (kingdom, `pub Entity`) / `LandHeldBy`
+  (land, single `Entity`). Read via `LandHeldBy::kingdom()`. The target
+  field is private (Bevy's `RelationshipTarget` correctness check requires
+  it) with a public accessor — same pattern as `CharacterLeads::kingdom()`.
 
 ## ECS components split to one field each
 
@@ -123,7 +120,7 @@ its land.
   kind; copying them onto each entity would duplicate definition data and break
   the definition/state split. So a building entity holds the *def id* and looks
   the stats up, exactly as `Built`'s ids once did — just from the entity side.
-- **Direction mirrors `LandHeldBy`/`KingdomHolds`:** the building is the child
+- **Direction mirrors `LandHeldBy`/`KingdomHold`:** the building is the child
   declaring its land (`BuildingOnLand`, single `Entity`, source of truth); the
   land's `LandHasBuildings` auto-fills. Same active/passive mirror as the
   land↔kingdom link.
@@ -155,7 +152,7 @@ command's steps the same way; the roster of commands it offers is the
 - **`step_items` takes `&World`, not `&mut World`:** it is a read, and keeping
   it immutable lets the menu recompute the list from a shared borrow. The
   helpers (`ruled_lands`, `buildings_on_land`) therefore walk the relationship
-  targets (`KingdomHolds`, `LandHasBuildings`) via `World::get` rather than
+  targets (`KingdomHold`, `LandHasBuildings`) via `World::get` rather than
   `World::query`
   (which needs `&mut World`).
 - **`Arc<dyn Command>` in the registry:** so the palette can hand a command to
@@ -218,21 +215,23 @@ and `Transform::translation` in place.
 ## A kingdom holds exactly one land
 
 `Kingdom::land_ids: Vec<String>` is gone; the field is `land_id: String`. One
-kingdom rules exactly one land, by id.
+kingdom rules exactly one land, by id. The Bevy relationship was also flipped
+from `KingdomHolds(Vec<Entity>)` (the auto-maintained reverse of each land's
+`LandHeldBy`) to `KingdomHold(Entity)` — single-entity on both sides.
 
-- **Why:** the gameplay we're actually modelling — one ruler over one territory
-  at a time, with war being the way a ruler gains a new land — is a 1:1 model.
-  The Vec carried no gameplay the 1:1 doesn't (a kingdom couldn't *act* across
-  its lands any differently), and the multi-land reconcile was paying
-  complexity for an empty abstraction.
-- **The Bevy relationship is unchanged.** `LandHeldBy(Entity)` on the land
-  (single, source of truth) and `KingdomHolds(Vec<Entity>)` (the auto-maintained
-  reverse) still work — the runtime Vec will simply always hold one entity.
-  Touching the Bevy shape to also be 1:1 is a separate, larger refactor with
-  its own payoff (an `Option<KingdomHolds>` lookup), and YAGNI says skip it
-  until a caller needs it.
-- **Data invariants tightened.** A kingdom's `seat_land_id` must equal its
-  `land_id`; `reconcile` repairs any drift. `seat_land_id` is kept on the struct
-  for now (other code still reads it), even though it duplicates `land_id`;
-  collapse it once nothing reads it.
+- **Why data first:** the gameplay we're actually modelling — one ruler over
+  one territory at a time, with war being the way a ruler gains a new land —
+  is a 1:1 model. The Vec carried no gameplay the 1:1 doesn't (a kingdom
+  couldn't *act* across its lands any differently), and the multi-land
+  reconcile was paying complexity for an empty abstraction.
+- **Why flip the Bevy shape too:** once the data side is 1:1, the runtime Vec
+  is paying the same empty-abstraction tax (`RelationshipTarget::iter` over
+  one entity, callers guarding `.get(...).ok()` on a Vec that always has 1
+  element). The relationship target is private (Bevy's correctness check
+  requires it) with a public `KingdomHold::land()` accessor — the same
+  pattern `CharacterLeads::kingdom()` uses.
+- **Data invariants tightened.** With one land per kingdom, the held land
+  is by definition the seat — `seat_land_id` was dropped from the schema and
+  the `KingdomSeat` component was removed; the held land is read through
+  `KingdomHold::land()`.
 

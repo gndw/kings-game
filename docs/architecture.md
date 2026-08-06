@@ -115,17 +115,17 @@ shape; this is the *what*.
   you which entity it sits on:
   - `KingdomLedBy` (on kingdom) ↔ `CharacterLeads` (on leader character) —
     one-to-one. Read the reverse via `CharacterLeads::kingdom()`.
-  - `LandHeldBy` (on land) ↔ `KingdomHolds` (on kingdom, `Vec<Entity>`) — a
-    land declares its kingdom; the kingdom's `KingdomHolds` auto-fills.
-    Iterate via `RelationshipTarget::iter`.
+  - `KingdomHold` (on kingdom) ↔ `LandHeldBy` (on land, single `Entity`) — a
+    kingdom declares its held land; the land's `LandHeldBy` auto-fills. Read
+    via `LandHeldBy::kingdom()`.
   - `BuildingOnLand` (on building) ↔ `LandHasBuildings` (on land,
     `Vec<Entity>`) — a building declares its land; the land's
     `LandHasBuildings` auto-fills. Iterate via `RelationshipTarget::iter`.
   - Plain (non-relationship) entity links: `CharacterOfHouse`
-    (character→house), `KingdomSeat` (kingdom→capital land), `BuildingOf`
+    (character→house), `BuildingOf`
     (building→definition id, a string looked up against the `BuildingDefs`
     resource — not an entity link, since definitions are a roster, not
-    entities).
+    entities). The kingdom's seat is implicit: its single held land.
 
 - **`populate(world, content)`** (`ecs/ecs.rs`) builds the world **once** from
   merged+reconciled content, called from `main` before `App::run`. Spawn order is
@@ -144,7 +144,7 @@ shape; this is the *what*.
 
 - **`Ctx`** (`ctx.rs`) holds only what isn't an entity: `seed`, the `SimRng`
   behind an `Arc<Mutex<>>`, `player_character_id`, and `selected_land_id` (set
-  on `Startup` to the player's own seat via `CharacterLeads`→`KingdomSeat`).
+  on `Startup` to the player's own capital via `CharacterLeads`→`KingdomHold::land()`).
   The chronicle log
   is not here — it is the separate `Chronicles` resource. Gold/levy are
   **not** here — every character has their own components and the player is
@@ -185,7 +185,7 @@ Lives in `updates/` and `schedules.rs`.
     structural change; its `On<OnBuildingUpdated>` observer walks
     `land → LandHeldBy → kingdom → KingdomLedBy → leader`, runs the shared
     [`sum_kingdom_yield`] helper over
-    `kingdom → KingdomHolds → lands → LandHasBuildings → BuildingOf →
+    `kingdom → KingdomHold → land → LandHasBuildings → BuildingOf →
     BuildingDefs`, and writes that one character's [`CharacterGoldYield`]
     and [`CharacterLevy`]. The event fires *after* the relationship hook
     has settled `LandHasBuildings` (construct → hook adds; destroy → hook
@@ -350,8 +350,8 @@ asset-loaded sprites.
 - **Read order = archetype order = spawn order = content order.** Anything that
   needs stable iteration order relies on each kind being a single archetype.
 - **Relationships are hook-maintained.** Set the single-`Entity` side
-  (`KingdomLedBy`/`LandHeldBy`/`BuildingOnLand`); never hand-edit the reverse
-  (`CharacterLeads`/`KingdomHolds`/`LandHasBuildings`).
+  (`KingdomLedBy`/`KingdomHold`/`BuildingOnLand`); never hand-edit the reverse
+  (`CharacterLeads`/`LandHeldBy`/`LandHasBuildings`).
 - **Definition refs are fatal; state refs are repaired.** Don't move
   `validate`'s checks into `reconcile` or vice versa — they encode different
   policies (broken mod vs old save).

@@ -5,7 +5,7 @@
 //! lives in `crate::resources`.
 
 use crate::app::Game;
-use crate::ecs::{CharacterLeads, KingdomSeat, LandHolding, Registry, StringId};
+use crate::ecs::{CharacterLeads, KingdomHold, LandHolding, Registry, StringId};
 use crate::rng::SimRng;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
@@ -47,14 +47,14 @@ impl Ctx {
     }
 
     /// Resolve the opening selection: the player's own capital, via their
-    /// kingdom's [`KingdomSeat`]. Runs in the `Startup` schedule, after
+    /// kingdom's held land. Runs in the `Startup` schedule, after
     /// [`crate::ecs::populate`] has spawned the entities. Left `None` if the
-    /// player leads no kingdom with a seat.
+    /// player leads no kingdom, or that kingdom holds no land.
     pub fn startup(
         mut game: ResMut<Game>,
         registry: Res<Registry>,
         character_leads: Query<&CharacterLeads>,
-        kingdom_seats: Query<&KingdomSeat>,
+        kingdom_holds: Query<&KingdomHold>,
         string_ids: Query<&StringId>,
     ) {
         let Some(player_e) = registry.get(&game.ctx.player_character_id) else {
@@ -63,8 +63,9 @@ impl Ctx {
         game.ctx.selected_land_id = character_leads
             .get(player_e)
             .ok()
-            .and_then(|character_leads| kingdom_seats.get(character_leads.kingdom()).ok())
-            .and_then(|kingdom_seat| string_ids.get(kingdom_seat.0).ok())
+            .and_then(|character_leads| kingdom_holds.get(character_leads.kingdom()).ok())
+            .map(|kingdom_hold| kingdom_hold.0)
+            .and_then(|land_e| string_ids.get(land_e).ok())
             .map(|string_id| string_id.0.clone());
     }
 }

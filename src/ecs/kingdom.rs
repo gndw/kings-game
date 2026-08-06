@@ -1,12 +1,11 @@
-//! Kingdom entities: realms held by a leader character across many lands.
+//! Kingdom entities: realms held by a leader character over a single land.
 //!
 //! A kingdom carries the [`Kingdom`] marker, a [`KingdomLedBy`] link to its
-//! ruler, a [`KingdomSeat`] pointing at its capital land, and a
-//! [`KingdomHolds`] collection auto-maintained from each land's
-//! [`LandHeldBy`](super::land::LandHeldBy).
+//! ruler, and a [`KingdomHold`] link to the single land it holds. A kingdom's
+//! held land is also its capital — 1 kingdom ↔ 1 land makes the seat implicit,
+//! so there is no separate `KingdomSeat` component.
 
 use super::character::CharacterLeads;
-use super::land::LandHeldBy;
 use bevy::ecs::entity::Entity;
 use bevy::prelude::Component;
 
@@ -21,13 +20,9 @@ pub struct Kingdom;
 #[relationship(relationship_target = CharacterLeads)]
 pub struct KingdomLedBy(pub Entity);
 
-/// The capital land of a kingdom. Points at a [`Land`](super::Land) entity.
+/// The land a kingdom holds. One-to-one: a kingdom holds at most one land,
+/// which is also its capital. A Bevy relationship component: inserting it
+/// auto-maintains [`LandHeldBy`](super::land::LandHeldBy) on the held land.
 #[derive(Component, Debug, Clone, Copy)]
-pub struct KingdomSeat(pub Entity);
-
-/// The lands a kingdom holds — the auto-maintained reverse of
-/// [`LandHeldBy`](super::land::LandHeldBy). Read-only: set [`LandHeldBy`] on
-/// each land and Bevy's hook keeps this in sync.
-#[derive(Component, Debug, Default)]
-#[relationship_target(relationship = LandHeldBy)]
-pub struct KingdomHolds(Vec<Entity>);
+#[relationship(relationship_target = super::land::LandHeldBy)]
+pub struct KingdomHold(pub Entity);

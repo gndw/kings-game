@@ -87,7 +87,7 @@ fn player_rules(
     let land_kingdom = land_held_by
         .get(land_e)
         .ok()
-        .map(|land_held_by| land_held_by.0);
+        .map(|land_held_by| land_held_by.kingdom());
     matches!(
         (player_kingdom, land_kingdom),
         (Some(pk), Some(lk)) if pk == lk

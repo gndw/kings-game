@@ -13,6 +13,10 @@ pub struct Game {
     /// Which of the calendar's `speeds` is selected — an index, because the
     /// rates themselves are mod data.
     pub speed_idx: usize,
+    /// Camera mode: `false` shows the whole map (the default view), `true`
+    /// frames on the selected land's polygon with margin. Toggled by `Z`;
+    /// `ui::map::update_camera` reads this every frame.
+    pub zoomed: bool,
 }
 
 impl Game {
@@ -21,6 +25,7 @@ impl Game {
             ctx,
             paused: true,
             speed_idx: 0,
+            zoomed: false,
         }
     }
 
@@ -48,6 +53,11 @@ pub fn input(
     // Escape closes the command palette while it's open, so it mustn't quit.
     if !menu.open && (keys.just_pressed(KeyCode::KeyQ) || keys.just_pressed(KeyCode::Escape)) {
         exit.write(AppExit::Success);
+    }
+    // Z toggles zoom-to-selection. Yielded to the palette while it's open,
+    // same as Esc, so a modal can't lose its keys.
+    if !menu.open && keys.just_pressed(KeyCode::KeyZ) {
+        game.zoomed = !game.zoomed;
     }
     if keys.just_pressed(KeyCode::Space) {
         game.paused = !game.paused;

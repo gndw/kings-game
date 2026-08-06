@@ -281,13 +281,28 @@ asset-loaded sprites.
 - **Map** (`ui/map.rs`): camera (`Startup`) framed on the whole `Border` with an
   `AutoMin` projection so the island never distorts and never pans. The same
   `startup` also spawns one `Text2d` label per land just below the holding
-  circle (land entities already exist — `populate` runs before `Startup`).
-  `update_draw` draws the world border, each land's outline (gizmos draw lines
-  only, so the fill is a **scanline** routine handling the map's concave
-  shapes), holdings as circles, the selected land in yellow over its
-  neighbours, the player's own holdings tinted green, and a waving pennant
-  (`flag.rs`) on the selection. Pan/zoom will hook into the existing camera
-  (translate the `Transform`, scale `OrthographicProjection::scale`).
+  circle (land entities already exist — `populate` runs before `Startup`) and
+  attaches `CameraView` (current rendered view) + `CameraTween` (in-flight
+  `from`/`to`/`t`) to the camera so `update_camera` can smoothly animate
+  between destinations. `update_draw` draws the world border, each land's
+  outline (gizmos draw lines only, so the fill is a **scanline** routine
+  handling the map's concave shapes), holdings as circles, the selected land
+  in yellow over its neighbours, the player's own holdings tinted green, and
+  a waving pennant (`flag.rs`) on the selection. `update_camera` (PostUpdate,
+  runs *before* `update_draw`) computes the destination from
+  `Game::zoomed` + `selected_land_id` each frame — unzoomed → whole `Border`,
+  zoomed → selected land's polygon bbox + `ZOOM_MARGIN`, centred on the bbox
+  — and if the destination moved since last frame, restarts the tween with
+  `from` = current rendered view (so a re-target mid-transition stays smooth).
+  The tween advances `t` over `TRANSITION_DURATION` seconds with a smoothstep
+  ease, then writes the lerped `min_width`/`min_height`/`translation` into the
+  camera's `Projection::Orthographic` and `Transform`. `Z` toggles
+  `Game::zoomed` in `app::input`; arrow keys move the selection in
+  `update_input`, and the camera follows because `update_camera` re-reads
+  `selected_land_id` each frame and re-tweens when it changes. Pan/zoom hooks
+  still use the same camera: pan = `Transform::translation`, zoom =
+  `OrthographicProjection::scale` (currently constant at `CAMERA_SCALE`, 30%
+  zoom-in over a 1:1 view).
 - **Panels** each own a marker `Component` (`LegendInfo`, `LegendBuildings`,
   `LegendActions`, `Chronicle`, `ResourceBar`, `Status`) and an `update` system
   that reads the world through `Query`/`Res` and writes into a `Single<&mut Text>`.
@@ -366,6 +381,7 @@ asset-loaded sprites.
 | `src/updates/payout.rs` | `payout` (monthly gold to leaders) |
 | `src/rng.rs` | `SimRng` — seeded, draw-counted for exact replay |
 | `src/ui/*` | flex layout, map/camera gizmos, the four text panels |
+| `src/ui/map.rs::update_camera` | reads `Game::zoomed` + selection, rewrites the camera each PostUpdate |
 | `src/ui/command_menu.rs` | the command palette modal (open/navigate/dispatch + render) |
 
 ## Related docs

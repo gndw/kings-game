@@ -116,6 +116,9 @@ fn main() -> Result<()> {
             PostUpdate,
             (
                 ui::resource::update,
+                // update_camera mutates Projection/Transform; must run before
+                // update_draw so gizmos draw against the new view.
+                ui::map::update_camera,
                 ui::map::update_draw,
                 ui::legend::update,
                 ui::actions::update,

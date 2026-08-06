@@ -48,5 +48,10 @@ pub fn update(
     text.0 = state.to_string();
     text_colour.0 = colour.into();
     // Gold and levy live in the resource bar along the top.
-    status_rest.0 = format!("  {}  {} days/s  -  C commands", *date, speed(&calendar.speeds, game.speed_idx));
+    status_rest.0 = format!(
+        "  {}  {} days/s  -  C commands  -  {}",
+        *date,
+        speed(&calendar.speeds, game.speed_idx),
+        if game.zoomed { "Z unzoom" } else { "Z zoom" },
+    );
 }

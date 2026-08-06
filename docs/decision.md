@@ -167,3 +167,50 @@ command's steps the same way; the roster of commands it offers is the
   So `input` recomputes the current list into the `CommandMenu` resource;
   `update` reads that stored list (it can't take `&World`). `input`→`update` is
   chained so the just-opened list shows the same frame.
+
+## Camera mode is a boolean (`Game::zoomed`) with a tween between views
+
+The camera has two views — the whole map and "zoomed in on the selected land" —
+and toggles between them with `Z`. It is a plain `bool` on `Game`, not a state
+machine: `true` means "frame on the selection's bbox with `ZOOM_MARGIN`",
+`false` means "frame on `Border`". `ui::map::update_camera` reads the flag and
+the current `selected_land_id` every PostUpdate frame and rewrites the
+camera's `Projection::Orthographic { scaling_mode, scale, viewport_origin }`
+and `Transform::translation` in place.
+
+- **Why a flag, not an enum / state machine:** two states with one transition
+  (toggle) and one extra input (selection id, already on `Ctx`); anything more
+  is over-engineering. The flag lives on `Game` because it's session state,
+  not UI state — same neighbourhood as `paused`/`speed_idx`.
+- **One frame, one write, every frame.** Recomputing a polygon's bbox is
+  trivial, so `update_camera` redoes the math each PostUpdate rather than
+  diffing `(mode, selected_land_id)`. The selection-following behaviour comes
+  for free: when arrow keys move the selection in `update_input`, the next
+  `update_camera` reads the new id and re-centres. Caching would be premature
+  optimisation.
+- **Fit via `AutoMin`, not by hand.** The same `ScalingMode::AutoMin` the
+  default view uses — set `min_width = land_w * ZOOM_MARGIN / (1 - RIGHT_BAR)`,
+  `min_height = land_h * ZOOM_MARGIN`, translation = bbox centre. Keeps the
+  aspect-ratio guarantees the default relies on and the same 30%-zoom-in
+  (`CAMERA_SCALE = 0.7`) so the transition doesn't pop. The hand-rolled
+  alternative (`scale` → `1.0`, manual world↔screen math) would duplicate the
+  AutoMin logic.
+- **Z is yielded to the command palette while it's open**, same as `Esc`. The
+  palette owns all input while up; `app::input` reads `menu.open` and skips the
+  toggle. Listed alongside `C commands` / `days/s` in the status bar.
+- **Smoothstep tween between destinations.** Two extra components on the
+  camera entity: `CameraView` (last applied view, doubles as "where are we
+  now") and `CameraTween { from, to, t }`. Each frame, `update_camera`:
+  (1) computes the destination from `(zoomed, selection)`; (2) if the
+  destination moved, copies the current `CameraView` into `from`, sets
+  `to = target`, resets `t = 0`; (3) advances `t` by `dt / TRANSITION_DURATION`
+  (clamped to 1) and applies a smoothstep ease; (4) writes the lerped
+  `min_w`/`min_h`/`translation` into the camera. Mid-transition re-targets
+  start the new tween from the current rendered view, so the camera never
+  jumps. `TRANSITION_DURATION = 0.2s` — snappy on toggle, no strobing on pan.
+- **Why a tween, not exponential smoothing:** a tween settles exactly to the
+  destination (`t = 1` ⇒ `view = to`), which keeps the on-screen state clean
+  for any later code that wants to read it. Exponential smoothing approaches
+  asymptotically and would need a snap threshold plus fiddly `dt * rate`
+  constants per field. The tween is also ~25 lines; the smoothing version is
+  not noticeably shorter.

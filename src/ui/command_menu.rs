@@ -140,7 +140,7 @@ pub fn startup(mut commands: Commands) {
 /// One list row: full-width, highlighted when `selected`.
 fn item(c: &mut ChildSpawnerCommands, label: &str, selected: bool) {
     let (bg, fg, prefix) = if selected {
-        (SELECTED, Color::WHITE, "›  ")
+        (SELECTED, Color::WHITE, "-  ")
     } else {
         (Color::NONE, ITEM, "   ")
     };

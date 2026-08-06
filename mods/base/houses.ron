@@ -4,5 +4,8 @@
         (id: "house-hightower", name: "hightower"),
         (id: "house-lannister", name: "lannister"),
         (id: "house-arryn",     name: "arryn"),
+        (id: "house-tully",     name: "tully"),
+        (id: "house-tyrell",    name: "tyrell"),
+        (id: "house-martell",   name: "martell"),
     ],
 )

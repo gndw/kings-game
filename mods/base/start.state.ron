@@ -12,12 +12,18 @@
 // characters simply start where their own mod says they do.
 (
     kingdoms: [
-        (id: "kingdom-west",   leader_character_id: "char-leyton", seat_land_id: "land-2",
-         land_ids: ["land-1", "land-2"]),
-        (id: "kingdom-centre", leader_character_id: "char-tywin",  seat_land_id: "land-3",
-         land_ids: ["land-3", "land-4"]),
-        (id: "kingdom-east",   leader_character_id: "char-jon",    seat_land_id: "land-5",
-         land_ids: ["land-5", "land-6"]),
+        (id: "kingdom-west",        leader_character_id: "char-leyton", seat_land_id: "land-2",
+         land_ids: ["land-2"]),
+        (id: "kingdom-centre",      leader_character_id: "char-tywin",  seat_land_id: "land-3",
+         land_ids: ["land-3"]),
+        (id: "kingdom-east",        leader_character_id: "char-jon",    seat_land_id: "land-5",
+         land_ids: ["land-5"]),
+        (id: "kingdom-riverlands",  leader_character_id: "char-minisa", seat_land_id: "land-1",
+         land_ids: ["land-1"]),
+        (id: "kingdom-reach",       leader_character_id: "char-olenna", seat_land_id: "land-4",
+         land_ids: ["land-4"]),
+        (id: "kingdom-dorne",       leader_character_id: "char-doran",  seat_land_id: "land-6",
+         land_ids: ["land-6"]),
     ],
     // Each built building is its own instance: a unique `id`, the `def_id` of
     // the building kind it is (an entry in building_definitions.ron), and the
@@ -64,5 +70,11 @@
         (id: "char-jaime",  age: 29, gold: 13),
         (id: "char-jon",    age: 66, gold: 27),
         (id: "char-lysa",   age: 32, gold: 6),
+        (id: "char-minisa", age: 50, gold: 20),
+        (id: "char-edmure", age: 23, gold: 10),
+        (id: "char-olenna", age: 75, gold: 30),
+        (id: "char-mace",   age: 40, gold: 15),
+        (id: "char-doran",  age: 55, gold: 25),
+        (id: "char-oberyn", age: 38, gold: 12),
     ],
 )

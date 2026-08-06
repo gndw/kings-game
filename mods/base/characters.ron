@@ -11,5 +11,11 @@
         (id: "char-jaime",   name: "jaime",   house_id: "house-lannister"),
         (id: "char-jon",     name: "jon",     house_id: "house-arryn"),
         (id: "char-lysa",    name: "lysa",    house_id: "house-arryn"),
+        (id: "char-minisa",  name: "minisa",  house_id: "house-tully"),
+        (id: "char-edmure",  name: "edmure",  house_id: "house-tully"),
+        (id: "char-olenna",  name: "olenna",  house_id: "house-tyrell"),
+        (id: "char-mace",    name: "mace",    house_id: "house-tyrell"),
+        (id: "char-doran",   name: "doran",   house_id: "house-martell"),
+        (id: "char-oberyn",  name: "oberyn",  house_id: "house-martell"),
     ],
 )

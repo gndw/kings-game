@@ -43,6 +43,41 @@ impl Calendar {
         u32::from(self.days_per_month) * u32::from(self.months_per_year)
     }
 
+    /// Human-readable form of `days` under this calendar: "1 year 6 months
+    /// 30 days", omitting zero units so 360 reads as "1 year" and 30 as
+    /// "1 month". Used by the construct menu and any other place a duration
+    /// needs to read out to the player.
+    pub fn format_duration(&self, days: u32) -> String {
+        let dpm = u32::from(self.days_per_month);
+        let dpy = self.days_per_year();
+        let y = days / dpy;
+        let rem = days % dpy;
+        let m = rem / dpm;
+        let d = rem % dpm;
+        let mut s = String::new();
+        let mut first = true;
+        let mut push = |s: &mut String, n: u32, singular: &str| {
+            if !first {
+                s.push(' ');
+            }
+            first = false;
+            s.push_str(&format!("{} {}{}", n, singular, if n == 1 { "" } else { "s" }));
+        };
+        if y > 0 {
+            push(&mut s, y, "year");
+        }
+        if m > 0 {
+            push(&mut s, m, "month");
+        }
+        // Always show days if nothing else turned up — keeps the label
+        // informative for bare-day spans (e.g. a mod that ships a 7-day
+        // construction time would say "7 days", not nothing).
+        if d > 0 || s.is_empty() {
+            push(&mut s, d, "day");
+        }
+        s
+    }
+
     /// A zero-length month or year would make the rollover spin forever, an
     /// empty speed list leaves nothing to run at, and a speed of 0 stops the
     /// clock — all checked before the game starts.

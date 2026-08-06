@@ -3,8 +3,8 @@
 
 use crate::app::Game;
 use crate::ecs::{
-    BuildingOf, CharacterGoldYield, CharacterLeads, CharacterLevy, KingdomHold, KingdomLedBy,
-    LandHasBuildings, LandHeldBy,
+    BuildingOf, BuildingStatus, CharacterGoldYield, CharacterLeads, CharacterLevy, KingdomHold,
+    KingdomLedBy, LandHasBuildings, LandHeldBy, BUILDING_STATUS_ACTIVE,
 };
 use crate::resources::buildings::BuildingDefs;
 use bevy::prelude::*;
@@ -33,11 +33,14 @@ pub const BUILDING_DESTROYED: u8 = 3;
 /// `kingdom → KingdomHold → land → LandHasBuildings → BuildingOf →
 /// BuildingDefs` once; `gold_profit - gold_upkeep` accumulates into gold,
 /// `levy` accumulates into troops. Pure — no character iteration, shared by
-/// [`recompute_yields`] and the dirty-yield observer.
+/// [`recompute_yields`] and the dirty-yield observer. Buildings still under
+/// construction (`BuildingStatus != ACTIVE`) do **not** contribute — they
+/// will, once `construction` flips them.
 fn sum_kingdom_yield(
     kingdom_hold: &KingdomHold,
     land_has_buildings: &Query<&LandHasBuildings>,
     building_of: &Query<&BuildingOf>,
+    building_status: &Query<&BuildingStatus>,
     defs: &BuildingDefs,
 ) -> (i64, u64) {
     let land_e = kingdom_hold.0;
@@ -49,6 +52,14 @@ fn sum_kingdom_yield(
         let Ok(building_of) = building_of.get(b_e) else {
             continue;
         };
+        // INACTIVE (2) and BUILDING (3) contribute nothing to yields.
+        let active = building_status
+            .get(b_e)
+            .map(|building_status| building_status.0 == BUILDING_STATUS_ACTIVE)
+            .unwrap_or(false);
+        if !active {
+            continue;
+        }
         if let Some(d) = defs.get(&building_of.0) {
             gold += d.gold_profit as i64 - d.gold_upkeep as i64;
             levy += d.levy as u64;
@@ -70,6 +81,7 @@ pub fn recompute_yields(
     kingdom_holds: Query<&KingdomHold>,
     land_has_buildings: Query<&LandHasBuildings>,
     building_of: Query<&BuildingOf>,
+    building_status: Query<&BuildingStatus>,
     defs: Res<BuildingDefs>,
 ) {
     for (character_leads, mut character_gold_yield, mut character_levy) in &mut characters {
@@ -80,6 +92,7 @@ pub fn recompute_yields(
                     kingdom_hold,
                     &land_has_buildings,
                     &building_of,
+                    &building_status,
                     &defs,
                 )
             })
@@ -104,6 +117,7 @@ pub fn on_building_updated(
     kingdom_holds: Query<&KingdomHold>,
     land_has_buildings: Query<&LandHasBuildings>,
     building_of: Query<&BuildingOf>,
+    building_status: Query<&BuildingStatus>,
     defs: Res<BuildingDefs>,
 ) {
     if game.is_none() {
@@ -129,6 +143,7 @@ pub fn on_building_updated(
         kingdom_hold,
         &land_has_buildings,
         &building_of,
+        &building_status,
         &defs,
     );
     character_gold_yield.0 = g;

@@ -4,7 +4,7 @@ use kings_game::app::{Game, input, speed};
 use kings_game::ctx::Ctx;
 use kings_game::ecs;
 use kings_game::resources::chronicle::Chronicles;
-use kings_game::schedules::OnMonth;
+use kings_game::schedules::{OnDay, OnMonth};
 use kings_game::commands::CommandRegistry;
 use kings_game::ui;
 use kings_game::ui::command_menu::CommandMenu;
@@ -139,8 +139,12 @@ fn main() -> Result<()> {
         )
         .add_systems(
             FixedUpdate,
+            // `advance` runs the date; `construction` lives on the `OnDay`
+            // schedule `advance` fires, so adding it here would run it twice
+            // a day.
             updates::advance_date::advance.run_if(|g: Res<Game>| g.running()),
         )
+        .add_systems(OnDay, updates::construction::construction)
         .add_systems(OnMonth, updates::payout::payout)
         .run();
     Ok(())

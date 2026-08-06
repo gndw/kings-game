@@ -4,8 +4,9 @@
 use super::{FONT, TITLE};
 use crate::app::Game;
 use crate::ecs::{
-    BuildingOf, CharacterAge, CharacterName, CharacterOfHouse, HouseName, KingdomHold,
-    KingdomLedBy, LandHasBuildings, LandName, Registry, StringId,
+    BuildingConstructionDate, BuildingOf, BuildingStatus, CharacterAge, CharacterName,
+    CharacterOfHouse, HouseName, KingdomHold, KingdomLedBy, LandHasBuildings, LandName, Registry,
+    StringId, BUILDING_STATUS_ACTIVE, BUILDING_STATUS_BUILDING,
 };
 use crate::resources::buildings::BuildingDefs;
 use bevy::prelude::*;
@@ -23,6 +24,8 @@ const DIVIDER: Color = Color::srgba(0.5, 0.5, 0.5, 0.6);
 /// Fixed widths so the gold and levy columns line up across rows.
 const GOLD_W: f32 = 48.0;
 const LEVY_W: f32 = 40.0;
+/// Greyed-out colour for building rows that are still under construction.
+const BUILDING_GREY: Color = Color::srgba(0.55, 0.55, 0.55, 1.0);
 
 /// Fills the space the chronicle leaves in the right-hand column.
 pub(super) fn spawn(col: &mut ChildSpawnerCommands, panel: Color) {
@@ -92,7 +95,13 @@ pub(super) fn spawn(col: &mut ChildSpawnerCommands, panel: Color) {
 
 /// One table row: name left-aligned filling the space, gold and levy
 /// right-aligned in fixed-width cells so the columns line up across rows.
-fn row(p: &mut ChildSpawnerCommands, name: &str, gold: &str, levy: &str) {
+/// `grey` tints all three cells — used to render `BUILDING` rows.
+fn row(p: &mut ChildSpawnerCommands, name: &str, gold: &str, levy: &str, grey: bool) {
+    let tint: TextColor = if grey {
+        TextColor(BUILDING_GREY)
+    } else {
+        TextColor(Color::WHITE)
+    };
     p.spawn(Node {
         width: percent(100),
         flex_direction: FlexDirection::Row,
@@ -102,6 +111,7 @@ fn row(p: &mut ChildSpawnerCommands, name: &str, gold: &str, levy: &str) {
         r.spawn((
             Text::new(name.to_string()),
             TextFont::from_font_size(FONT),
+            tint,
             Node {
                 flex_grow: 1.0,
                 ..default()
@@ -110,6 +120,7 @@ fn row(p: &mut ChildSpawnerCommands, name: &str, gold: &str, levy: &str) {
         r.spawn((
             Text::new(gold.to_string()),
             TextFont::from_font_size(FONT),
+            tint,
             TextLayout::justify(Justify::Right),
             Node {
                 width: px(GOLD_W),
@@ -119,6 +130,7 @@ fn row(p: &mut ChildSpawnerCommands, name: &str, gold: &str, levy: &str) {
         r.spawn((
             Text::new(levy.to_string()),
             TextFont::from_font_size(FONT),
+            tint,
             TextLayout::justify(Justify::Right),
             Node {
                 width: px(LEVY_W),
@@ -135,7 +147,7 @@ fn rebuild(
     container: Entity,
     key: &mut Option<String>,
     cur: Option<String>,
-    rows: &[(String, String, String)],
+    rows: &[(String, String, String, bool)],
     total: Option<(String, String)>,
 ) {
     if *key == cur {
@@ -148,8 +160,8 @@ fn rebuild(
         return;
     }
     commands.entity(container).with_children(|p| {
-        for (name, gold, levy) in rows {
-            row(p, name, gold, levy);
+        for (name, gold, levy, grey) in rows {
+            row(p, name, gold, levy, *grey);
         }
         // A faint rule, then the totals in the same 3-column layout.
         p.spawn((
@@ -162,7 +174,7 @@ fn rebuild(
             BackgroundColor(DIVIDER),
         ));
         if let Some((gold, levy)) = total {
-            row(p, "total", &gold, &levy);
+            row(p, "total", &gold, &levy, false);
         }
     });
 }
@@ -180,6 +192,8 @@ pub fn update(
     mut commands: Commands,
     lands: Query<(&LandName, &LandHasBuildings)>,
     building_of: Query<&BuildingOf>,
+    building_status: Query<&BuildingStatus>,
+    building_finish: Query<&BuildingConstructionDate>,
     kingdoms: Query<(&StringId, &KingdomHold, Option<&KingdomLedBy>)>,
     chars: Query<(&CharacterName, &CharacterAge)>,
     character_of_house: Query<&CharacterOfHouse>,
@@ -227,36 +241,74 @@ pub fn update(
     info.0 = inf;
 
     // Section 2: per-building yield and total — walk the land's building
-    // instances through to their definitions for the stats.
+    // instances through to their definitions for the stats. Buildings still
+    // under construction (`status == BUILDING`) are listed in grey with
+    // `Name (YYYY.MM.DD)`; `INACTIVE` buildings are listed with no yield
+    // info. Only `ACTIVE` buildings contribute to the totals.
     let (mut gold, mut levy) = (0i64, 0u64);
-    let mut rows: Vec<(String, String, String)> = Vec::new();
-    // The key tracks selection + the building roster on it (def ids in order);
-    // it changes when the land or its building set does.
+    let mut rows: Vec<(String, String, String, bool)> = Vec::new();
+    // The key tracks selection + the building roster on it (def ids + per-
+    // building status + finish date); it changes when the land, the building
+    // set, or any visible status does.
     let mut sig = String::new();
     for b_e in land_has_buildings.iter() {
-        let Some(building_of) = building_of.get(b_e).ok() else {
+        let Ok(building_of) = building_of.get(b_e) else {
             continue;
         };
-        if !sig.is_empty() {
-            sig.push(',');
-        }
-        sig.push_str(&building_of.0);
         let Some(d) = defs.get(&building_of.0) else {
             continue;
         };
-        gold += d.gold_profit as i64 - d.gold_upkeep as i64;
-        levy += d.levy as u64;
-        // One gold field is ever set (profit xor upkeep), so the net is
-        // whichever sign is present; omit zeroes to keep a cell clean.
-        let g = if d.gold_profit > 0 {
-            format!("+{}g", d.gold_profit)
-        } else if d.gold_upkeep > 0 {
-            format!("-{}g", d.gold_upkeep)
+        let status = building_status
+            .get(b_e)
+            .map(|building_status| building_status.0)
+            .unwrap_or(BUILDING_STATUS_ACTIVE);
+        let finish = building_finish.get(b_e).ok().map(|f| f.0);
+        let grey = status == BUILDING_STATUS_BUILDING;
+        let active = status == BUILDING_STATUS_ACTIVE;
+        if !sig.is_empty() {
+            sig.push(',');
+        }
+        sig.push_str(&format!(
+            "{}:{}:{}",
+            building_of.0,
+            status,
+            finish
+                .map(|building_construction_date| building_construction_date.to_string())
+                .unwrap_or_default()
+        ));
+        let g_cell;
+        let l_cell;
+        if active {
+            gold += d.gold_profit as i64 - d.gold_upkeep as i64;
+            levy += d.levy as u64;
+            // One gold field is ever set (profit xor upkeep), so the net is
+            // whichever sign is present; omit zeroes to keep a cell clean.
+            g_cell = if d.gold_profit > 0 {
+                format!("+{}g", d.gold_profit)
+            } else if d.gold_upkeep > 0 {
+                format!("-{}g", d.gold_upkeep)
+            } else {
+                String::new()
+            };
+            l_cell = if d.levy > 0 { d.levy.to_string() } else { String::new() };
+        } else if grey {
+            // Name carries "Building Name (YYYY.MM.DD)"; gold + levy cells
+            // stay empty. The grey tint tells the eye.
+            let name = format!(
+                "{} ({})",
+                d.name,
+                finish
+                    .map(|building_construction_date| building_construction_date.to_string())
+                    .unwrap_or_else(|| "?".into())
+            );
+            rows.push((name, String::new(), String::new(), true));
+            continue;
         } else {
-            String::new()
-        };
-        let l = if d.levy > 0 { d.levy.to_string() } else { String::new() };
-        rows.push((d.name.clone(), g, l));
+            // `INACTIVE` — listed but contributes nothing.
+            g_cell = String::new();
+            l_cell = String::new();
+        }
+        rows.push((d.name.clone(), g_cell, l_cell, grey));
     }
 
     let (cur_key, total) = if rows.is_empty() {

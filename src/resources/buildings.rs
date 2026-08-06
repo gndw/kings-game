@@ -14,7 +14,10 @@ use serde::Deserialize;
 
 /// One building definition. Military ones cost `gold_upkeep` and add `levy`
 /// troops; civil ones earn `gold_profit`. One gold field set, never both — the
-/// other stays 0. `construction_price` is the one-off gold cost to build one.
+/// other stays 0. `construction_price` is the one-off gold cost to build one;
+/// `construction_time` is how many in-game days it takes (the new building
+/// spawns as `BuildingStatus::BUILDING` and flips to `ACTIVE` once the date
+/// advances past the start date + this value).
 #[derive(Clone, Debug, Deserialize)]
 pub struct BuildingDef {
     pub id: String,
@@ -27,6 +30,8 @@ pub struct BuildingDef {
     pub levy: u32,
     #[serde(default)]
     pub construction_price: u32,
+    #[serde(default)]
+    pub construction_time: u32,
 }
 
 /// The roster: ID-keyed for O(1) lookup, insertion-ordered for deterministic

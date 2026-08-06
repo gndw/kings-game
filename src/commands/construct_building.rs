@@ -12,10 +12,12 @@
 
 use super::core::{Choice, Command, MenuItem, next_id, note, ruled_lands};
 use crate::ecs::{
-    Building, BuildingOf, BuildingOnLand, CharacterGold, CharacterLeads, LandHeldBy, Registry,
-    StringId,
+    Building, BuildingConstructionDate, BuildingOf, BuildingOnLand, BuildingStatus,
+    CharacterGold, CharacterLeads, LandHeldBy, LandName, Registry, StringId,
 };
 use crate::resources::buildings::BuildingDefs;
+use crate::resources::calendar::Calendar;
+use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
 
@@ -52,16 +54,25 @@ impl Command for ConstructBuilding {
                 .map(|(id, name)| MenuItem { label: name, value: id })
                 .collect(),
             // Step 1: every building kind in the roster — construction is not
-            // land-specific. The price is shown so the player can see the cost.
-            _ => world
-                .resource::<BuildingDefs>()
-                .0
-                .iter()
-                .map(|(id, d)| MenuItem {
-                    label: format!("{}  ({}g)", d.name, d.construction_price),
-                    value: id.clone(),
-                })
-                .collect(),
+            // land-specific. Price + construction time are shown so the player
+            // can see both what it costs and how long before it contributes.
+            _ => {
+                let cal = world.resource::<Calendar>();
+                world
+                    .resource::<BuildingDefs>()
+                    .0
+                    .iter()
+                    .map(|(id, d)| MenuItem {
+                        label: format!(
+                            "{} ({}g in {})",
+                            d.name,
+                            d.construction_price,
+                            cal.format_duration(d.construction_time),
+                        ),
+                        value: id.clone(),
+                    })
+                    .collect()
+            }
         }
     }
 
@@ -82,6 +93,11 @@ struct Go {
     land_e: Entity,
     price: u32,
     def_name: String,
+    def_id: String,
+    construction_time: u32,
+    /// Land name captured during the read-only `validate` so the chronicle
+    /// line can name the land rather than its bare id.
+    land_name: String,
 }
 
 /// Check the rules against a snapshot (`&World`): the def exists, the actor
@@ -121,11 +137,19 @@ fn validate(world: &World, actor: &str, land_id: &str, def_id: &str) -> Result<G
         return Err(format!("need {} gold", def.construction_price));
     }
 
+    let land_name = world
+        .get::<LandName>(land_e)
+        .map(|land_name| land_name.0.clone())
+        .unwrap_or_else(|| land_id.to_string());
+
     Ok(Go {
         actor_e,
         land_e,
         price: def.construction_price,
         def_name: def.name.clone(),
+        def_id: def_id.to_string(),
+        construction_time: def.construction_time,
+        land_name,
     })
 }
 
@@ -142,24 +166,42 @@ fn construct(world: &mut World, actor: &str, land_id: &str, def_id: &str) {
         character_gold.0 -= go.price as i64;
     }
 
+    // Finish date = today + the def's construction time, walked forward
+    // under the calendar's month/year lengths so it lands on a valid day
+    // even when the construction time crosses year boundaries.
+    let (start_date, finish_date) = {
+        let calendar = world.resource::<Calendar>();
+        let start = *world.resource::<Date>();
+        let finish = start.after_days(go.construction_time, calendar);
+        (start, finish)
+    };
+
     // Spawn the instance — the relationship hook lands the new building in
-    // the land's `LandHasBuildings` synchronously. Then ask the yield observer
-    // to re-sum this kingdom's holdings now that the data is authoritative.
+    // the land's `LandHasBuildings` synchronously. The building is spawned
+    // as `BUILDING` with the calculated finish date; it flips to `ACTIVE`
+    // once the day's tick passes that date and yields flow from then on.
     let id = next_id(world);
     let eid = world
         .spawn((
             StringId(id.clone()),
             Building,
-            BuildingOf(def_id.to_string()),
+            BuildingOf(go.def_id.clone()),
             BuildingOnLand(go.land_e),
+            BuildingStatus(crate::ecs::building::BUILDING_STATUS_BUILDING),
+            BuildingConstructionDate(finish_date),
         ))
         .id();
     world.resource_mut::<Registry>().insert(id, eid);
-    world.trigger(crate::updates::yields::OnBuildingUpdated {
-        building: eid,
-        land: go.land_e,
-        r#type: crate::updates::yields::BUILDING_CONSTRUCTED,
-    });
+    // Don't fire `OnBuildingUpdated` here — the new building isn't active
+    // yet, so its yield is zero anyway; the `construction` system fires
+    // it on the day the building transitions to `ACTIVE`.
+    let _ = start_date;
 
-    note(world, format!("built {} on {}", go.def_name, land_id));
+    note(
+        world,
+        format!(
+            "began construction of {} on {} (ready {})",
+            go.def_name, go.land_name, finish_date
+        ),
+    );
 }

@@ -2,13 +2,14 @@
 //! resources; the rollover logic lives here.
 
 use crate::resources::{calendar::Calendar, date::Date};
-use crate::schedules::OnMonth;
+use crate::schedules::{OnDay, OnMonth};
 use bevy::prelude::*;
 
-/// One simulated day: the tick count bumps and the date advances. On the day
-/// the date rolls back to 1 (a month boundary) it runs the [`OnMonth`]
-/// schedule, which holds the monthly payout. Exclusive so it can `run_schedule`,
-/// which needs `&mut World`.
+/// One simulated day: the tick count bumps and the date advances. Always runs
+/// the [`OnDay`] schedule (per-day building completion checks). On the day
+/// the date rolls back to 1 (a month boundary) it also runs the [`OnMonth`]
+/// schedule, which holds the monthly payout. Exclusive so it can
+/// `run_schedule`, which needs `&mut World`.
 pub fn advance(world: &mut World) {
     let (days_per_month, months_per_year) = {
         let calendar = world.resource::<Calendar>();
@@ -31,6 +32,7 @@ pub fn advance(world: &mut World) {
             true
         }
     };
+    world.run_schedule(OnDay);
     if month_rolled {
         world.run_schedule(OnMonth);
     }

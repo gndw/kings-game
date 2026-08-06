@@ -180,10 +180,10 @@ pub struct Character {
     pub gold_yield: i64,
 }
 
-/// One built building instance: which definition it is an instance of, and
-/// which land it stands on. State-only (what's built changes in play and
-/// belongs in a save), like [`Kingdom`]. Spawned as an entity by
-/// [`crate::ecs::populate`] and related to its land via
+/// One built building instance: which definition it is an instance of, which
+/// land it stands on, and what state it is in. State-only (what's built
+/// changes in play and belongs in a save), like [`Kingdom`]. Spawned as an
+/// entity by [`crate::ecs::populate`] and related to its land via
 /// [`BuildingOnLand`](crate::ecs::BuildingOnLand).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -194,6 +194,16 @@ pub struct Building {
     pub def_id: String,
     /// The land this building stands on, by id.
     pub land_id: String,
+    /// Per-instance operating state. `1 = ACTIVE`, `2 = INACTIVE`,
+    /// `3 = BUILDING` (matches the constants on
+    /// [`BuildingStatus`](crate::ecs::BuildingStatus)). Defaults to `ACTIVE`
+    /// so a state file can omit it and keep everything operational at load.
+    #[serde(default = "default_active_status")]
+    pub status: u8,
+}
+
+fn default_active_status() -> u8 {
+    1
 }
 
 /// A realm: a ruler and the single land it holds (which is also its capital).

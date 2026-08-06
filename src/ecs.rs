@@ -20,7 +20,9 @@
 //! - **Building** entities: [`StringId`], [`Building`], [`BuildingOf`] (a
 //!   definition id into the [`BuildingDefs`](crate::resources::buildings::BuildingDefs)
 //!   roster), [`BuildingOnLand`] (whose reverse [`LandHasBuildings`] sits on
-//!   the land).
+//!   the land), [`BuildingStatus`] (active/inactive/building), and
+//!   optionally [`BuildingConstructionDate`] (set on `BUILDING` instances
+//!   until the date passes the def's `construction_time`).
 //!
 //! Building *definitions* are not entities — they are a read-only roster held
 //! as the [`BuildingDefs`](crate::resources::buildings::BuildingDefs) resource;

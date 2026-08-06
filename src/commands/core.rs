@@ -169,6 +169,6 @@ pub(super) fn next_id(world: &mut World) -> String {
 }
 
 /// Append `line` to the chronicle.
-pub(super) fn note(world: &mut World, line: String) {
+pub(crate) fn note(world: &mut World, line: String) {
     world.resource_mut::<Chronicles>().0.push(line);
 }

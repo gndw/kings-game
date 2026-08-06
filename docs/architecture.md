@@ -126,7 +126,11 @@ shape; this is the *what*.
     (character→house), `BuildingOf`
     (building→definition id, a string looked up against the `BuildingDefs`
     resource — not an entity link, since definitions are a roster, not
-    entities). The kingdom's seat is implicit: its single held land.
+    entities), `BuildingStatus` (`ACTIVE` / `INACTIVE` / `BUILDING` — only
+    `ACTIVE` counts toward yield), and on `BUILDING` instances a
+    `BuildingConstructionDate` set to start date + def's `construction_time`
+    (removed once the per-day tick flips the status). The kingdom's seat is
+    implicit: its single held land.
 
 - **`populate(world, content)`** (`ecs/ecs.rs`) builds the world **once** from
   merged+reconciled content, called from `main` before `App::run`. Spawn order is
@@ -168,14 +172,15 @@ shape; this is the *what*.
 Lives in `updates/` and `schedules.rs`.
 
 - **Schedules** (`schedules.rs`): Bevy's `Startup`/`Update`/`FixedUpdate`, plus
-  one custom `OnMonth` (`ScheduleLabel`), run from the tick.
+  two custom labels — `OnDay` (per-day building completions) and `OnMonth`
+  (monthly payout) — both run from `advance` after the date mutates.
 - **The tick — `advance`** (`updates/advance_date.rs`) runs in `FixedUpdate`,
-  gated by `Game::running()`. It's an **exclusive `fn(&mut World)`** because it
-  needs `run_schedule(OnMonth)`, which requires `&mut World`. It bumps
-  `tick_count`, advances `day`/`month`/`year` against the `Calendar`, and on the
-  day the date rolls back to 1 it runs `OnMonth`. `FixedUpdate`'s rate is set by
-  `input` from `speed(&calendar.speeds, speed_idx)` — simulated days per real
-  second.
+  gated by `Game::running()`. It's an **exclusive `fn(&mut World)`** because
+  it needs `run_schedule(...)`, which requires `&mut World`. It bumps
+  `tick_count`, advances `day`/`month`/`year` against the `Calendar`, then
+  runs `OnDay`; on the day the date rolls back to 1 it also runs `OnMonth`.
+  `FixedUpdate`'s rate is set by `input` from
+  `speed(&calendar.speeds, speed_idx)` — simulated days per real second.
 - **The economy is Rust, not a script:**
   - `recompute_yields` (`updates/yields.rs`) — runs in `Startup` (so the
     opening screen shows what a realm renders). After that the construct
@@ -244,10 +249,13 @@ the style of `ctx::step`.
   kingdom — via `CharacterLeads` — equals the land's `LandHeldBy`, i.e. they
   rule it; gold ≥ `construction_price`, no debt), then spawns the same bundle
   `populate` uses
-  (`StringId`/`Building`/`BuildingOf`/`BuildingOnLand`), registers the id in
-  `Registry`, deducts gold, and appends a chronicle line on success *and*
-  every rejection. `recompute_yields` already runs each `FixedUpdate`, so the
-  new building's gold/levy flows next tick with no wiring.
+  (`StringId`/`Building`/`BuildingOf`/`BuildingOnLand` + `BuildingStatus::BUILDING`
+  + `BuildingConstructionDate(start + def.construction_time)`), registers the
+  id in `Registry`, deducts gold, and appends a chronicle line on success
+  *and* every rejection. The new building contributes no yield yet; the
+  per-day `construction` system (`updates/construction.rs`) flips it to
+  `ACTIVE` once the date passes the finish date and fires `OnBuildingUpdated`
+  so the realm's yields refresh through the same observer.
 - **`DestroyBuilding`** (the inverse) validates the actor rules the land and
   the building is `BuildingOnLand` it, then despawns the instance +
   deregisters its id. Despawning auto-removes it from the land's
@@ -368,8 +376,9 @@ asset-loaded sprites.
 | `src/app.rs` | `Game` resource, `Ctx` wrapper, `speed`, `input` |
 | `src/commands.rs` | module root + re-exports (`Command`, `CommandRegistry`, `Choice`, `MenuItem`) |
 | `src/commands/core.rs` | the `Command` trait, `CommandRegistry`, `MenuItem`/`Choice`, shared helpers (`next_id`, `note`, `ruled_lands`) |
-| `src/commands/construct_building.rs` | the `ConstructBuilding` command (validate + spawn + pay) |
+| `src/commands/construct_building.rs` | the `ConstructBuilding` command (validate + spawn as BUILDING + pay) |
 | `src/commands/destroy_building.rs` | the `DestroyBuilding` command (validate + despawn + deregister) |
+| `src/updates/construction.rs` | `tick` — flips `BUILDING` buildings to `ACTIVE` once the date passes their finish date |
 | `src/ctx.rs` | `Ctx` (session state: rng, player id, selection), `startup`, selection `step` |
 | `src/content.rs` | `Content`, per-kind structs, `parse_file`, `merge`, `validate` |
 | `src/state.rs` | `StateFile`, `merge_state`, `reconcile` |
@@ -378,7 +387,7 @@ asset-loaded sprites.
 | `src/ecs/ecs.rs` | `StringId`, `Registry`, `populate` |
 | `src/ecs/{house,character,land,building,kingdom}.rs` | components + relationships per kind |
 | `src/ecs.rs` | module root, re-exports, the component map |
-| `src/schedules.rs` | `OnMonth` label |
+| `src/schedules.rs` | `OnDay` + `OnMonth` labels |
 | `src/updates/advance_date.rs` | the tick (exclusive `&mut World`) |
 | `src/updates/yields.rs` | `recompute_yields` (graph walk) |
 | `src/updates/payout.rs` | `payout` (monthly gold to leaders) |

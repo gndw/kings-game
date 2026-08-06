@@ -18,6 +18,15 @@ use std::collections::HashSet;
 
 const HOLDING_RADIUS: f32 = 12.0;
 
+/// Gizmo config group dedicated to the per-land polygon outline. Uses a
+/// thinner 1.0px stroke (vs the default 2.0px) so the borders read as refined
+/// edges rather than chunky ones, while the world border, fill, holding ring,
+/// and flag keep the default width. Registered once in `main` via
+/// `AppGizmoBuilder::insert_gizmo_config` because `linestrip_2d` has no
+/// per-call width in Bevy 0.19.
+#[derive(Default, Reflect, GizmoConfigGroup)]
+pub struct LandBorderGizmoConfigGroup;
+
 /// Marker on the `Text2d` entity we spawn in [`startup`] for a land's name +
 /// yield, so [`update_draw`] can find the label for a given land and refresh
 /// the yield line.
@@ -155,6 +164,10 @@ fn sum_land_yield(
 /// World border, land outlines, holdings, and the selected land's flag.
 pub fn update_draw(
     mut gizmos: Gizmos,
+    // ponytail: separate `Gizmos<LandBorderGizmoConfigGroup>` so the per-land
+    // polygon outline uses the 1.0px stroke configured on that group; the
+    // world border, fill, holding ring, and flag stay on the default 2.0px.
+    mut land_border_gizmos: Gizmos<LandBorderGizmoConfigGroup>,
     game: Res<Game>,
     registry: Res<Registry>,
     border: Res<Border>,
@@ -210,10 +223,13 @@ pub fn update_draw(
         .chain(lands_vec.iter().filter(|l| Some(l.0.as_str()) == sel));
     for land in order {
         let is_sel = Some(land.0.as_str()) == sel;
+        // Unselected lands: dark brown outline. Selected lands keep the
+        // yellow outline as the selection cue (the holding circle is yellow
+        // too, and the land draws last so it covers its neighbours).
         let (outline, holder) = if is_sel {
             (css::YELLOW, css::YELLOW)
         } else {
-            (css::WHITE, Srgba::rgb(0.59, 0.29, 0.0))
+            (Srgba::rgb(0.36, 0.22, 0.12), Srgba::rgb(0.59, 0.29, 0.0))
         };
         let land_color = if own.contains(&land.0) {
             Srgba::rgb(0.012, 0.435, 0.165).with_alpha(0.1).into()
@@ -221,7 +237,7 @@ pub fn update_draw(
             Srgba::rgb(0.322, 0.208, 0.165).with_alpha(0.1).into()
         };
         fill(&mut gizmos, &land.1, land_color);
-        gizmos.linestrip_2d(
+        land_border_gizmos.linestrip_2d(
             land.1.iter().map(|&(x, y)| Vec2::new(x as f32, y as f32)),
             outline,
         );

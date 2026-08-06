@@ -68,6 +68,16 @@ fn main() -> Result<()> {
                 ..default()
             }),
     );
+    // Register the per-land-border gizmo group with a thinner 1.0px stroke;
+    // `update_draw` draws the polygon outline through `Gizmos<LandBorder...>`
+    // because `linestrip_2d` has no per-call width.
+    app.insert_gizmo_config(
+        ui::map::LandBorderGizmoConfigGroup,
+        GizmoConfig {
+            line: GizmoLineConfig { width: 1.0, ..default() },
+            ..default()
+        },
+    );
     {
         let world = app.world_mut();
         ecs::populate(world, mods.content);

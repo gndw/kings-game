@@ -1,8 +1,10 @@
 //! The text overlays: the chronicle panel, plus the resource bar along the top
-//! and the status bar along the bottom. The camera and map drawing live in
-//! `map`, the layout that spawns the panels in `startup`.
+//! and the status bar along the bottom. The camera lives in `camera`, the
+//! gizmo map drawing in `map`, and the layout that spawns the panels in
+//! `startup`.
 
 pub mod actions;
+pub mod camera;
 pub mod chronicle;
 pub mod command_menu;
 pub mod flag;

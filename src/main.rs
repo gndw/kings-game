@@ -88,6 +88,7 @@ fn main() -> Result<()> {
             (
                 Ctx::startup,
                 ui::startup::startup,
+                ui::camera::startup,
                 ui::map::startup,
                 ui::command_menu::startup,
                 updates::yields::recompute_yields,
@@ -118,7 +119,7 @@ fn main() -> Result<()> {
                 ui::resource::update,
                 // update_camera mutates Projection/Transform; must run before
                 // update_draw so gizmos draw against the new view.
-                ui::map::update_camera,
+                ui::camera::update_camera,
                 ui::map::update_draw,
                 ui::legend::update,
                 ui::actions::update,

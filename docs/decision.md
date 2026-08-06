@@ -173,7 +173,7 @@ command's steps the same way; the roster of commands it offers is the
 The camera has two views — the whole map and "zoomed in on the selected land" —
 and toggles between them with `Z`. It is a plain `bool` on `Game`, not a state
 machine: `true` means "frame on the selection's bbox with `ZOOM_MARGIN`",
-`false` means "frame on `Border`". `ui::map::update_camera` reads the flag and
+`false` means "frame on `Border`". `ui::camera::update_camera` reads the flag and
 the current `selected_land_id` every PostUpdate frame and rewrites the
 camera's `Projection::Orthographic { scaling_mode, scale, viewport_origin }`
 and `Transform::translation` in place.

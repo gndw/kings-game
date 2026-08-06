@@ -118,23 +118,23 @@ fn main() -> Result<()> {
                 ui::command_menu::input,
                 ui::command_menu::update,
                 ui::map::update_input,
+                ui::actions::update,
                 // Ponytail: keep debug systems last so they don't displace
                 // gameplay systems in the schedule.
+                ui::resource::update,
+                ui::legend::update,
+                ui::chronicle::update,
+                ui::status::update,
                 kings_game::debug::dump_characters,
             ),
         )
         .add_systems(
             PostUpdate,
             (
-                ui::resource::update,
                 // update_camera mutates Projection/Transform; must run before
                 // update_draw so gizmos draw against the new view.
                 ui::camera::update_camera,
                 ui::map::update_draw,
-                ui::legend::update,
-                ui::actions::update,
-                ui::chronicle::update,
-                ui::status::update
             )
         )
         .add_systems(

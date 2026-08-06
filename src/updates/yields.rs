@@ -4,7 +4,7 @@
 use crate::app::Game;
 use crate::ecs::{
     BuildingOf, BuildingStatus, CharacterGoldYield, CharacterLeads, CharacterLevy, KingdomHold,
-    KingdomLedBy, LandHasBuildings, LandHeldBy, BUILDING_STATUS_ACTIVE,
+    KingdomLedBy, LandHasBuildings, LandHeldBy,
 };
 use crate::resources::buildings::BuildingDefs;
 use bevy::prelude::*;
@@ -52,10 +52,10 @@ fn sum_kingdom_yield(
         let Ok(building_of) = building_of.get(b_e) else {
             continue;
         };
-        // INACTIVE (2) and BUILDING (3) contribute nothing to yields.
+        // Inactive and Building contribute nothing to yields.
         let active = building_status
             .get(b_e)
-            .map(|building_status| building_status.0 == BUILDING_STATUS_ACTIVE)
+            .map(|status| *status == BuildingStatus::Active)
             .unwrap_or(false);
         if !active {
             continue;
@@ -75,9 +75,11 @@ fn sum_kingdom_yield(
 /// not left stale. After startup the construct/destroy commands trigger
 /// [`OnBuildingUpdated`] for per-realm updates.
 pub fn recompute_yields(
-    mut characters: Query<
-        (Option<&CharacterLeads>, &mut CharacterGoldYield, &mut CharacterLevy),
-    >,
+    mut characters: Query<(
+        Option<&CharacterLeads>,
+        &mut CharacterGoldYield,
+        &mut CharacterLevy,
+    )>,
     kingdom_holds: Query<&KingdomHold>,
     land_has_buildings: Query<&LandHasBuildings>,
     building_of: Query<&BuildingOf>,

@@ -9,20 +9,20 @@
 //! at [`BuildingConstructionDate`]). Only `ACTIVE` buildings contribute to
 //! `sum_kingdom_yield` and to the buildings panel's yield column.
 
+use super::land::LandHasBuildings;
 use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;
 use bevy::prelude::Component;
-use super::land::LandHasBuildings;
+use serde::Deserialize;
 
-/// Building is operating normally. Counts toward yield and total.
-pub const BUILDING_STATUS_ACTIVE: u8 = 1;
-/// Building exists but has been disabled (reserved for future code paths).
-/// ponytail: defined but unused; the construct / destroy commands don't
-/// toggle it. Wire it up if a "deactivate building" command ever ships.
-pub const BUILDING_STATUS_INACTIVE: u8 = 2;
-/// Building is under construction; flips to `ACTIVE` once the date passes
-/// [`BuildingConstructionDate`].
-pub const BUILDING_STATUS_BUILDING: u8 = 3;
+/// Per-instance operating state.
+#[derive(Component, Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+pub enum BuildingStatus {
+    #[default]
+    Active,
+    Inactive,
+    Building,
+}
 
 /// A built building instance. No data of its own here: which kind of building it
 /// is lives in [`BuildingOf`] (a definition id), and its stats are looked up in
@@ -43,11 +43,7 @@ pub struct BuildingOf(pub String);
 #[relationship(relationship_target = LandHasBuildings)]
 pub struct BuildingOnLand(pub Entity);
 
-/// Per-instance operating state. See [`BUILDING_STATUS_ACTIVE`] / `_INACTIVE` /
-/// `_BUILDING`. Populated from content at spawn time and advanced to
-/// `ACTIVE` by the `construction` system once the construction finishes.
-#[derive(Component, Debug, Clone, Copy)]
-pub struct BuildingStatus(pub u8);
+/// Per-instance operating state is represented directly by the enum above.
 
 /// The date the building becomes `ACTIVE` (when present — only meaningful on
 /// `BUILDING` buildings). Set at construction time as

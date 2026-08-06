@@ -12,7 +12,7 @@ section stops matching the code, fix the section in the same change.
 
 A Bevy `App` runs three schedules — `Startup`, `FixedUpdate` (the tick), and
 `Update` (render + input) — plus one custom `OnMonth`. The world is Bevy ECS
-(not hecs, despite the README): every land, character, house, kingdom and building is an
+(not hecs, despite the README): every land, character, house, kingdom, courtier and building is an
 entity, and a read-only building-definition roster plus the calendar, date and map border
 and chronicle log are `Resource`s. Session state (rng, player id, map selection)
 lives in a single `Game` resource wrapping `Ctx`. All of the *what exists* comes
@@ -122,12 +122,15 @@ shape; this is the *what*.
   - `BuildingOnLand` (on building) ↔ `LandHasBuildings` (on land,
     `Vec<Entity>`) — a building declares its land; the land's
     `LandHasBuildings` auto-fills. Iterate via `RelationshipTarget::iter`.
+  - `CourtierOfCharacter` (courtier→character) ↔ `CharacterHasCourtiers`, and
+    `CourtierOfKingdom` (courtier→kingdom) ↔ `KingdomHasCourtiers` — each appointment
+    links one character to one kingdom; `CourtierType::Courtier` is the generic role.
   - Plain (non-relationship) entity links: `CharacterOfHouse`
     (character→house), `BuildingOf`
     (building→definition id, a string looked up against the `BuildingDefs`
     resource — not an entity link, since definitions are a roster, not
-    entities), `BuildingStatus` (`ACTIVE` / `INACTIVE` / `BUILDING` — only
-    `ACTIVE` counts toward yield), and on `BUILDING` instances a
+    entities), `BuildingStatus` (`Active` / `Inactive` / `Building` — only
+    `Active` counts toward yield), and on `Building` instances a
     `BuildingConstructionDate` set to start date + def's `construction_time`
     (removed once the per-day tick flips the status). The kingdom's seat is
     implicit: its single held land.
@@ -250,12 +253,12 @@ the style of `ctx::step`.
   kingdom — via `CharacterLeads` — equals the land's `LandHeldBy`, i.e. they
   rule it; gold ≥ `construction_price`, no debt), then spawns the same bundle
   `populate` uses
-  (`StringId`/`Building`/`BuildingOf`/`BuildingOnLand` + `BuildingStatus::BUILDING`
+  (`StringId`/`Building`/`BuildingOf`/`BuildingOnLand` + `BuildingStatus::Building`
   + `BuildingConstructionDate(start + def.construction_time)`), registers the
   id in `Registry`, deducts gold, and appends a chronicle line on success
   *and* every rejection. The new building contributes no yield yet; the
   per-day `construction` system (`updates/construction.rs`) flips it to
-  `ACTIVE` once the date passes the finish date and fires `OnBuildingUpdated`
+  `Active` once the date passes the finish date and fires `OnBuildingUpdated`
   so the realm's yields refresh through the same observer.
 - **`DestroyBuilding`** (the inverse) validates the actor rules the land and
   the building is `BuildingOnLand` it, then despawns the instance +
@@ -284,7 +287,7 @@ asset-loaded sprites.
 
 - **Layout** (`ui/startup.rs`): a column flex tree — `resource` bar on top, a row
   holding the map (left, full remaining width) and the right-hand column
-  (`information` over `buildings` over `actions` over `chronicle`, the latter
+  (`information` over `buildings` over `courts` over `actions` over `chronicle`, the latter
   pinned to 30% height),
   `status` bar on
   the bottom. `RIGHT_BAR = 0.3` is shared with the camera so the map lands beside
@@ -331,6 +334,7 @@ asset-loaded sprites.
     gold (right) / levy (right), one row per building, then a thin rule and a
     `total` row in the same layout. Its `update` clears the table on no
     selection.
+  - `courts` — courtiers of the kingdom holding the selected land, showing character name and role.
   - `actions` — its own panel between `buildings` and `chronicle`: a title
     (`ACTIONS`) + a `LegendActions` column listing the player's build/destroy
     hotkeys if the player rules the selected land, else a `(none)` placeholder.
@@ -390,7 +394,7 @@ asset-loaded sprites.
 | `src/mods/mod.rs` | `load(dir)` — the two-pass orchestrator |
 | `src/resources/*` | `Border`, `Calendar`(+validate, carries `start`), `Date` (the walking clock), `BuildingDefs`/`BuildingDef` (kind roster), `Chronicles` (log) |
 | `src/ecs/ecs.rs` | `StringId`, `Registry`, `populate` |
-| `src/ecs/{house,character,land,building,kingdom}.rs` | components + relationships per kind |
+| `src/ecs/{house,character,land,building,kingdom,courtier}.rs` | components + relationships per kind |
 | `src/ecs.rs` | module root, re-exports, the component map |
 | `src/schedules.rs` | `OnDay` + `OnMonth` labels |
 | `src/updates/advance_date.rs` | the tick (exclusive `&mut World`) |

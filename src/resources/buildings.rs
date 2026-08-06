@@ -16,7 +16,7 @@ use serde::Deserialize;
 /// troops; civil ones earn `gold_profit`. One gold field set, never both — the
 /// other stays 0. `construction_price` is the one-off gold cost to build one;
 /// `construction_time` is how many in-game days it takes (the new building
-/// spawns as `BuildingStatus::BUILDING` and flips to `ACTIVE` once the date
+/// spawns as `BuildingStatus::Building` and flips to `Active` once the date
 /// advances past the start date + this value).
 #[derive(Clone, Debug, Deserialize)]
 pub struct BuildingDef {

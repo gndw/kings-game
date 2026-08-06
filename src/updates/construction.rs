@@ -13,10 +13,7 @@
 //! tiny.
 
 use crate::commands::core::note;
-use crate::ecs::{
-    BuildingConstructionDate, BuildingOf, BuildingOnLand, BuildingStatus, LandName,
-    BUILDING_STATUS_ACTIVE, BUILDING_STATUS_BUILDING,
-};
+use crate::ecs::{BuildingConstructionDate, BuildingOf, BuildingOnLand, BuildingStatus, LandName};
 use crate::resources::buildings::BuildingDefs;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
@@ -40,11 +37,7 @@ pub fn construction(world: &mut World) {
     // def_id). The def_id is captured here so pass 2 can name the building
     // in the chronicle line without re-reading the world during the
     // mutation loop.
-    let mut ready: Vec<(
-        bevy::ecs::entity::Entity,
-        bevy::ecs::entity::Entity,
-        String,
-    )> = Vec::new();
+    let mut ready: Vec<(bevy::ecs::entity::Entity, bevy::ecs::entity::Entity, String)> = Vec::new();
     {
         let mut q = world.query::<(
             bevy::ecs::entity::Entity,
@@ -54,7 +47,7 @@ pub fn construction(world: &mut World) {
             &BuildingOf,
         )>();
         for (b_e, status, finish_date, building_on_land, building_of) in q.iter(world) {
-            if status.0 != BUILDING_STATUS_BUILDING {
+            if *status != BuildingStatus::Building {
                 continue;
             }
             if today_ord >= finish_date.0.ordinal(&calendar) {
@@ -70,7 +63,7 @@ pub fn construction(world: &mut World) {
     // already active.
     for (b_e, land_e, def_id) in ready {
         if let Some(mut status) = world.get_mut::<BuildingStatus>(b_e) {
-            status.0 = BUILDING_STATUS_ACTIVE;
+            *status = BuildingStatus::Active;
         }
         world.entity_mut(b_e).remove::<BuildingConstructionDate>();
         let def_name = world
@@ -82,10 +75,7 @@ pub fn construction(world: &mut World) {
             .get::<LandName>(land_e)
             .map(|land_name| land_name.0.clone())
             .unwrap_or_default();
-        note(
-            world,
-            format!("{def_name} on {land_name} is now active."),
-        );
+        note(world, format!("{def_name} on {land_name} is now active."));
         world.trigger(OnBuildingUpdated {
             building: b_e,
             land: land_e,

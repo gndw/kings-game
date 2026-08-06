@@ -1,6 +1,6 @@
 //! The flex layout holding the text panels and the two full-width bars.
 
-use super::{GAP, actions, buildings, chronicle, information, resource, status};
+use super::{GAP, actions, buildings, chronicle, courts, information, resource, status};
 use bevy::prelude::*;
 
 pub(crate) const RIGHT_BAR: f32 = 0.3;
@@ -41,6 +41,7 @@ pub fn startup(mut commands: Commands) {
                 .with_children(|col| {
                     information::spawn(col, panel);
                     buildings::spawn(col, panel);
+                    courts::spawn(col, panel);
                     actions::spawn(col, panel);
                     chronicle::spawn(col, panel);
                 });

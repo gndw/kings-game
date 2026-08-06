@@ -12,8 +12,8 @@
 
 use super::core::{Choice, Command, MenuItem, next_id, note, ruled_lands};
 use crate::ecs::{
-    Building, BuildingConstructionDate, BuildingOf, BuildingOnLand, BuildingStatus,
-    CharacterGold, CharacterLeads, LandHeldBy, LandName, Registry, StringId,
+    Building, BuildingConstructionDate, BuildingOf, BuildingOnLand, BuildingStatus, CharacterGold,
+    CharacterLeads, LandHeldBy, LandName, Registry, StringId,
 };
 use crate::resources::buildings::BuildingDefs;
 use crate::resources::calendar::Calendar;
@@ -51,7 +51,10 @@ impl Command for ConstructBuilding {
             // Step 0: the lands the actor rules (can build on).
             0 => ruled_lands(world, actor)
                 .into_iter()
-                .map(|(id, name)| MenuItem { label: name, value: id })
+                .map(|(id, name)| MenuItem {
+                    label: name,
+                    value: id,
+                })
                 .collect(),
             // Step 1: every building kind in the roster — construction is not
             // land-specific. Price + construction time are shown so the player
@@ -187,7 +190,7 @@ fn construct(world: &mut World, actor: &str, land_id: &str, def_id: &str) {
             Building,
             BuildingOf(go.def_id.clone()),
             BuildingOnLand(go.land_e),
-            BuildingStatus(crate::ecs::building::BUILDING_STATUS_BUILDING),
+            BuildingStatus::Building,
             BuildingConstructionDate(finish_date),
         ))
         .id();

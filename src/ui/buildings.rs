@@ -5,7 +5,6 @@ use super::{FONT, TITLE};
 use crate::app::Game;
 use crate::ecs::{
     BuildingConstructionDate, BuildingOf, BuildingStatus, LandHasBuildings, Registry,
-    BUILDING_STATUS_ACTIVE, BUILDING_STATUS_BUILDING,
 };
 use crate::resources::buildings::BuildingDefs;
 use bevy::prelude::*;
@@ -190,16 +189,16 @@ pub fn update(
         };
         let status = building_status
             .get(b_e)
-            .map(|building_status| building_status.0)
-            .unwrap_or(BUILDING_STATUS_ACTIVE);
+            .copied()
+            .unwrap_or(BuildingStatus::Active);
         let finish = building_finish.get(b_e).ok().map(|f| f.0);
-        let grey = status == BUILDING_STATUS_BUILDING;
-        let active = status == BUILDING_STATUS_ACTIVE;
+        let grey = status == BuildingStatus::Building;
+        let active = status == BuildingStatus::Active;
         if !sig.is_empty() {
             sig.push(',');
         }
         sig.push_str(&format!(
-            "{}:{}:{}",
+            "{}:{:?}:{}",
             building_of.0,
             status,
             finish
@@ -220,7 +219,11 @@ pub fn update(
             } else {
                 String::new()
             };
-            l_cell = if d.levy > 0 { d.levy.to_string() } else { String::new() };
+            l_cell = if d.levy > 0 {
+                d.levy.to_string()
+            } else {
+                String::new()
+            };
         } else if grey {
             // Name carries "Building Name (YYYY.MM.DD)"; gold + levy cells
             // stay empty. The grey tint tells the eye.

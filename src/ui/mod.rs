@@ -8,6 +8,7 @@ pub mod buildings;
 pub mod camera;
 pub mod chronicle;
 pub mod command_menu;
+pub mod courts;
 pub mod flag;
 pub mod information;
 pub mod map;

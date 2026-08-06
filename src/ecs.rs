@@ -54,6 +54,7 @@
 
 pub mod building;
 pub mod character;
+pub mod courtier;
 pub mod ecs;
 pub mod house;
 pub mod kingdom;
@@ -61,6 +62,7 @@ pub mod land;
 
 pub use building::*;
 pub use character::*;
+pub use courtier::*;
 pub use ecs::*;
 pub use house::*;
 pub use kingdom::*;

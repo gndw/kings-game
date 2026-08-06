@@ -12,6 +12,7 @@
 //! `crate::mods` does the loading and merging; the camera and drawing live in
 //! `crate::ui::map`.
 
+use crate::ecs::{BuildingStatus, CourtierType};
 use crate::resources::border::Border;
 use crate::resources::buildings::{BuildingDef, BuildingDefs};
 use crate::resources::calendar::Calendar;
@@ -46,6 +47,7 @@ pub struct Content {
     /// Realms. Wholly state — a kingdom's leader, seat and lands all change in
     /// play — so they arrive only via the state overlay.
     pub kingdoms: IndexMap<String, Kingdom>,
+    pub courtiers: IndexMap<String, Courtier>,
 }
 
 /// Hand-written rather than derived because an empty `speeds` list is not a
@@ -61,6 +63,7 @@ impl Default for Content {
             houses: IndexMap::new(),
             characters: IndexMap::new(),
             kingdoms: IndexMap::new(),
+            courtiers: IndexMap::new(),
         }
     }
 }
@@ -194,16 +197,9 @@ pub struct Building {
     pub def_id: String,
     /// The land this building stands on, by id.
     pub land_id: String,
-    /// Per-instance operating state. `1 = ACTIVE`, `2 = INACTIVE`,
-    /// `3 = BUILDING` (matches the constants on
-    /// [`BuildingStatus`](crate::ecs::BuildingStatus)). Defaults to `ACTIVE`
-    /// so a state file can omit it and keep everything operational at load.
-    #[serde(default = "default_active_status")]
-    pub status: u8,
-}
-
-fn default_active_status() -> u8 {
-    1
+    /// Per-instance operating state. Defaults to `Active`.
+    #[serde(default)]
+    pub status: BuildingStatus,
 }
 
 /// A realm: a ruler and the single land it holds (which is also its capital).
@@ -215,6 +211,17 @@ pub struct Kingdom {
     pub id: String,
     pub leader_character_id: String,
     pub land_id: String,
+}
+
+/// A kingdom court appointment.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Courtier {
+    pub id: String,
+    pub kingdom_id: String,
+    pub character_id: String,
+    #[serde(rename = "type")]
+    pub courtier_type: CourtierType,
 }
 
 impl Content {

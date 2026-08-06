@@ -212,6 +212,20 @@ and `Transform::translation` in place.
   constants per field. The tween is also ~25 lines; the smoothing version is
   not noticeably shorter.
 
+## Building status is a serialized enum
+
+`BuildingStatus` is both the ECS component and the RON state type, with
+`Active`, `Inactive`, and `Building` variants. Variant names replace numeric
+status codes so invalid values cannot enter the world.
+
+## Courtiers are state-only appointment entities
+
+A courtier is an addressable state entity linking one character and one kingdom
+through Bevy relationships (`CourtierOfCharacter` / `CourtierOfKingdom` and their
+auto-maintained reverse collections). `CourtierType` is an enum serialized by
+variant name; `Courtier` is the generic role, leaving later roles additive without changing
+the entity shape. The court panel follows the selected land's kingdom.
+
 ## A kingdom holds exactly one land
 
 `Kingdom::land_ids: Vec<String>` is gone; the field is `land_id: String`. One

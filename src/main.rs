@@ -1,11 +1,11 @@
 use anyhow::{Result, bail};
 use bevy::prelude::*;
 use kings_game::app::{Game, input, speed};
+use kings_game::commands::CommandRegistry;
 use kings_game::ctx::Ctx;
 use kings_game::ecs;
 use kings_game::resources::chronicle::Chronicles;
 use kings_game::schedules::{OnDay, OnMonth};
-use kings_game::commands::CommandRegistry;
 use kings_game::ui;
 use kings_game::ui::command_menu::CommandMenu;
 use kings_game::updates;
@@ -74,7 +74,10 @@ fn main() -> Result<()> {
     app.insert_gizmo_config(
         ui::map::LandBorderGizmoConfigGroup,
         GizmoConfig {
-            line: GizmoLineConfig { width: 1.0, ..default() },
+            line: GizmoLineConfig {
+                width: 1.0,
+                ..default()
+            },
             ..default()
         },
     );
@@ -87,7 +90,9 @@ fn main() -> Result<()> {
     let hz = f64::from(speed(&calendar.speeds, game.speed_idx));
     app.insert_resource(game)
         .insert_resource(start)
-        .insert_resource(Chronicles(vec![format!("{start} -- the chronicle begins.")]))
+        .insert_resource(Chronicles(vec![format!(
+            "{start} -- the chronicle begins."
+        )]))
         .insert_resource(calendar)
         .insert_resource(border)
         .insert_resource(CommandMenu::default())
@@ -119,6 +124,7 @@ fn main() -> Result<()> {
                 ui::command_menu::update,
                 ui::map::update_input,
                 ui::actions::update,
+                ui::courts::update,
                 // Ponytail: keep debug systems last so they don't displace
                 // gameplay systems in the schedule.
                 ui::resource::update,
@@ -136,7 +142,7 @@ fn main() -> Result<()> {
                 // update_draw so gizmos draw against the new view.
                 ui::camera::update_camera,
                 ui::map::update_draw,
-            )
+            ),
         )
         .add_systems(
             FixedUpdate,

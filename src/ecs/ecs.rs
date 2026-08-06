@@ -9,11 +9,12 @@ use bevy::ecs::world::World;
 use bevy::prelude::{Component, Entity, Resource};
 use std::collections::HashMap;
 
-use super::building::{Building, BuildingOf, BuildingOnLand, BuildingStatus};
+use super::building::{Building, BuildingOf, BuildingOnLand};
 use super::character::{
     Character, CharacterAge, CharacterGold, CharacterGoldYield, CharacterLevy, CharacterName,
     CharacterOfHouse,
 };
+use super::courtier::{Courtier, CourtierOfCharacter, CourtierOfKingdom};
 use super::house::{House, HouseName};
 use super::kingdom::{Kingdom, KingdomHold, KingdomLedBy};
 use super::land::{Land, LandBorders, LandHolding, LandName};
@@ -120,7 +121,7 @@ pub fn populate(world: &mut World, content: Content) {
     // `BuildingOnLand` resolves to an entity that already exists; the land's
     // `LandHasBuildings` is auto-maintained by the relationship hook. The
     // per-instance status comes from the state overlay (defaults to
-    // `BUILDING_STATUS_ACTIVE`); the construction-date is only meaningful on
+    // `BuildingStatus::Active`); the construction-date is only meaningful on
     // `BUILDING` instances and is set by `ConstructBuilding` at runtime.
     for (id, b) in content.buildings.into_iter() {
         let Some(land_e) = world.resource::<Registry>().get(&b.land_id) else {
@@ -132,7 +133,7 @@ pub fn populate(world: &mut World, content: Content) {
                 Building,
                 BuildingOf(b.def_id),
                 BuildingOnLand(land_e),
-                BuildingStatus(b.status),
+                b.status,
             ))
             .id();
         world.resource_mut::<Registry>().insert(id, eid);
@@ -158,6 +159,25 @@ pub fn populate(world: &mut World, content: Content) {
         // `KingdomLedBy` is a Bevy relationship: its hook auto-maintains
         // `CharacterLeads` on the leader, so there is no manual reverse insert
         // here.
+        world.resource_mut::<Registry>().insert(id, eid);
+    }
+
+    // Court appointments resolve both characters and kingdoms spawned above.
+    for (id, c) in content.courtiers {
+        let character = world.resource::<Registry>().get(&c.character_id);
+        let kingdom = world.resource::<Registry>().get(&c.kingdom_id);
+        let (Some(character), Some(kingdom)) = (character, kingdom) else {
+            continue;
+        };
+        let eid = world
+            .spawn((
+                StringId(id.clone()),
+                Courtier,
+                c.courtier_type,
+                CourtierOfCharacter(character),
+                CourtierOfKingdom(kingdom),
+            ))
+            .id();
         world.resource_mut::<Registry>().insert(id, eid);
     }
 }

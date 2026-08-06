@@ -10,7 +10,7 @@
 //! On disk a state file is any `*.state.ron` in a mod folder; see
 //! `crate::mods::load`.
 
-use crate::content::{Building, Character, Content, Kingdom};
+use crate::content::{Building, Character, Content, Courtier, Kingdom};
 use serde::Deserialize;
 
 /// The deserialization target for a `*.state.ron` file. State entries reuse
@@ -30,6 +30,8 @@ pub struct StateFile {
     pub buildings: Vec<Building>,
     #[serde(default)]
     pub characters: Vec<Character>,
+    #[serde(default)]
+    pub courtiers: Vec<Courtier>,
 }
 
 impl Content {
@@ -62,6 +64,9 @@ impl Content {
                 existing.gold_yield = c.gold_yield;
             }
         }
+        for c in file.courtiers {
+            self.courtiers.insert(c.id.clone(), c);
+        }
     }
 }
 
@@ -81,19 +86,24 @@ pub fn reconcile(content: &mut Content) -> Vec<String> {
 
     // Snapshot the id sets up front so the mutable loops below don't have to
     // fight the borrow checker for `content`.
-    let known_defs: HashSet<&str> =
-        content.building_defs.0.keys().map(String::as_str).collect();
+    let known_defs: HashSet<&str> = content.building_defs.0.keys().map(String::as_str).collect();
     let known_chars: HashSet<&str> = content.characters.keys().map(String::as_str).collect();
     let known_lands: HashSet<&str> = content.lands.keys().map(String::as_str).collect();
 
     // Building instances: drop any whose definition or land no longer exists.
     content.buildings.retain(|id, b| {
         if !known_defs.contains(b.def_id.as_str()) {
-            notes.push(format!("dropped building `{id}`: unknown definition `{}`", b.def_id));
+            notes.push(format!(
+                "dropped building `{id}`: unknown definition `{}`",
+                b.def_id
+            ));
             return false;
         }
         if !known_lands.contains(b.land_id.as_str()) {
-            notes.push(format!("dropped building `{id}`: unknown land `{}`", b.land_id));
+            notes.push(format!(
+                "dropped building `{id}`: unknown land `{}`",
+                b.land_id
+            ));
             return false;
         }
         true
@@ -116,6 +126,19 @@ pub fn reconcile(content: &mut Content) -> Vec<String> {
             return false;
         }
         true
+    });
+
+    content.courtiers.retain(|id, c| {
+        if !content.kingdoms.contains_key(&c.kingdom_id)
+            || !known_chars.contains(c.character_id.as_str())
+        {
+            notes.push(format!(
+                "dropped courtier `{id}`: unknown kingdom or character"
+            ));
+            false
+        } else {
+            true
+        }
     });
 
     notes

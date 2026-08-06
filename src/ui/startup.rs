@@ -10,7 +10,7 @@ pub fn startup(mut commands: Commands) {
     // The old terminal layout, as a flex tree: the resource bar on top, a row
     // holding the map and the right-hand column (legend / actions /
     // chronicle), the status bar underneath.
-    let panel = Color::srgba(0.0, 0.0, 0.0, 0.6);
+    let panel = Color::srgba(0.1, 0.1, 0.1, 1.0);
     commands
         .spawn(Node {
             width: percent(100),

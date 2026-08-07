@@ -6,8 +6,8 @@
 use super::flag;
 use crate::app::Game;
 use crate::ecs::{
-    BuildingOf, CharacterLeads, KingdomHold, LandBorders, LandHasBuildings, LandHolding,
-    LandName, Registry, StringId,
+    BuildingOf, BuildingStatus, CharacterLeads, KingdomHold, LandBorders, LandHasBuildings,
+    LandHolding, LandName, Registry, StringId,
 };
 use crate::resources::border::Border;
 use crate::resources::buildings::BuildingDefs;
@@ -158,32 +158,6 @@ pub fn update_input(world: &mut World) {
     }
 }
 
-/// Sum a single land's buildings into `(gold, levy)`. The same
-/// `gold_profit - gold_upkeep` and `levy` walk as
-/// [`sum_kingdom_yield`](crate::game::yields::sum_kingdom_yield) but
-/// scoped to one land, so the map label can show the per-land total.
-fn sum_land_yield(
-    land_e: Entity,
-    land_has_buildings: &Query<&LandHasBuildings>,
-    building_of: &Query<&BuildingOf>,
-    defs: &BuildingDefs,
-) -> (i64, u64) {
-    let Ok(land_has_buildings) = land_has_buildings.get(land_e) else {
-        return (0, 0);
-    };
-    let (mut gold, mut levy) = (0i64, 0u64);
-    for b_e in land_has_buildings.iter() {
-        let Ok(building_of) = building_of.get(b_e) else {
-            continue;
-        };
-        if let Some(d) = defs.get(&building_of.0) {
-            gold += d.gold_profit as i64 - d.gold_upkeep as i64;
-            levy += d.levy as u64;
-        }
-    }
-    (gold, levy)
-}
-
 /// World border, land outlines, holdings, and the selected land's flag.
 pub fn update_draw(
     mut gizmos: Gizmos,
@@ -202,6 +176,7 @@ pub fn update_draw(
     string_ids: Query<&StringId>,
     land_has_buildings: Query<&LandHasBuildings>,
     building_of: Query<&BuildingOf>,
+    building_status: Query<&BuildingStatus>,
     land_names: Query<&LandName>,
     mut labels: Query<(&LandLabel, &mut Text2d)>,
 ) {
@@ -278,7 +253,13 @@ pub fn update_draw(
     // but a per-frame walk is cheap and keeps the code branch-free.
     for (label, mut text) in &mut labels {
         let name = land_names.get(label.0).map(|n| n.0.as_str()).unwrap_or("");
-        let (gold, levy) = sum_land_yield(label.0, &land_has_buildings, &building_of, &defs);
+        let (gold, levy) = crate::game::yields::sum_land_yield(
+            label.0,
+            &land_has_buildings,
+            &building_of,
+            &building_status,
+            &defs,
+        );
         text.0 = format!("{name}\n({gold:+}g/m {levy:+})");
     }
 }

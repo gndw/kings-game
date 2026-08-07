@@ -7,7 +7,7 @@
 //! [`BuildingStatus`] tracks whether it is `ACTIVE` (counted in yields),
 //! `INACTIVE` (silently ignored), or `BUILDING` (under construction, finishing
 //! at [`BuildingConstructionDate`]). Only `ACTIVE` buildings contribute to
-//! `sum_kingdom_yield` and to the buildings panel's yield column.
+//! `sum_land_yield` and to the buildings panel's yield column.
 
 use super::land::LandHasBuildings;
 use crate::resources::date::Date;

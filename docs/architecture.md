@@ -193,12 +193,12 @@ Lives in `game/` and `schedules.rs`.
     move a building or hot-swap its definition) straight after their
     structural change; its `On<OnBuildingUpdated>` observer walks
     `land → LandHeldBy → kingdom → KingdomLedBy → leader`, runs the shared
-    [`sum_kingdom_yield`] helper over
+    [`sum_land_yield`] helper over
     `kingdom → KingdomHold → land → LandHasBuildings → BuildingOf →
     BuildingDefs`, and writes that one character's [`CharacterGoldYield`]
     and [`CharacterLevy`]. The event fires *after* the relationship hook
     has settled `LandHasBuildings` (construct → hook adds; destroy → hook
-    pulls), so `sum_kingdom_yield` always sees authoritative data.
+    pulls), so `sum_land_yield` always sees authoritative data.
   - `ui::resource::update` runs in `PostUpdate` (one of Bevy's built-in
     schedules, strictly after `Update` finishes), so the bar's read against
     `CharacterGoldYield` happens on the same frame as the event-driven

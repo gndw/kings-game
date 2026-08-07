@@ -13,7 +13,7 @@ use bevy::prelude::*;
 /// (construct, destroy, future code paths that move a building or hot-swap
 /// its definition). The commands fire this event *after* their structural
 /// change settles Bevy's relationship hooks, so the observer's
-/// [`sum_kingdom_yield`] walk sees authoritative data. Observer is
+/// [`sum_land_yield`] walk sees authoritative data. Observer is
 /// [`on_building_updated`].
 #[derive(Event)]
 pub struct OnBuildingUpdated {
@@ -29,21 +29,20 @@ pub const BUILDING_CONSTRUCTED: u8 = 1;
 pub const BUILDING_UPDATED: u8 = 2;
 pub const BUILDING_DESTROYED: u8 = 3;
 
-/// Sum the realm's holdings into `(gold, levy)`. Walks
-/// `kingdom → KingdomHold → land → LandHasBuildings → BuildingOf →
-/// BuildingDefs` once; `gold_profit - gold_upkeep` accumulates into gold,
-/// `levy` accumulates into troops. Pure — no character iteration, shared by
-/// [`recompute_yields`] and the dirty-yield observer. Buildings still under
-/// construction (`BuildingStatus != ACTIVE`) do **not** contribute — they
-/// will, once `construction` flips them.
-fn sum_kingdom_yield(
-    kingdom_hold: &KingdomHold,
+/// Sum a land's buildings into `(gold, levy)`. Walks
+/// `land → LandHasBuildings → BuildingOf → BuildingDefs` once;
+/// `gold_profit - gold_upkeep` accumulates into gold, `levy` accumulates into
+/// troops. Pure — no character iteration, shared by [`recompute_yields`], the
+/// dirty-yield observer, and the map's per-land yield label. Buildings still
+/// under construction (`BuildingStatus != ACTIVE`) do **not** contribute —
+/// they will, once `construction` flips them.
+pub fn sum_land_yield(
+    land_e: Entity,
     land_has_buildings: &Query<&LandHasBuildings>,
     building_of: &Query<&BuildingOf>,
     building_status: &Query<&BuildingStatus>,
     defs: &BuildingDefs,
 ) -> (i64, u64) {
-    let land_e = kingdom_hold.0;
     let Ok(land_has_buildings) = land_has_buildings.get(land_e) else {
         return (0, 0);
     };
@@ -69,11 +68,11 @@ fn sum_kingdom_yield(
 }
 
 /// Recompute every character's `gold_yield` and `levy` from their holdings: a
-/// leader's realm summed via [`sum_kingdom_yield`]; everyone else zeroed.
-/// Runs in `Startup` so the opening screen already shows what a realm renders.
-/// `Option<&CharacterLeads>` walks every character so a non-ruler is zeroed,
-/// not left stale. After startup the construct/destroy commands trigger
-/// [`OnBuildingUpdated`] for per-realm updates.
+/// leader's realm summed via [`sum_land_yield`] (the kingdom's held land);
+/// everyone else zeroed. Runs in `Startup` so the opening screen already shows
+/// what a realm renders. `Option<&CharacterLeads>` walks every character so a
+/// non-ruler is zeroed, not left stale. After startup the construct/destroy
+/// commands trigger [`OnBuildingUpdated`] for per-realm updates.
 pub fn recompute_yields(
     mut characters: Query<(
         Option<&CharacterLeads>,
@@ -90,8 +89,8 @@ pub fn recompute_yields(
         let (g, l) = character_leads
             .and_then(|character_leads| kingdom_holds.get(character_leads.kingdom()).ok())
             .map(|kingdom_hold| {
-                sum_kingdom_yield(
-                    kingdom_hold,
+                sum_land_yield(
+                    kingdom_hold.0,
                     &land_has_buildings,
                     &building_of,
                     &building_status,
@@ -141,8 +140,8 @@ pub fn on_building_updated(
     let Ok(kingdom_hold) = kingdom_holds.get(kingdom_e) else {
         return;
     };
-    let (g, l) = sum_kingdom_yield(
-        kingdom_hold,
+    let (g, l) = sum_land_yield(
+        kingdom_hold.0,
         &land_has_buildings,
         &building_of,
         &building_status,

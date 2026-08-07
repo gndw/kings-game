@@ -310,8 +310,10 @@ the style of `ctx::step`.
   land as the choice.
 - **`DismissArmy`** validates the army belongs to the actor's kingdom
   (via `ArmyBelongsToKingdom`), then *distributes* the army's `ArmyLevy`
-  back into the land's buildings' `BuildingLevy` pools (capped at each
-  def's `levy`), flags every ACTIVE building on the land as
+  back into the kingdom's home land's buildings' `BuildingLevy` pools
+  (capped at each def's `levy`) — the kingdom's `KingdomHold`, not the
+  army's current land, so a dismissed army that marched away still sends
+  its levy home. Flags every ACTIVE building on that land as
   `BuildingIsRaised = false`, despawns + deregisters. Despawning
   auto-pulls the army out of both `LandHasArmies` and `KingdomHasArmies`.
   One step (pick an army under the actor's kingdom). From the actions panel

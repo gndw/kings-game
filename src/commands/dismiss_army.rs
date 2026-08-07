@@ -6,10 +6,14 @@
 //! the data shape — the army list walks `KingdomHasArmies`). The pick
 //! despawns the entity, which Bevy's relationship hooks use to pull it out of
 //! the land's `LandHasArmies` and the kingdom's `KingdomHasArmies`; we then
-//! deregister the runtime id.
+//! deregister the runtime id. The army's levy is distributed back into the
+//! kingdom's home land's `BuildingLevy` pools (the ones *raised* drained on
+//! the way up) — regardless of which land the army currently sits on. So a
+//! dismissed army that marched away still returns its levy home.
 
 use super::core::{distribute_levy_back, Choice, Command, MenuItem, note};
 use crate::ecs::army::{ArmyBelongsToKingdom, ArmyHasMarching, ArmyLevy, ArmyName};
+use crate::ecs::kingdom::KingdomHold;
 use crate::ecs::{CharacterLeads, KingdomHasArmies, Registry, StringId};
 use bevy::ecs::world::World;
 use bevy::prelude::RelationshipTarget;
@@ -118,20 +122,33 @@ fn dismiss(world: &mut World, actor: &str, army_id: &str) {
             "cannot dismiss `{army_id}`: that army does not belong to your kingdom"
         ));
     }
+    let kingdom_e = army_k.unwrap();
 
-    // Label for the log: land name + army name + levy before we drop the
-    // components. Read in this order so the relationships are still valid.
-    let land_name = world
-        .get::<crate::ecs::army::ArmyOnLand>(army_e)
-        .and_then(|army_on_land| {
-            world
-                .get::<crate::ecs::LandName>(army_on_land.0)
-                .map(|land_name| land_name.0.clone())
-        })
-        .unwrap_or_else(|| "?".into());
-    let land_e = world
+    // Two lands to distinguish:
+    // - `army_land_e`: the land the army is currently sitting on (for the
+    //   chronicle line). The army may have marched away from home.
+    // - `kingdom_land_e`: the kingdom's home land — the one whose
+    //   `BuildingLevy` pools the army drained on raise, and the one they
+    //   fill back into on dismiss. The levy always returns home, not to
+    //   whatever land the army happens to be on at dismiss time.
+    let army_land_e = world
         .get::<crate::ecs::army::ArmyOnLand>(army_e)
         .map(|army_on_land| army_on_land.0);
+    let army_land_name = army_land_e
+        .and_then(|e| world.get::<crate::ecs::LandName>(e))
+        .map(|land_name| land_name.0.clone())
+        .unwrap_or_else(|| "?".into());
+    let kingdom_land_e = world
+        .get::<KingdomHold>(kingdom_e)
+        .map(|kingdom_hold| kingdom_hold.0);
+    let Some(kingdom_land_e) = kingdom_land_e else {
+        return note(world, format!("cannot dismiss `{army_id}`: kingdom has no land"));
+    };
+    let kingdom_land_name = world
+        .get::<crate::ecs::LandName>(kingdom_land_e)
+        .map(|land_name| land_name.0.clone())
+        .unwrap_or_else(|| "?".into());
+
     let army_name = world
         .get::<ArmyName>(army_e)
         .map(|army_name| army_name.0.clone())
@@ -141,13 +158,11 @@ fn dismiss(world: &mut World, actor: &str, army_id: &str) {
         .map(|army_levy| army_levy.0)
         .unwrap_or(0);
 
-    // Distribute the army's levy back into the land's buildings BEFORE the
-    // despawn — `distribute_levy_back` walks `LandHasBuildings` on the
-    // army's land; once the army is gone, the land's auto-maintained
-    // collection is still correct (it lists *buildings*, not armies).
-    if let Some(land_e) = land_e {
-        distribute_levy_back(world, land_e, army_levy);
-    }
+    // Distribute the army's levy back into the kingdom's-land buildings
+    // BEFORE the despawn — `distribute_levy_back` walks `LandHasBuildings`
+    // on the kingdom's home land. The levy was raised from those pools,
+    // so it returns there regardless of where the army ended up.
+    distribute_levy_back(world, kingdom_land_e, army_levy);
 
     // Despawn any queued marchings BEFORE the army goes — otherwise the
     // marchings would be left holding a `MarchingArmy` pointing at a
@@ -172,6 +187,8 @@ fn dismiss(world: &mut World, actor: &str, army_id: &str) {
 
     note(
         world,
-        format!("dismissed {army_name} on {land_name} ({army_levy} levy returned)"),
+        format!(
+            "dismissed {army_name} on {army_land_name} ({army_levy} levy returned to {kingdom_land_name})"
+        ),
     );
 }

@@ -5,10 +5,10 @@
 //! `&mut World` happens in [`construct`], never tangled. On success it spawns
 //! the same bundle [`crate::ecs::populate`] uses, then fires the
 //! `OnBuildingUpdated` event so
-//! [`on_building_updated`](crate::updates::yields::on_building_updated)
+//! [`on_building_updated`](crate::game::yields::on_building_updated)
 //! re-sums the realm while `LandHasBuildings` is already authoritative.
 //!
-//! [`recompute_yields`]: crate::updates::yields::recompute_yields
+//! [`recompute_yields`]: crate::game::yields::recompute_yields
 
 use super::core::{Choice, Command, MenuItem, next_id, note, ruled_lands};
 use crate::ecs::{

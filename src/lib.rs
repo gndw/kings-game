@@ -10,4 +10,4 @@ pub mod rng;
 pub mod state;
 pub mod schedules;
 pub mod ui;
-pub mod updates;
+pub mod game;

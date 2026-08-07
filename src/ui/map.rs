@@ -160,7 +160,7 @@ pub fn update_input(world: &mut World) {
 
 /// Sum a single land's buildings into `(gold, levy)`. The same
 /// `gold_profit - gold_upkeep` and `levy` walk as
-/// [`sum_kingdom_yield`](crate::updates::yields::sum_kingdom_yield) but
+/// [`sum_kingdom_yield`](crate::game::yields::sum_kingdom_yield) but
 /// scoped to one land, so the map label can show the per-land total.
 fn sum_land_yield(
     land_e: Entity,

@@ -2,7 +2,7 @@
 //! and whose `BuildingConstructionDate` has been reached flips to `ACTIVE`
 //! and fires `OnBuildingUpdated` so the realm's yields refresh.
 //!
-//! Runs on the `OnDay` schedule from [`crate::updates::advance_date::advance`],
+//! Runs on the `OnDay` schedule from [`crate::game::advance_date::advance`],
 //! so a building placed today with `construction_time = 5` finishes at the
 //! start of day 6 (advance already moved the date there).
 //!
@@ -17,7 +17,7 @@ use crate::ecs::{BuildingConstructionDate, BuildingOf, BuildingOnLand, BuildingS
 use crate::resources::buildings::BuildingDefs;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
-use crate::updates::yields::{BUILDING_UPDATED, OnBuildingUpdated};
+use crate::game::yields::{BUILDING_UPDATED, OnBuildingUpdated};
 use bevy::ecs::world::World;
 
 /// Walk every `BUILDING` building whose date has been reached, flip it to

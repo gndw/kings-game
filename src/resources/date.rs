@@ -1,6 +1,6 @@
 //! The date that walks the calendar. An ECS resource, seeded in `main` from
 //! [`crate::resources::calendar::Calendar::start`]; the day-by-day rollover
-//! lives in [`crate::updates::advance_date`].
+//! lives in [`crate::game::advance_date`].
 
 use super::calendar::Calendar;
 use bevy::prelude::Resource;

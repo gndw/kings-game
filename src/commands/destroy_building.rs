@@ -4,10 +4,10 @@
 //! Despawning the entity auto-pulls it from the land's
 //! [`LandHasBuildings`](crate::ecs::LandHasBuildings) (the relationship hook);
 //! we then fire `OnBuildingUpdated` so
-//! [`on_building_updated`](crate::updates::yields::on_building_updated)
+//! [`on_building_updated`](crate::game::yields::on_building_updated)
 //! re-sums the realm against the post-hook `LandHasBuildings`.
 //!
-//! [`recompute_yields`]: crate::updates::yields::recompute_yields
+//! [`recompute_yields`]: crate::game::yields::recompute_yields
 
 use super::core::{Choice, Command, MenuItem, note, ruled_lands};
 use crate::ecs::{
@@ -146,10 +146,10 @@ fn destroy(world: &mut World, actor: &str, land_id: &str, building_id: &str) {
     // the land's `LandHasBuildings` synchronously, so the yield observer can
     // re-sum authoritative data on the next line.
     world.entity_mut(b_e).despawn();
-    world.trigger(crate::updates::yields::OnBuildingUpdated {
+    world.trigger(crate::game::yields::OnBuildingUpdated {
         building: b_e,
         land: land_e,
-        r#type: crate::updates::yields::BUILDING_DESTROYED,
+        r#type: crate::game::yields::BUILDING_DESTROYED,
     });
     world.resource_mut::<Registry>().by_id.remove(building_id);
 

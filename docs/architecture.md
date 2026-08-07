@@ -172,12 +172,12 @@ shape; this is the *what*.
 
 ## The simulation loop
 
-Lives in `updates/` and `schedules.rs`.
+Lives in `game/` and `schedules.rs`.
 
 - **Schedules** (`schedules.rs`): Bevy's `Startup`/`Update`/`FixedUpdate`, plus
   two custom labels — `OnDay` (per-day building completions) and `OnMonth`
   (monthly payout) — both run from `advance` after the date mutates.
-- **The tick — `advance`** (`updates/advance_date.rs`) runs in `FixedUpdate`,
+- **The tick — `advance`** (`game/advance_date.rs`) runs in `FixedUpdate`,
   gated by `Game::running()`. It's an **exclusive `fn(&mut World)`** because
   it needs `run_schedule(...)`, which requires `&mut World`. It bumps
   `tick_count`, advances `day`/`month`/`year` against the `Calendar`, then
@@ -185,10 +185,10 @@ Lives in `updates/` and `schedules.rs`.
   `FixedUpdate`'s rate is set by `input` from
   `speed(&calendar.speeds, speed_idx)` — simulated days per real second.
 - **The economy is Rust, not a script:**
-  - `recompute_yields` (`updates/yields.rs`) — runs in `Startup` (so the
+  - `recompute_yields` (`game/yields.rs`) — runs in `Startup` (so the
     opening screen shows what a realm renders). After that the construct
     and destroy commands trigger a custom [`OnBuildingUpdated`]
-    (`updates/yields.rs`) event (`kind = 1 = constructed` /
+    (`game/yields.rs`) event (`kind = 1 = constructed` /
     `3 = destroyed`; `2 = updated` is reserved for future code paths that
     move a building or hot-swap its definition) straight after their
     structural change; its `On<OnBuildingUpdated>` observer walks
@@ -207,7 +207,7 @@ Lives in `updates/` and `schedules.rs`.
     `status::update`, etc.) stay in
     `Update` — the bar is the one that has to react to ECS writes from
     `Update`'s event-driven recompute.
-  - `payout` (`updates/payout.rs`) — runs in `OnMonth`. Pays every leader
+  - `payout` (`game/payout.rs`) — runs in `OnMonth`. Pays every leader
     (entities carrying `CharacterLeads`) their `CharacterGoldYield` into
     `CharacterGold`.
     Signed both places: debt and losses are real, no floor.
@@ -257,7 +257,7 @@ the style of `ctx::step`.
   + `BuildingConstructionDate(start + def.construction_time)`), registers the
   id in `Registry`, deducts gold, and appends a chronicle line on success
   *and* every rejection. The new building contributes no yield yet; the
-  per-day `construction` system (`updates/construction.rs`) flips it to
+  per-day `construction` system (`game/construction.rs`) flips it to
   `Active` once the date passes the finish date and fires `OnBuildingUpdated`
   so the realm's yields refresh through the same observer.
 - **`DestroyBuilding`** (the inverse) validates the actor rules the land and
@@ -387,7 +387,7 @@ asset-loaded sprites.
 | `src/commands/core.rs` | the `Command` trait, `CommandRegistry`, `MenuItem`/`Choice`, shared helpers (`next_id`, `note`, `ruled_lands`) |
 | `src/commands/construct_building.rs` | the `ConstructBuilding` command (validate + spawn as BUILDING + pay) |
 | `src/commands/destroy_building.rs` | the `DestroyBuilding` command (validate + despawn + deregister) |
-| `src/updates/construction.rs` | `tick` — flips `BUILDING` buildings to `ACTIVE` once the date passes their finish date |
+| `src/game/construction.rs` | `tick` — flips `BUILDING` buildings to `ACTIVE` once the date passes their finish date |
 | `src/ctx.rs` | `Ctx` (session state: rng, player id, selection), `startup`, selection `step` |
 | `src/content.rs` | `Content`, per-kind structs, `parse_file`, `merge`, `validate` |
 | `src/state.rs` | `StateFile`, `merge_state`, `reconcile` |
@@ -397,9 +397,9 @@ asset-loaded sprites.
 | `src/ecs/{house,character,land,building,kingdom,courtier}.rs` | components + relationships per kind |
 | `src/ecs.rs` | module root, re-exports, the component map |
 | `src/schedules.rs` | `OnDay` + `OnMonth` labels |
-| `src/updates/advance_date.rs` | the tick (exclusive `&mut World`) |
-| `src/updates/yields.rs` | `recompute_yields` (graph walk) |
-| `src/updates/payout.rs` | `payout` (monthly gold to leaders) |
+| `src/game/advance_date.rs` | the tick (exclusive `&mut World`) |
+| `src/game/yields.rs` | `recompute_yields` (graph walk) |
+| `src/game/payout.rs` | `payout` (monthly gold to leaders) |
 | `src/rng.rs` | `SimRng` — seeded, draw-counted for exact replay |
 | `src/ui/*` | flex layout, map/camera gizmos, the four text panels |
 | `src/ui/camera.rs::update_camera` | reads `Game::zoomed` + selection, tweens the camera each PostUpdate |

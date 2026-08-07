@@ -8,7 +8,7 @@ use kings_game::resources::chronicle::Chronicles;
 use kings_game::schedules::{OnDay, OnMonth};
 use kings_game::ui;
 use kings_game::ui::command_menu::CommandMenu;
-use kings_game::updates;
+use kings_game::game;
 use std::path::Path;
 
 fn main() -> Result<()> {
@@ -106,7 +106,7 @@ fn main() -> Result<()> {
                 ui::camera::startup,
                 ui::map::startup,
                 ui::command_menu::startup,
-                updates::yields::recompute_yields,
+                game::yields::recompute_yields,
             ),
         )
         // The construct / destroy commands (and any future code path that
@@ -115,7 +115,7 @@ fn main() -> Result<()> {
         // `land → LandHeldBy → kingdom → KingdomLedBy → leader` and writes the
         // new yield. `ui::resource::update` sits in `PostUpdate` so its read
         // lands on the same frame as the observer's write.
-        .add_observer(updates::yields::on_building_updated)
+        .add_observer(game::yields::on_building_updated)
         .add_systems(
             Update,
             (
@@ -149,10 +149,10 @@ fn main() -> Result<()> {
             // `advance` runs the date; `construction` lives on the `OnDay`
             // schedule `advance` fires, so adding it here would run it twice
             // a day.
-            updates::advance_date::advance.run_if(|g: Res<Game>| g.running()),
+            game::advance_date::advance.run_if(|g: Res<Game>| g.running()),
         )
-        .add_systems(OnDay, updates::construction::construction)
-        .add_systems(OnMonth, updates::payout::payout)
+        .add_systems(OnDay, game::construction::construction)
+        .add_systems(OnMonth, game::payout::payout)
         .run();
     Ok(())
 }

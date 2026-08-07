@@ -2,9 +2,12 @@
 //!
 //! A character carries the [`Character`] marker plus [`CharacterName`],
 //! [`CharacterAge`], [`CharacterGold`], [`CharacterLevy`],
-//! [`CharacterGoldYield`], a [`CharacterOfHouse`] link to their house, and — if
-//! they rule — a [`CharacterLeads`] link to their kingdom.
+//! [`CharacterGoldYield`], a [`CharacterOfHouse`] link to their house, a
+//! [`CharacterLeads`] link to the kingdom they rule (if any), and the
+//! auto-maintained reverse [`CharacterHasCourtiers`] for O(1) read of who
+//! serves at their court.
 
+use super::courtier::CourtierOfCharacter;
 use super::kingdom::KingdomLedBy;
 use bevy::ecs::entity::Entity;
 use bevy::prelude::Component;
@@ -57,3 +60,10 @@ impl CharacterLeads {
         self.0
     }
 }
+
+/// The courtiers serving a character — the auto-maintained reverse of
+/// [`CourtierOfCharacter`]. Read-only: set [`CourtierOfCharacter`] on the
+/// courtier and Bevy's hook keeps this in sync.
+#[derive(Component, Debug, Default)]
+#[relationship_target(relationship = CourtierOfCharacter)]
+pub struct CharacterHasCourtiers(Vec<Entity>);

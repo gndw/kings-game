@@ -1,5 +1,14 @@
 //! Court appointments linking a character to a kingdom.
+//!
+//! The courtier entity carries [`Courtier`] + [`CourtierType`] and the two
+//! relationship components [`CourtierOfCharacter`] (to the character served)
+//! and [`CourtierOfKingdom`] (to the kingdom served). Their auto-maintained
+//! reverses — `CharacterHasCourtiers` and `KingdomHasCourtiers` — live in
+//! [`super::character`] and [`super::kingdom`] respectively, alongside the
+//! entity each side sits on.
 
+use super::character::CharacterHasCourtiers;
+use super::kingdom::KingdomHasCourtiers;
 use bevy::prelude::{Component, Entity};
 use serde::Deserialize;
 
@@ -16,14 +25,6 @@ pub enum CourtierType {
 #[relationship(relationship_target = CharacterHasCourtiers)]
 pub struct CourtierOfCharacter(pub Entity);
 
-#[derive(Component, Debug, Default)]
-#[relationship_target(relationship = CourtierOfCharacter)]
-pub struct CharacterHasCourtiers(Vec<Entity>);
-
 #[derive(Component, Debug, Clone, Copy)]
 #[relationship(relationship_target = KingdomHasCourtiers)]
 pub struct CourtierOfKingdom(pub Entity);
-
-#[derive(Component, Debug, Default)]
-#[relationship_target(relationship = CourtierOfKingdom)]
-pub struct KingdomHasCourtiers(Vec<Entity>);

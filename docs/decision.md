@@ -249,3 +249,26 @@ from `KingdomHolds(Vec<Entity>)` (the auto-maintained reverse of each land's
   the `KingdomSeat` component was removed; the held land is read through
   `KingdomHold::land()`.
 
+## Relationship components live in the file of their main component
+
+Every ECS relationship component — both `#[relationship]` sources and
+`#[relationship_target]` reverses — is placed in the file of the entity it
+sits on, matching the colocated components for that entity kind.
+
+- **Why:** the relationship's behaviour is determined by which entity it
+  attaches to, so its file should match. Putting the source on `kingdom.rs`
+  and its reverse on `character.rs` keeps both sides of a link next to the
+  other components for that entity, instead of forcing readers to grep a
+  generic "relationships" module to understand one link.
+- **Existing examples:** `KingdomLedBy` and `KingdomHold` are in `kingdom.rs`
+  (they sit on the kingdom); `CharacterLeads` and `LandHeldBy` are in
+  `character.rs` and `land.rs` respectively (they sit on the leader and the
+  held land); `CourtierOfCharacter` and `CourtierOfKingdom` are in
+  `courtier.rs` (they sit on the courtier); `CharacterHasCourtiers` and
+  `KingdomHasCourtiers` likewise land on `character.rs` and `kingdom.rs`.
+- **Rule for new relationships:** when adding a `#[relationship]` or
+  `#[relationship_target]`, decide the entity it attaches to first, then put
+  the component in that entity's file. If a future generic relationships
+  module appears, move them back — but the split by entity kind is the
+  default and stays until something forces otherwise.
+

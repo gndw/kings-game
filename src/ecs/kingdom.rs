@@ -1,11 +1,14 @@
 //! Kingdom entities: realms held by a leader character over a single land.
 //!
 //! A kingdom carries the [`Kingdom`] marker, a [`KingdomLedBy`] link to its
-//! ruler, and a [`KingdomHold`] link to the single land it holds. A kingdom's
-//! held land is also its capital — 1 kingdom ↔ 1 land makes the seat implicit,
-//! so there is no separate `KingdomSeat` component.
+//! ruler, a [`KingdomHold`] link to the single land it holds, and the
+//! auto-maintained reverse [`KingdomHasCourtiers`] for O(1) read of who
+//! serves at its court. A kingdom's held land is also its capital — 1
+//! kingdom ↔ 1 land makes the seat implicit, so there is no separate
+//! `KingdomSeat` component.
 
 use super::character::CharacterLeads;
+use super::courtier::CourtierOfKingdom;
 use bevy::ecs::entity::Entity;
 use bevy::prelude::Component;
 
@@ -26,3 +29,10 @@ pub struct KingdomLedBy(pub Entity);
 #[derive(Component, Debug, Clone, Copy)]
 #[relationship(relationship_target = super::land::LandHeldBy)]
 pub struct KingdomHold(pub Entity);
+
+/// The courtiers serving a kingdom — the auto-maintained reverse of
+/// [`CourtierOfKingdom`]. Read-only: set [`CourtierOfKingdom`] on the
+/// courtier and Bevy's hook keeps this in sync.
+#[derive(Component, Debug, Default)]
+#[relationship_target(relationship = CourtierOfKingdom)]
+pub struct KingdomHasCourtiers(Vec<Entity>);

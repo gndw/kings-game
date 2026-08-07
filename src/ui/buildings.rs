@@ -14,6 +14,8 @@ use crate::ecs::{
     LandHasBuildings, Registry,
 };
 use crate::resources::buildings::BuildingDefs;
+use crate::resources::calendar::Calendar;
+use crate::resources::date::Date;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 
@@ -163,6 +165,8 @@ pub fn update(
     game: Res<Game>,
     registry: Res<Registry>,
     defs: Res<BuildingDefs>,
+    calendar: Res<Calendar>,
+    date: Res<Date>,
     container: Single<Entity, With<LegendBuildings>>,
     // ponytail: cache key in a Local so identical selections don't respawn the
     // table every frame; it flips only on a new land or a changed building set.
@@ -192,16 +196,18 @@ pub fn update(
     // Per-building yield and total — walk the land's building instances
     // through to their definitions for the stats. Buildings still under
     // construction (`status == BUILDING`) are listed in grey with
-    // `Name (YYYY.MM.DD)`; `INACTIVE` buildings are listed with no yield
-    // info. Only `ACTIVE` buildings contribute to the totals; for those,
-    // the name colour reflects the pool state (`BuildingIsRaised` →
-    // red; partial `BuildingLevy` → yellow with `Name (current/max)`;
-    // full pool → white).
+    // `Name (time remaining)` formatted via `Calendar::format_duration`;
+    // `INACTIVE` buildings are listed with no yield info. Only `ACTIVE`
+    // buildings contribute to the totals; for those, the name colour
+    // reflects the pool state (`BuildingIsRaised` → red; partial
+    // `BuildingLevy` → yellow with `Name (current/max)`; full pool →
+    // white).
     let (mut gold, mut levy) = (0i64, 0u64);
     let mut rows: Vec<(String, String, String, Color, Color)> = Vec::new();
     // The key tracks selection + the building roster on it (def ids + per-
-    // building status + finish date + pool state); it changes when the
-    // land, the building set, or any visible pool state does.
+    // building status + finish date + pool state + current day); it changes
+    // when the land, the building set, any visible pool state, or the day
+    // rolls over (the countdown readout depends on the current date).
     let mut sig = String::new();
     for b_e in land_has_buildings.iter() {
         let Ok(building_of) = building_of.get(b_e) else {
@@ -231,14 +237,17 @@ pub fn update(
             sig.push(',');
         }
         sig.push_str(&format!(
-            "{}:{:?}:{}:{}:{}",
+            "{}:{:?}:{}:{}:{}:{}",
             building_of.0,
             status,
             finish
-                .map(|building_construction_date| building_construction_date.to_string())
+                .map(|d| d.to_string())
                 .unwrap_or_default(),
             is_raised,
             current_levy,
+            // The countdown readout depends on today's date, so the cache
+            // must invalidate when the day rolls over.
+            date.tick_count,
         ));
 
         // Cells. ACTIVE buildings show their def's gold/levy values; non-
@@ -281,7 +290,12 @@ pub fn update(
                     "{} ({})",
                     d.name,
                     finish
-                        .map(|building_construction_date| building_construction_date.to_string())
+                        .map(|f| {
+                            let remaining = (f.ordinal(&calendar)
+                                - date.ordinal(&calendar))
+                            .max(0) as u32;
+                            calendar.format_duration(remaining)
+                        })
                         .unwrap_or_else(|| "?".into())
                 );
                 (BUILDING_GREY, BUILDING_GREY, name)

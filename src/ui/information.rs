@@ -4,9 +4,12 @@
 use super::{FONT, TITLE};
 use crate::app::Game;
 use crate::ecs::{
-    CharacterAge, CharacterName, CharacterOfHouse, HouseName, KingdomHold, KingdomLedBy,
+    CharacterDateOfBirth, CharacterName, CharacterOfHouse, HouseName, KingdomHold, KingdomLedBy,
     LandName, Registry,
 };
+use crate::game::age::age;
+use crate::resources::calendar::Calendar;
+use crate::resources::date::Date;
 use bevy::prelude::*;
 
 /// land / ruler detail block. Its `Text` is rewritten by [`update`] when the
@@ -39,10 +42,12 @@ pub(super) fn spawn(col: &mut ChildSpawnerCommands, panel: Color) {
 pub fn update(
     game: Res<Game>,
     registry: Res<Registry>,
+    date: Res<Date>,
+    calendar: Res<Calendar>,
     mut info: Single<&mut Text, With<LegendInfo>>,
     lands: Query<&LandName>,
     kingdoms: Query<(&KingdomHold, Option<&KingdomLedBy>)>,
-    chars: Query<(&CharacterName, &CharacterAge)>,
+    chars: Query<(&CharacterName, &CharacterDateOfBirth)>,
     character_of_house: Query<&CharacterOfHouse>,
     houses: Query<&HouseName>,
 ) {
@@ -65,7 +70,7 @@ pub fn update(
         .iter()
         .find(|(kingdom_hold, _)| kingdom_hold.0 == land_e)
         && let Some(kingdom_led_by) = kingdom_led_by
-        && let Ok((character_name, character_age)) = chars.get(kingdom_led_by.0)
+        && let Ok((character_name, character_dob)) = chars.get(kingdom_led_by.0)
     {
         let house = character_of_house
             .get(kingdom_led_by.0)
@@ -75,9 +80,10 @@ pub fn update(
             })
             .map(|house_name| house_name.0.clone())
             .unwrap_or_default();
+        let character_age = age(&character_dob.0, &date, &calendar);
         inf.push_str(&format!(
             "\nruler:{} of {} ({})",
-            character_name.0, house, character_age.0
+            character_name.0, house, character_age
         ));
     }
     info.0 = inf;

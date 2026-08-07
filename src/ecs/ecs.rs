@@ -11,8 +11,8 @@ use std::collections::HashMap;
 
 use super::building::{Building, BuildingOf, BuildingOnLand};
 use super::character::{
-    Character, CharacterAge, CharacterGold, CharacterGoldYield, CharacterLevy, CharacterName,
-    CharacterOfHouse,
+    Character, CharacterDateOfBirth, CharacterGold, CharacterGoldYield, CharacterLevy,
+    CharacterName, CharacterOfHouse,
 };
 use super::courtier::{Courtier, CourtierOfCharacter, CourtierOfKingdom};
 use super::house::{House, HouseName};
@@ -90,7 +90,7 @@ pub fn populate(world: &mut World, content: Content) {
                 StringId(id.clone()),
                 Character,
                 CharacterName(c.name),
-                CharacterAge(c.age),
+                CharacterDateOfBirth(c.dob),
                 CharacterGold(c.gold),
                 CharacterLevy(c.levy),
                 CharacterGoldYield(c.gold_yield),

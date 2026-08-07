@@ -58,7 +58,7 @@ impl Content {
         }
         for c in file.characters {
             if let Some(existing) = self.characters.get_mut(&c.id) {
-                existing.age = c.age;
+                existing.dob = c.dob;
                 existing.gold = c.gold;
                 existing.levy = c.levy;
                 existing.gold_yield = c.gold_yield;

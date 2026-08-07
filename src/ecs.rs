@@ -9,7 +9,7 @@
 //!
 //! - **House** entities: [`StringId`], [`House`], [`HouseName`].
 //! - **Character** entities: [`StringId`], [`Character`], [`CharacterName`],
-//!   [`CharacterAge`], [`CharacterGold`], [`CharacterLevy`],
+//!   [`CharacterDateOfBirth`], [`CharacterGold`], [`CharacterLevy`],
 //!   [`CharacterGoldYield`], [`CharacterOfHouse`], maybe [`CharacterLeads`].
 //! - **Land** entities: [`StringId`], [`Land`], [`LandName`], [`LandBorders`],
 //!   [`LandHolding`], maybe [`LandHeldBy`] (auto-maintained from the holding

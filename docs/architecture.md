@@ -73,7 +73,7 @@ Lives in `mods/`, `content.rs`, `state.rs`, `resources/`.
   - *Definitions* = read-only, only ever grows: map geometry, the building
     catalogue (one entry per kind), houses, who characters are (name/house). Authored by hand, so a dangling
     reference is a **fatal** mod bug.
-  - *State* = the mutable half, what a save holds: ages, treasuries, levies,
+  - *State* = the mutable half, what a save holds: dates of birth, treasuries, levies,
     yields, what's built, who rules what. An overlay keyed by id; unknown ids are
     silently dropped (no separate map to diff against anymore).
   - Each kind's struct holds **both** halves in one non-`Option` struct
@@ -101,7 +101,7 @@ shape; this is the *what*.
 
 - **Entity kinds** are marker-tag components: `House`, `Character`, `Land`,
   `Kingdom`. Each kind's data is **one field per component** so a system queries
-  only what it touches (payout needs gold + yield, not age), in its own file:
+  only what it touches (payout needs gold + yield, not the date of birth), in its own file:
   `house.rs`, `character.rs`, `land.rs`, `kingdom.rs`.
 
 - **`StringId`** (`ecs/ecs.rs`): every entity carries the id its RON data and

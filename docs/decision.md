@@ -62,7 +62,7 @@ held land. A kingdom declares its held land; Bevy's hook keeps the land's
 ## ECS components split to one field each
 
 `House`/`Character`/`Land` are marker tags; their data is one field per
-component: `HouseName`; `CharacterName`, `CharacterAge`, `CharacterGold`,
+component: `HouseName`; `CharacterName`, `CharacterDateOfBirth`, `CharacterGold`,
 `CharacterLevy`, `CharacterGoldYield`; `LandName`, `LandBorders`,
 `LandHolding`. The old multi-field `ecs::CharacterState` is dissolved into
 the four character components above.

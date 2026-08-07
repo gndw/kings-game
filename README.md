@@ -44,7 +44,7 @@ the base game splits itself across `world.ron`, `calendar.ron`, `lands.ron`,
 
 Those files are **definitions**: read-only data the game only ever gains more
 of. What *changes* — who rules what, what stands in each land, every
-character's age and gold — is **state**, and lives in any `*.state.ron`
+character's date of birth and gold — is **state**, and lives in any `*.state.ron`
 (`mods/base/start.state.ron` is where the world starts). That's the split a
 save file runs along: a save is state, so it can be loaded against a game that
 has grown new lands, buildings and characters since it was written.
@@ -135,7 +135,7 @@ their entry — no need to redeclare who they are:
 
 ```ron
 // mods/rich-arryn/start.state.ron
-(characters: [(id: "char-jon", age: 66, gold: 500)])
+(characters: [(id: "char-jon", dob: (year: 1000, month: 1, day: 1), gold: 500)])
 ```
 
 Use `rand()` rather than rolling your own randomness — it draws from the game's

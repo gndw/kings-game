@@ -65,18 +65,21 @@
     ],
     // Levy and gold_yield are left out on purpose: the sim recomputes both at
     // `new_game`, so writing them here would only ever be wrong.
+    // `dob` is the character's date of birth. The starting ages live here as
+    // `calendar.start.year - dob.year`, so a mod that picks a different
+    // opening year doesn't need to recompute anyone's birthday.
     characters: [
-        (id: "char-leyton", age: 61, gold: 42),
-        (id: "char-alerie", age: 34, gold: 8),
-        (id: "char-tywin",  age: 57, gold: 35),
-        (id: "char-jaime",  age: 29, gold: 13),
-        (id: "char-jon",    age: 66, gold: 27),
-        (id: "char-lysa",   age: 32, gold: 6),
-        (id: "char-minisa", age: 50, gold: 20),
-        (id: "char-edmure", age: 23, gold: 10),
-        (id: "char-olenna", age: 75, gold: 30),
-        (id: "char-mace",   age: 40, gold: 15),
-        (id: "char-doran",  age: 55, gold: 25),
-        (id: "char-oberyn", age: 38, gold: 12),
+        (id: "char-leyton", dob: (year: 1005, month: 1, day: 1), gold: 42),
+        (id: "char-alerie", dob: (year: 1032, month: 1, day: 1), gold: 8),
+        (id: "char-tywin",  dob: (year: 1009, month: 1, day: 1), gold: 35),
+        (id: "char-jaime",  dob: (year: 1037, month: 1, day: 1), gold: 13),
+        (id: "char-jon",    dob: (year: 1000, month: 1, day: 1), gold: 27),
+        (id: "char-lysa",   dob: (year: 1034, month: 1, day: 1), gold: 6),
+        (id: "char-minisa", dob: (year: 1016, month: 1, day: 1), gold: 20),
+        (id: "char-edmure", dob: (year: 1043, month: 1, day: 1), gold: 10),
+        (id: "char-olenna", dob: (year:  991, month: 1, day: 1), gold: 30),
+        (id: "char-mace",   dob: (year: 1026, month: 1, day: 1), gold: 15),
+        (id: "char-doran",  dob: (year: 1011, month: 1, day: 1), gold: 25),
+        (id: "char-oberyn", dob: (year: 1028, month: 1, day: 1), gold: 12),
     ],
 )

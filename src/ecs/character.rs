@@ -1,7 +1,7 @@
 //! Character entities: the people of the world.
 //!
 //! A character carries the [`Character`] marker plus [`CharacterName`],
-//! [`CharacterAge`], [`CharacterGold`], [`CharacterLevy`],
+//! [`CharacterDateOfBirth`], [`CharacterGold`], [`CharacterLevy`],
 //! [`CharacterGoldYield`], a [`CharacterOfHouse`] link to their house, a
 //! [`CharacterLeads`] link to the kingdom they rule (if any), and the
 //! auto-maintained reverse [`CharacterHasCourtiers`] for O(1) read of who
@@ -9,12 +9,13 @@
 
 use super::courtier::CourtierOfCharacter;
 use super::kingdom::KingdomLedBy;
+use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;
 use bevy::prelude::Component;
 
 /// A person. Their house is [`CharacterOfHouse`]; name in [`CharacterName`],
-/// age in [`CharacterAge`], treasury in [`CharacterGold`], troops in
-/// [`CharacterLevy`], monthly yield in [`CharacterGoldYield`].
+/// date of birth in [`CharacterDateOfBirth`], treasury in [`CharacterGold`],
+/// troops in [`CharacterLevy`], monthly yield in [`CharacterGoldYield`].
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Character;
 
@@ -27,9 +28,10 @@ pub struct CharacterName(pub String);
 #[derive(Component, Debug, Clone, Copy)]
 pub struct CharacterOfHouse(pub Entity);
 
-/// A character's age, in years.
+/// A character's date of birth, in the world's calendar. The years-elapsed
+/// "age" is derived against the current date — see [`crate::game::age`].
 #[derive(Component, Debug, Clone, Copy, Default)]
-pub struct CharacterAge(pub u32);
+pub struct CharacterDateOfBirth(pub Date);
 
 /// A character's treasury. Signed: a ruler can be in debt.
 #[derive(Component, Debug, Clone, Copy, Default)]

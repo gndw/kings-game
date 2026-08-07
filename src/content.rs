@@ -16,6 +16,7 @@ use crate::ecs::{BuildingStatus, CourtierType};
 use crate::resources::border::Border;
 use crate::resources::buildings::{BuildingDef, BuildingDefs};
 use crate::resources::calendar::Calendar;
+use crate::resources::date::Date;
 use anyhow::{Result, bail};
 use indexmap::IndexMap;
 use serde::Deserialize;
@@ -153,9 +154,9 @@ pub struct House {
     pub name: String,
 }
 
-/// One character: who they are (definition) plus their numbers (state). Age,
-/// treasury, levy and yield arrive at zero from a definition file and are filled
-/// in by the state overlay.
+/// One character: who they are (definition) plus their numbers (state). Date
+/// of birth, treasury, levy and yield arrive at zero / the default date from a
+/// definition file and are filled in by the state overlay.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Character {
@@ -166,9 +167,11 @@ pub struct Character {
     pub name: String,
     #[serde(default)]
     pub house_id: String,
-    /// State: years. Defaults to 0 on a definition-only entry.
+    /// State: date of birth, in calendar terms. A character's age is derived
+    /// from this against the current date — see [`crate::game::age`]. Defaults
+    /// to `Date::default()` on a definition-only entry.
     #[serde(default)]
-    pub age: u32,
+    pub dob: Date,
     /// State: treasury. Signed, so a script may spend past zero.
     #[serde(default)]
     pub gold: i64,

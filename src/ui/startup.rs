@@ -8,8 +8,8 @@ pub(crate) const RIGHT_BAR: f32 = 0.3;
 /// The two text panels.
 pub fn startup(mut commands: Commands) {
     // The old terminal layout, as a flex tree: the resource bar on top, a row
-    // holding the map and the right-hand column (information / buildings /
-    // actions / chronicle), the status bar underneath.
+    // holding the map and the right-hand column (information / courts /
+    // buildings / actions / chronicle), the status bar underneath.
     let panel = Color::srgba(0.1, 0.1, 0.1, 1.0);
     commands
         .spawn(Node {
@@ -40,8 +40,8 @@ pub fn startup(mut commands: Commands) {
                 })
                 .with_children(|col| {
                     information::spawn(col, panel);
-                    buildings::spawn(col, panel);
                     courts::spawn(col, panel);
+                    buildings::spawn(col, panel);
                     actions::spawn(col, panel);
                     chronicle::spawn(col, panel);
                 });

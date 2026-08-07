@@ -287,7 +287,7 @@ asset-loaded sprites.
 
 - **Layout** (`ui/startup.rs`): a column flex tree — `resource` bar on top, a row
   holding the map (left, full remaining width) and the right-hand column
-  (`information` over `buildings` over `courts` over `actions` over `chronicle`, the latter
+  (`information` over `courts` over `buildings` over `actions` over `chronicle`, the latter
   pinned to 30% height),
   `status` bar on
   the bottom. `RIGHT_BAR = 0.3` is shared with the camera so the map lands beside
@@ -327,8 +327,8 @@ asset-loaded sprites.
   child rows — buildings only when a `Local` cache key (selection + building
   roster) changes, actions every frame since the list is ≤2 rows.
   - `information` — the selected land, in one panel: a title (`INFORMATION`)
-    + a `LegendInfo` text block holding id/name and the holder kingdom +
-    ruler (name, house, age). Its `update` clears the text on no selection.
+    + a `LegendInfo` text block holding the land name and the ruler
+    (name, house, age). Its `update` clears the text on no selection.
   - `buildings` — the selected land, in a sibling panel: a title
     (`BUILDINGS`) + a `LegendBuildings` 3-column table — name (left, fills) /
     gold (right) / levy (right), one row per building, then a thin rule and a

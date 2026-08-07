@@ -14,6 +14,7 @@
 
 use super::kingdom::KingdomHasArmies;
 use super::land::LandHasArmies;
+use super::marching::MarchingArmy;
 use bevy::ecs::entity::Entity;
 use bevy::prelude::Component;
 
@@ -22,6 +23,19 @@ use bevy::prelude::Component;
 /// [`ArmyBelongsToKingdom`](self::ArmyBelongsToKingdom).
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Army;
+
+/// The operational status of an army. `Idle` — sitting on its land, ready for
+/// orders. `Marching` — currently in motion, working through a queue of
+/// marchings. Set to `Idle` on raise; the daily
+/// [`march`](crate::game::marching::tick) tick flips it to `Marching` when a
+/// scheduled marching is activated, and back to `Idle` when the queue runs
+/// dry.
+#[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ArmyStatus {
+    #[default]
+    Idle,
+    Marching,
+}
 
 /// The number of levy troops in this army. Defaults to 0; future code paths
 /// (the `levy_rate` on military buildings, the player's [`CharacterLevy`]
@@ -48,3 +62,20 @@ pub struct ArmyBelongsToKingdom(pub Entity);
 /// and the right-hand `ARMY` panel. A mod can rename via a future command.
 #[derive(Component, Debug, Clone)]
 pub struct ArmyName(pub String);
+
+/// The marching this army is currently executing. Only present when
+/// `ArmyStatus == Marching`; the daily
+/// [`march`](crate::game::marching::tick) tick inserts it when activating a
+/// scheduled marching and removes it when the queue runs dry. Read by the
+/// tick to advance the army's `ArmyOnLand` and dequeue the next marching.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct ArmyMarching(pub Entity);
+
+/// The marchings queued against this army — the auto-maintained reverse of
+/// [`MarchingArmy`](super::marching::MarchingArmy). Includes both the
+/// currently-executing marching and any scheduled ones waiting in the queue.
+/// The marching tick walks this to find the next scheduled marching whose
+/// `MarchingFromLand` matches the army's current land.
+#[derive(Component, Debug, Default)]
+#[relationship_target(relationship = MarchingArmy)]
+pub struct ArmyHasMarching(Vec<Entity>);

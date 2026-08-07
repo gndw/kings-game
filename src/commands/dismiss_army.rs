@@ -9,7 +9,7 @@
 //! deregister the runtime id.
 
 use super::core::{distribute_levy_back, Choice, Command, MenuItem, note};
-use crate::ecs::army::{ArmyBelongsToKingdom, ArmyLevy, ArmyName};
+use crate::ecs::army::{ArmyBelongsToKingdom, ArmyHasMarching, ArmyLevy, ArmyName};
 use crate::ecs::{CharacterLeads, KingdomHasArmies, Registry, StringId};
 use bevy::ecs::world::World;
 use bevy::prelude::RelationshipTarget;
@@ -147,6 +147,21 @@ fn dismiss(world: &mut World, actor: &str, army_id: &str) {
     // collection is still correct (it lists *buildings*, not armies).
     if let Some(land_e) = land_e {
         distribute_levy_back(world, land_e, army_levy);
+    }
+
+    // Despawn any queued marchings BEFORE the army goes — otherwise the
+    // marchings would be left holding a `MarchingArmy` pointing at a
+    // despawned entity. Bevy's relationship hooks drop the `MarchingArmy`
+    // off the marching on target despawn, but the marching itself would
+    // still be in the world with no army, no source land, and no status
+    // to walk. Snapshot the marching entities, then drop the borrow
+    // before despawning.
+    let queued: Vec<bevy::ecs::entity::Entity> = world
+        .get::<ArmyHasMarching>(army_e)
+        .map(|q| q.iter().collect())
+        .unwrap_or_default();
+    for m_e in queued {
+        world.despawn(m_e);
     }
 
     // Despawn + deregister. The relationship hooks remove the army from the

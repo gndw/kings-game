@@ -141,7 +141,7 @@ fn player_has_army_on_selected_land(
     })
 }
 
-/// Own system: rebuild the actions list each frame. The list is ≤4 rows, so
+/// Own system: rebuild the actions list each frame. The list is ≤5 rows, so
 /// the despawn/populate cost is negligible — no cache needed.
 pub fn update(
     game: Res<Game>,
@@ -171,6 +171,7 @@ pub fn update(
             action_row(p, "r", "Raise Army");
             if has_army {
                 action_row(p, "m", "Dismiss Army");
+                action_row(p, "g", "Marching Army");
             }
         } else {
             p.spawn((

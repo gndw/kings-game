@@ -203,7 +203,7 @@ pub fn update(
 /// decides its own steps/queries) and the last step calls the command's
 /// `execute`, an `&mut World` method.
 pub fn input(world: &mut World) {
-    let (toggle, up, down, enter, escape, build, destroy, raise, dismiss) = {
+    let (toggle, up, down, enter, escape, build, destroy, raise, dismiss, march) = {
         let keys = world.resource::<ButtonInput<KeyCode>>();
         (
             keys.just_pressed(KeyCode::KeyC),
@@ -215,6 +215,7 @@ pub fn input(world: &mut World) {
             keys.just_pressed(KeyCode::KeyD),
             keys.just_pressed(KeyCode::KeyR),
             keys.just_pressed(KeyCode::KeyM),
+            keys.just_pressed(KeyCode::KeyG),
         )
     };
 
@@ -229,6 +230,8 @@ pub fn input(world: &mut World) {
             raise_army_direct(world);
         } else if dismiss {
             dismiss_army_direct(world);
+        } else if march {
+            marching_direct(world);
         }
         return;
     }
@@ -528,4 +531,42 @@ fn find_army_on_land_for_player(world: &World, actor: &str, land_id: &str) -> Op
         let sid = world.get::<StringId>(army_e)?;
         Some(sid.0.clone())
     })
+}
+
+/// Direct marching trigger: the actions panel's **G** hotkey. Mirrors
+/// `dismiss_army_direct` in shape — the army is already determined by the
+/// selected land, so the palette is opened directly into step 1 (target
+/// land) with the army pre-picked. The final step picks the target land and
+/// the command's `execute` spawns the marching entity. Same gate as the
+/// dismiss/raise direct paths: player must rule the selected land AND at
+/// least one player's army must sit on it.
+fn marching_direct(world: &mut World) {
+    let Some(ci) = find_command(world, "Marching Army") else {
+        return;
+    };
+    let (actor, land_id) = {
+        let game = world.resource::<Game>();
+        (
+            game.ctx.player_character_id.clone(),
+            game.ctx.selected_land_id.clone(),
+        )
+    };
+    let Some(land_id) = land_id else {
+        return;
+    };
+    if !crate::commands::rules_land(world, &actor, &land_id) {
+        return;
+    }
+    let Some(army_id) = find_army_on_land_for_player(world, &actor, &land_id) else {
+        return;
+    };
+    open_menu(
+        world,
+        Some(ci),
+        1,
+        vec![Choice {
+            label: army_id.clone(),
+            value: army_id,
+        }],
+    );
 }

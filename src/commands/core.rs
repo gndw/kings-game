@@ -14,6 +14,7 @@ use std::sync::Arc;
 use super::construct_building::ConstructBuilding;
 use super::destroy_building::DestroyBuilding;
 use super::dismiss_army::DismissArmy;
+use super::marching::MarchingOrder;
 use super::raise_army::RaiseArmy;
 use crate::app::Game;
 use crate::ecs::{
@@ -100,6 +101,7 @@ impl Default for CommandRegistry {
         r.register(Arc::new(DestroyBuilding));
         r.register(Arc::new(RaiseArmy));
         r.register(Arc::new(DismissArmy));
+        r.register(Arc::new(MarchingOrder));
         r
     }
 }

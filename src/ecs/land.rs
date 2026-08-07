@@ -9,6 +9,7 @@
 use super::army::ArmyOnLand;
 use super::building::BuildingOnLand;
 use super::kingdom::KingdomHold;
+use super::marching::{MarchingFromLand, MarchingToLand};
 use bevy::ecs::entity::Entity;
 use bevy::prelude::Component;
 
@@ -58,3 +59,22 @@ pub struct LandHasBuildings(Vec<Entity>);
 #[derive(Component, Debug, Default)]
 #[relationship_target(relationship = ArmyOnLand)]
 pub struct LandHasArmies(Vec<Entity>);
+
+/// The marchings originating from this land — the auto-maintained reverse
+/// of [`MarchingFromLand`](super::marching::MarchingFromLand). Read-only:
+/// set `MarchingFromLand` on each marching and Bevy's hook keeps this in
+/// sync. Not currently queried by gameplay code; the marching tick walks
+/// `ArmyHasMarching` instead (which is keyed by the army). Lives here to
+/// satisfy Bevy's `RelationshipTarget` correctness check.
+#[derive(Component, Debug, Default)]
+#[relationship_target(relationship = MarchingFromLand)]
+pub struct LandHasMarchingsFrom(Vec<Entity>);
+
+/// The marchings terminating at this land — the auto-maintained reverse of
+/// [`MarchingToLand`](super::marching::MarchingToLand). Read-only: set
+/// `MarchingToLand` on each marching and Bevy's hook keeps this in sync.
+/// Same role as [`LandHasMarchingsFrom`] — here for the
+/// `RelationshipTarget` contract.
+#[derive(Component, Debug, Default)]
+#[relationship_target(relationship = MarchingToLand)]
+pub struct LandHasMarchingsTo(Vec<Entity>);

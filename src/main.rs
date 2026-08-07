@@ -154,7 +154,13 @@ fn main() -> Result<()> {
             // a day.
             game::advance_date::advance.run_if(|g: Res<Game>| g.running()),
         )
-        .add_systems(OnDay, game::construction::construction)
+        .add_systems(
+            OnDay,
+            (
+                game::construction::construction,
+                game::marching::tick,
+            ),
+        )
         .add_systems(
             OnMonth,
             (

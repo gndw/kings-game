@@ -12,13 +12,15 @@ section stops matching the code, fix the section in the same change.
 
 A Bevy `App` runs three schedules — `Startup`, `FixedUpdate` (the tick), and
 `Update` (render + input) — plus one custom `OnMonth`. The world is Bevy ECS
-(not hecs, despite the README): every land, character, house, kingdom, courtier and building is an
+(not hecs, despite the README): every land, character, house, kingdom, courtier, building, army and marching is an
 entity, and a read-only building-definition roster plus the calendar, date and map border
 and chronicle log are `Resource`s. Session state (rng, player id, map selection)
 lives in a single `Game` resource wrapping `Ctx`. All of the *what exists* comes
 from mod folders of RON data, loaded in two passes — definitions merge by id,
 then state overlays the mutable fields — and is consumed once by `populate` to
-spawn entities, after which the ECS is the whole world.
+spawn entities, after which the ECS is the whole world. Marchings are run-time
+entities only (spawned by the `MarchingOrder` command, despawned by the daily
+marching tick) — they never appear in mod data.
 
 ## Layers
 
@@ -100,10 +102,16 @@ flat. `decision.md` is the authoritative *why* for the component/relationship
 shape; this is the *what*.
 
 - **Entity kinds** are marker-tag components: `House`, `Character`, `Land`,
-  `Kingdom`, `Army`. Each kind's data is **one field per component** so a system queries
+  `Kingdom`, `Army`, `Marching`. Each kind's data is **one field per component** so a system queries
   only what it touches (payout needs gold + yield, not the date of birth), in its own file:
-  `house.rs`, `character.rs`, `land.rs`, `kingdom.rs`, `army.rs` (all under
-  `ecs/`).
+  `house.rs`, `character.rs`, `land.rs`, `kingdom.rs`, `army.rs`, `marching.rs`
+  (all under `ecs/`). Marching is a run-time entity only — the player spawns
+  them via the `MarchingOrder` command and the daily tick reaps them when the
+  army arrives — so they don't appear in `populate` or mod data. Army carries
+  `ArmyStatus` (`Idle` / `Marching`) and the active `ArmyMarching`; the
+  scheduled-and-active marchings queue is the auto-maintained `ArmyHasMarching`
+  `Vec<Entity>` on the army. See the `Army and Marching are separate entity
+  kinds` decision for the *why*.
 
 - **`StringId`** (`ecs/ecs.rs`): every entity carries the id its RON data and
   saves address it by. The Rhai script ABI was string ids; the `Registry`
@@ -129,6 +137,16 @@ shape; this is the *what*.
     `Vec<Entity>`) — set explicitly on raise rather than derived through the
     land's `LandHeldBy`, so the link survives a future world where kingdoms
     hold multiple lands.
+  - `MarchingArmy` (on marching) ↔ `ArmyHasMarching` (on army, `Vec<Entity>`) —
+    a marching declares its army; the army's `ArmyHasMarching` auto-fills.
+    The Vec is the army's marching queue (current + scheduled). Insertion
+    order is preserved by the `RelationshipTarget` Vec.
+  - `MarchingFromLand` (on marching) ↔ `LandHasMarchingsFrom` (on land,
+    `Vec<Entity>`) and `MarchingToLand` (on marching) ↔ `LandHasMarchingsTo`
+    (on land, `Vec<Entity>`) — the marching's source and destination. The
+    land-side targets are not queried by gameplay code (the marching tick
+    walks `ArmyHasMarching` instead); they exist to satisfy Bevy's
+    `RelationshipTarget` correctness check.
   - `CourtierOfCharacter` (courtier→character) ↔ `CharacterHasCourtiers`, and
     `CourtierOfKingdom` (courtier→kingdom) ↔ `KingdomHasCourtiers` — each appointment
     links one character to one kingdom; `CourtierType::Courtier` is the generic role.
@@ -185,8 +203,9 @@ shape; this is the *what*.
 Lives in `game/` and `schedules.rs`.
 
 - **Schedules** (`schedules.rs`): Bevy's `Startup`/`Update`/`FixedUpdate`, plus
-  two custom labels — `OnDay` (per-day building completions) and `OnMonth`
-  (monthly payout) — both run from `advance` after the date mutates.
+  two custom labels — `OnDay` (per-day building completions *and* the
+  marching tick) and `OnMonth` (monthly payout) — both run from `advance`
+  after the date mutates.
 - **The tick — `advance`** (`game/advance_date.rs`) runs in `FixedUpdate`,
   gated by `Game::running()`. It's an **exclusive `fn(&mut World)`** because
   it needs `run_schedule(...)`, which requires `&mut World`. It bumps
@@ -300,7 +319,26 @@ the style of `ctx::step`.
   `ui/command_menu`) and runs `execute` straight away with the first army
   on the selected land whose `ArmyBelongsToKingdom` matches the player's
   kingdom as the choice; with multiple armies on the land, the player can
-  re-press **M** to dismiss the next one.
+  re-press **M** to dismiss the next one. Also walks the army's
+  `ArmyHasMarching` collection and despawns any queued marchings first —
+  otherwise the marchings would be left holding a `MarchingArmy` pointing
+  at the despawned army.
+- **`MarchingOrder`** queues a marching order to move one of the actor's
+  armies to another land. Validates the army belongs to the actor's
+  kingdom (via `ArmyBelongsToKingdom`) and the target is a different
+  land from the army's current land, then spawns a `Marching` entity with
+  `MarchingStatus::Scheduled`, empty `MarchingBeginDate` /
+  `MarchingArrivedDate`, and the source (`MarchingFromLand`) / target
+  (`MarchingToLand`) relationships filled. The three relationships
+  auto-maintain `ArmyHasMarching` (on the army, the queue) and
+  `LandHasMarchingsFrom` / `LandHasMarchingsTo` (on the two lands); the
+  `ArmyMarching` "current marching" component is *not* inserted here —
+  the daily marching tick does that when activating the marching. Two
+  steps (pick an army, pick a target land). From the actions panel the
+  **G** hotkey bypasses the army step (`marching_direct` in
+  `ui/command_menu`) and opens the palette into step 1 with the first army
+  on the selected land pre-picked. The "G" row only shows when the player
+  rules the selected land AND at least one player's army sits on it.
 - **Runtime building id** is a v4 UUID drawn from the seeded `SimRng` (not OS
   entropy), keeping the one-entropy-source invariant; format-only, no `uuid`
   crate.
@@ -375,10 +413,10 @@ asset-loaded sprites.
     (`ACTIONS`) + a `LegendActions` column listing the player's build/destroy
     hotkeys if the player rules the selected land, else a `(none)` placeholder.
     Raise Army (**R**) is shown when the player rules the selected land;
-    Dismiss Army (**M**) is shown only when the player rules the selected
-    *and* at least one army on it belongs to the player's kingdom
-    (`player_has_army_on_selected_land` in `ui/actions.rs`). `update` runs as
-    its own system each frame.
+    Dismiss Army (**M**) and Marching Army (**G**) are shown only when the
+    player rules the selected *and* at least one army on it belongs to the
+    player's kingdom (`player_has_army_on_selected_land` in `ui/actions.rs`).
+    `update` runs as its own system each frame.
   - `chronicle` — last 10 lines of the `Chronicles` resource.
   - `resource` — the player's name, house, gold, yield/mo, levy.
   - `status` — `[PAUSED]`/`[RUNNING]`, the `Date`, current speed, a `C commands`
@@ -409,9 +447,10 @@ asset-loaded sprites.
   needs stable iteration order relies on each kind being a single archetype.
 - **Relationships are hook-maintained.** Set the single-`Entity` side
   (`KingdomLedBy`/`KingdomHold`/`BuildingOnLand`/`ArmyOnLand`/
-  `ArmyBelongsToKingdom`); never hand-edit the reverse
-  (`CharacterLeads`/`LandHeldBy`/`LandHasBuildings`/`LandHasArmies`/
-  `KingdomHasArmies`).
+  `ArmyBelongsToKingdom`/`MarchingArmy`/`MarchingFromLand`/`MarchingToLand`);
+  never hand-edit the reverse (`CharacterLeads`/`LandHeldBy`/`LandHasBuildings`/
+  `LandHasArmies`/`KingdomHasArmies`/`ArmyHasMarching`/`LandHasMarchingsFrom`/
+  `LandHasMarchingsTo`).
 - **Definition refs are fatal; state refs are repaired.** Don't move
   `validate`'s checks into `reconcile` or vice versa — they encode different
   policies (broken mod vs old save).
@@ -430,7 +469,10 @@ asset-loaded sprites.
 | `src/commands/construct_building.rs` | the `ConstructBuilding` command (validate + spawn as BUILDING + pay) |
 | `src/commands/destroy_building.rs` | the `DestroyBuilding` command (validate + despawn + deregister) |
 | `src/commands/raise_army.rs` | the `RaiseArmy` command (validate + spawn the army bundle + drain `BuildingLevy` pools) |
-| `src/commands/dismiss_army.rs` | the `DismissArmy` command (validate + distribute `ArmyLevy` back into `BuildingLevy` + despawn + deregister) |
+| `src/commands/dismiss_army.rs` | the `DismissArmy` command (validate + distribute `ArmyLevy` back into `BuildingLevy` + despawn + deregister + reap queued marchings) |
+| `src/commands/marching.rs` | the `MarchingOrder` command (validate + spawn a `Marching` entity with `MarchingStatus::Scheduled` and empty dates) |
+| `src/ecs/marching.rs` | the `Marching` entity kind — `Marching` marker + `MarchingArmy`/`MarchingFromLand`/`MarchingToLand` relationships + `MarchingBeginDate`/`MarchingArrivedDate` + `MarchingStatus` enum |
+| `src/game/marching.rs` | the per-day marching tick (`OnDay` — activate scheduled marchings on the matching source land, move arrived armies, chain into the next marching or return to Idle) |
 | `src/game/replenish_levy.rs` | the monthly `BuildingLevy` top-up (`OnMonth` — every ACTIVE building's pool += `def.levy_rate`, capped at `def.levy`) |
 | `src/map/army.rs` | on-map army indicators (gizmo marker + `Text2d` label per army, spawned via `Local<HashMap>` and reaped via `RemovedComponents<Army>`; lives in `crate::map` because it draws directly on the world frame) |
 | `src/ui/army.rs` | the `ARMY` right-column panel (one `<ArmyName> (<levy>)` row per army under the selected land's kingdom) |

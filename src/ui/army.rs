@@ -1,16 +1,26 @@
-//! The ARMIES panel in the right-hand column: armies of the kingdom holding
-//! the selected land, one `<ArmyName> (<levy>)` row per army.
+//! The ARMIES panel in the right-hand column: one row per army standing on
+//! the selected land.
+//!
+//! - **Idle** armies render as `"<ArmyName> (<levy>)"`, e.g. `"Lannister Army (90)"`.
+//! - **Marching** armies render as `"<ArmyName> (<levy>) marching to <target> in <N> days"`,
+//!   e.g. `"Lannister Army (90) marching to Riverrun in 14 days"`, where
+//!   `<target>` is the target land's `LandName` and `<N>` is the days
+//!   remaining until the marching's `MarchingArrivedDate`.
 //!
 //! Mirrors the layout of `ui::courts` (a title + a single multi-line `Text`
-//! block) since the population is small — typically 0–3 armies per kingdom,
-//! one per raise. `update` resolves the selected land's kingdom, walks its
-//! `KingdomHasArmies`, and renders one line per army; falls back to `(none)`
-//! when there's nothing to show, matching `ui::courts`.
+//! block) since the population is small — typically 0–3 armies on a land.
+//! `update` walks the selected land's `LandHasArmies` (the auto-maintained
+//! reverse of `ArmyOnLand`) and renders one line per army; falls back to
+//! `(none)` when there's no selection or no army sits on the selected land.
 
 use super::{FONT, TITLE};
 use crate::app::Game;
-use crate::ecs::army::{ArmyLevy, ArmyName};
-use crate::ecs::{KingdomHasArmies, LandHeldBy, Registry};
+use crate::ecs::army::{ArmyLevy, ArmyMarching, ArmyName, ArmyStatus};
+use crate::ecs::land::LandHasArmies;
+use crate::ecs::marching::{MarchingArrivedDate, MarchingToLand};
+use crate::ecs::{LandName, Registry};
+use crate::resources::calendar::Calendar;
+use crate::resources::date::Date;
 use bevy::prelude::*;
 use bevy::prelude::RelationshipTarget;
 
@@ -42,46 +52,59 @@ pub(super) fn spawn(col: &mut ChildSpawnerCommands, panel: Color) {
     });
 }
 
-/// Render one `<ArmyName> (<levy>)` row per army under the selected land's
-/// kingdom; clears to `(none)` when the selection doesn't resolve to a
-/// kingdom-held land or the kingdom has no armies.
+/// Render one row per army on the selected land. Idle armies show name +
+/// levy; marching armies show name + levy + "marching to <target> in <N>
+/// days". Clears to `(none)` when the selection doesn't resolve to a land
+/// or the land has no armies on it.
 pub fn update(
     game: Res<Game>,
     registry: Res<Registry>,
-    land_held_by: Query<&LandHeldBy>,
-    kingdom_has_armies: Query<&KingdomHasArmies>,
-    armies: Query<(&ArmyName, &ArmyLevy)>,
+    calendar: Res<Calendar>,
+    date: Res<Date>,
+    land_has_armies_q: Query<&LandHasArmies>,
+    armies: Query<(&ArmyName, &ArmyLevy, &ArmyStatus)>,
+    army_marching: Query<&ArmyMarching>,
+    marching_to_land: Query<&MarchingToLand>,
+    marching_arrived_date: Query<&MarchingArrivedDate>,
+    land_names: Query<&LandName>,
     mut text: Single<&mut Text, With<LegendArmies>>,
 ) {
-    // The selected land's kingdom, via the same `LandHeldBy` lookup the
-    // other kingdom-following panels (courts, information) use.
-    let kingdom = game
+    let Some(land_e) = game
         .ctx
         .selected_land_id
         .as_deref()
         .and_then(|id| registry.get(id))
-        .and_then(|land| land_held_by.get(land).ok())
-        .map(LandHeldBy::kingdom);
-
-    let Some(kingdom_e) = kingdom else {
+    else {
         text.0 = "(none)".into();
         return;
     };
-    let Ok(kingdom_has_armies) = kingdom_has_armies.get(kingdom_e) else {
+    let Ok(land_has_armies) = land_has_armies_q.get(land_e) else {
         text.0 = "(none)".into();
         return;
     };
 
-    // Walk `KingdomHasArmies` (the kingdom's auto-maintained list) and
-    // render one line per army. Missing `ArmyName`/`ArmyLevy` on an entry
-    // skips it — every army spawned by `RaiseArmy` carries both, but a torn
-    // edge case shouldn't crash the panel.
-    let mut lines = kingdom_has_armies
-        .iter()
-        .filter_map(|army_e| {
-            let (name, levy) = armies.get(army_e).ok()?;
-            Some(format!("{} ({})", name.0, levy.0))
-        });
+    let today_ord = date.ordinal(&calendar);
+
+    // Walk `LandHasArmies` (the land's auto-maintained list) and render one
+    // line per army. Missing `ArmyName`/`ArmyLevy`/`ArmyStatus` on an entry
+    // skips it — every army spawned by `RaiseArmy` carries all three, but a
+    // torn edge case shouldn't crash the panel. For marching armies, a
+    // missing `ArmyMarching`/`MarchingToLand`/`MarchingArrivedDate` chain
+    // likewise skips the army rather than rendering a half-formed line.
+    let mut lines = land_has_armies.iter().filter_map(|army_e| {
+        let (name, levy, status) = armies.get(army_e).ok()?;
+        let base = format!("{} ({})", name.0, levy.0);
+        if *status != ArmyStatus::Marching {
+            return Some(base);
+        }
+        let marching_e = army_marching.get(army_e).ok()?.0;
+        let target_e = marching_to_land.get(marching_e).ok()?.0;
+        let arrived = marching_arrived_date.get(marching_e).ok()?.0?;
+        let target_name = land_names.get(target_e).ok()?.0.clone();
+        let days = arrived.ordinal(&calendar) - today_ord;
+        Some(format!("{base} marching to {target_name} in {days} days"))
+    });
+
     text.0 = lines
         .next()
         .map(|first| {

@@ -14,11 +14,13 @@
 //! - [`destroy_building`] — tear down a building on a ruled land.
 //! - [`raise_army`] — raise an army on a ruled land.
 //! - [`dismiss_army`] — dismiss an army the actor rules.
+//! - [`marching`] — queue a marching order to move an army to another land.
 
 pub mod construct_building;
 pub mod core;
 pub mod destroy_building;
 pub mod dismiss_army;
+pub mod marching;
 pub mod raise_army;
 
 pub use core::{rules_land, Choice, Command, CommandRegistry, MenuItem};

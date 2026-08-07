@@ -60,6 +60,7 @@ pub mod ecs;
 pub mod house;
 pub mod kingdom;
 pub mod land;
+pub mod marching;
 
 pub use army::*;
 pub use building::*;

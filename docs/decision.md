@@ -300,3 +300,39 @@ armies raised on its land.
   ground at `levy_rate: 5`, for example) without changing the field's
   default of `0` on civil kinds.
 
+## Army and Marching are separate entity kinds
+
+A marching is a separate entity from the army it moves, not a component on
+the army. The marching carries the scheduling data (`MarchingFromLand` /
+`MarchingToLand`, `MarchingBeginDate` / `MarchingArrivedDate`,
+`MarchingStatus`); the army carries the operational state (`ArmyStatus:`
+`Idle` / `Marching`, plus `ArmyMarching` pointing at the current marching).
+They are linked by a Bevy relationship: `MarchingArmy` (on the marching)
+↔ `ArmyHasMarching` (a `Vec<Entity>` on the army, the queue, insertion-
+order-preserving).
+
+- **Why a separate entity:** the same army can carry multiple marchings at
+  once (a queue of marches the player lined up: A→B→C→D). Putting the
+  scheduling data on the army would have turned `Army` into a `Vec` of
+  marchings, or pushed the queue somewhere else; the marching entity kind
+  keeps the data shape small (one marching per ordered move) and lets the
+  daily tick walk a single archetype (`Marching`).
+- **Why a relationship, not a plain `Entity` field:** Bevy's hook-
+  maintained `Vec<Entity>` collection on the army is the queue, free of
+  hand-maintained reverse inserts. Insertion order is preserved by the
+  `RelationshipTarget` Vec, which is how the "first scheduled marching on
+  the matching source land wins" rule lands.
+- **Current vs scheduled marching.** `ArmyMarching` (single `Entity` on
+  the army) is set only by the daily tick when it activates a scheduled
+  marching, and removed when the queue runs dry. The `ArmyHasMarching` Vec
+  includes both the currently-executing marching and the scheduled ones
+  waiting for the army to be on the matching source land. The two pieces
+  are not redundant: the Vec is the queue, the single `Entity` is the
+  pointer the marching tick follows day-to-day.
+- **Run-time only.** Marchings never appear in mod data — `populate` does
+  not spawn any. They are spawned by the `MarchingOrder` command and
+  despawned by the daily tick when the army reaches the target land and
+  the queue is empty. `DismissArmy` also walks the queue and despawns every
+  marching before despawning the army (otherwise the marchings would be
+  left holding a `MarchingArmy` pointing at a despawned entity).
+

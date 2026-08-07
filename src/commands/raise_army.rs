@@ -19,7 +19,7 @@
 use super::core::{
     available_levy, drain_buildings, ruled_lands, Choice, Command, MenuItem, next_id, note,
 };
-use crate::ecs::army::{Army, ArmyBelongsToKingdom, ArmyLevy, ArmyName, ArmyOnLand};
+use crate::ecs::army::{Army, ArmyBelongsToKingdom, ArmyLevy, ArmyName, ArmyOnLand, ArmyStatus};
 use crate::ecs::{
     CharacterLeads, CharacterOfHouse, HouseName, LandHeldBy, LandName, Registry, StringId,
 };
@@ -133,6 +133,10 @@ fn raise(world: &mut World, actor: &str, land_id: &str) {
             ArmyLevy(initial_levy),
             ArmyOnLand(land_e),
             ArmyBelongsToKingdom(kingdom_e),
+            // New armies start idle. The marching tick flips this to
+            // `Marching` when activating the first scheduled marching in
+            // the queue (starts empty).
+            ArmyStatus::Idle,
         ))
         .id();
     world.resource_mut::<Registry>().insert(id, eid);

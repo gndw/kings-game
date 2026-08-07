@@ -6,6 +6,7 @@
 //! column.
 
 pub mod army;
+pub mod components;
 
 /// On-map label font size. Mirrors `crate::ui::FONT_SIZE`; duplicated rather
 /// than shared because both are 1-line constants and the two module trees

@@ -145,6 +145,7 @@ fn main() -> Result<()> {
                 ui::camera::update_camera,
                 ui::map::update_draw,
                 map::army::update,
+                map::components::army_icon::update,
             ),
         )
         .add_systems(

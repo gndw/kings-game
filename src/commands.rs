@@ -12,9 +12,13 @@
 //!   id/chronicle/ruled-lands helpers.
 //! - [`construct_building`] — build a building kind on a ruled land.
 //! - [`destroy_building`] — tear down a building on a ruled land.
+//! - [`raise_army`] — raise an army on a ruled land.
+//! - [`dismiss_army`] — dismiss an army the actor rules.
 
 pub mod construct_building;
 pub mod core;
 pub mod destroy_building;
+pub mod dismiss_army;
+pub mod raise_army;
 
 pub use core::{rules_land, Choice, Command, CommandRegistry, MenuItem};

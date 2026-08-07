@@ -1,12 +1,20 @@
 //! The BUILDINGS panel in the right-hand column: the selected land's
 //! buildings as a 3-column table (name / gold / levy) with a totals row.
+//!
+//! Name colour reflects each building's pool state: red while its levy is
+//! raised into an army (`BuildingIsRaised`), yellow while the pool is
+//! partially drained (`BuildingLevy < def.levy`, displayed as
+//! `Name (current/max)`), and white when the pool is full. Non-ACTIVE
+//! buildings stay greyed-out as before.
 
 use super::{FONT, TITLE};
 use crate::app::Game;
 use crate::ecs::{
-    BuildingConstructionDate, BuildingOf, BuildingStatus, LandHasBuildings, Registry,
+    BuildingConstructionDate, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingStatus,
+    LandHasBuildings, Registry,
 };
 use crate::resources::buildings::BuildingDefs;
+use bevy::color::palettes::css;
 use bevy::prelude::*;
 
 /// Buildings list and total yield block. A column container; its child rows
@@ -19,8 +27,14 @@ const DIVIDER: Color = Color::srgba(0.5, 0.5, 0.5, 0.6);
 /// Fixed widths so the gold and levy columns line up across rows.
 const GOLD_W: f32 = 48.0;
 const LEVY_W: f32 = 40.0;
-/// Greyed-out colour for building rows that are still under construction.
+/// Greyed-out colour for non-ACTIVE rows (under construction / inactive).
 const BUILDING_GREY: Color = Color::srgba(0.55, 0.55, 0.55, 1.0);
+/// Name colour for ACTIVE buildings whose levy is currently in an army.
+const RAISED_RED: Color = Color::Srgba(css::RED);
+/// Name colour for ACTIVE buildings whose pool is partially drained but
+/// not currently raised (mid-replenishment, or post-dismiss before a full
+/// month has rolled over).
+const PARTIAL_YELLOW: Color = Color::Srgba(css::YELLOW);
 
 /// The BUILDINGS panel: title + column container of building rows. Spawned
 /// as a sibling panel below `information` in the right-hand column.
@@ -57,13 +71,17 @@ pub(super) fn spawn(col: &mut ChildSpawnerCommands, panel: Color) {
 
 /// One table row: name left-aligned filling the space, gold and levy
 /// right-aligned in fixed-width cells so the columns line up across rows.
-/// `grey` tints all three cells — used to render `BUILDING` rows.
-fn row(p: &mut ChildSpawnerCommands, name: &str, gold: &str, levy: &str, grey: bool) {
-    let tint: TextColor = if grey {
-        TextColor(BUILDING_GREY)
-    } else {
-        TextColor(Color::WHITE)
-    };
+/// `name_color` tints the name cell; `value_color` tints gold + levy.
+/// Non-ACTIVE rows pass the same grey for both; ACTIVE rows pass white
+/// for the cells and either white / yellow / red for the name.
+fn row(
+    p: &mut ChildSpawnerCommands,
+    name: &str,
+    gold: &str,
+    levy: &str,
+    name_color: Color,
+    value_color: Color,
+) {
     p.spawn(Node {
         width: percent(100),
         flex_direction: FlexDirection::Row,
@@ -73,7 +91,7 @@ fn row(p: &mut ChildSpawnerCommands, name: &str, gold: &str, levy: &str, grey: b
         r.spawn((
             Text::new(name.to_string()),
             TextFont::from_font_size(FONT),
-            tint,
+            TextColor(name_color),
             Node {
                 flex_grow: 1.0,
                 ..default()
@@ -82,7 +100,7 @@ fn row(p: &mut ChildSpawnerCommands, name: &str, gold: &str, levy: &str, grey: b
         r.spawn((
             Text::new(gold.to_string()),
             TextFont::from_font_size(FONT),
-            tint,
+            TextColor(value_color),
             TextLayout::justify(Justify::Right),
             Node {
                 width: px(GOLD_W),
@@ -92,7 +110,7 @@ fn row(p: &mut ChildSpawnerCommands, name: &str, gold: &str, levy: &str, grey: b
         r.spawn((
             Text::new(levy.to_string()),
             TextFont::from_font_size(FONT),
-            tint,
+            TextColor(value_color),
             TextLayout::justify(Justify::Right),
             Node {
                 width: px(LEVY_W),
@@ -109,7 +127,7 @@ fn rebuild(
     container: Entity,
     key: &mut Option<String>,
     cur: Option<String>,
-    rows: &[(String, String, String, bool)],
+    rows: &[(String, String, String, Color, Color)],
     total: Option<(String, String)>,
 ) {
     if *key == cur {
@@ -122,8 +140,8 @@ fn rebuild(
         return;
     }
     commands.entity(container).with_children(|p| {
-        for (name, gold, levy, grey) in rows {
-            row(p, name, gold, levy, *grey);
+        for (name, gold, levy, name_color, value_color) in rows {
+            row(p, name, gold, levy, *name_color, *value_color);
         }
         // A faint rule, then the totals in the same 3-column layout.
         p.spawn((
@@ -136,7 +154,7 @@ fn rebuild(
             BackgroundColor(DIVIDER),
         ));
         if let Some((gold, levy)) = total {
-            row(p, "total", &gold, &levy, false);
+            row(p, "total", &gold, &levy, Color::WHITE, Color::WHITE);
         }
     });
 }
@@ -154,6 +172,8 @@ pub fn update(
     building_of: Query<&BuildingOf>,
     building_status: Query<&BuildingStatus>,
     building_finish: Query<&BuildingConstructionDate>,
+    building_levy: Query<&BuildingLevy>,
+    building_is_raised: Query<&BuildingIsRaised>,
 ) {
     // Nothing selected, or a selected id the world doesn't resolve to a land:
     // blank the buildings table. The information panel clears itself
@@ -173,12 +193,15 @@ pub fn update(
     // through to their definitions for the stats. Buildings still under
     // construction (`status == BUILDING`) are listed in grey with
     // `Name (YYYY.MM.DD)`; `INACTIVE` buildings are listed with no yield
-    // info. Only `ACTIVE` buildings contribute to the totals.
+    // info. Only `ACTIVE` buildings contribute to the totals; for those,
+    // the name colour reflects the pool state (`BuildingIsRaised` →
+    // red; partial `BuildingLevy` → yellow with `Name (current/max)`;
+    // full pool → white).
     let (mut gold, mut levy) = (0i64, 0u64);
-    let mut rows: Vec<(String, String, String, bool)> = Vec::new();
+    let mut rows: Vec<(String, String, String, Color, Color)> = Vec::new();
     // The key tracks selection + the building roster on it (def ids + per-
-    // building status + finish date); it changes when the land, the building
-    // set, or any visible status does.
+    // building status + finish date + pool state); it changes when the
+    // land, the building set, or any visible pool state does.
     let mut sig = String::new();
     for b_e in land_has_buildings.iter() {
         let Ok(building_of) = building_of.get(b_e) else {
@@ -192,21 +215,39 @@ pub fn update(
             .copied()
             .unwrap_or(BuildingStatus::Active);
         let finish = building_finish.get(b_e).ok().map(|f| f.0);
-        let grey = status == BuildingStatus::Building;
+        let is_raised = building_is_raised
+            .get(b_e)
+            .copied()
+            .unwrap_or(BuildingIsRaised(false))
+            .0;
+        let current_levy = building_levy
+            .get(b_e)
+            .copied()
+            .unwrap_or(BuildingLevy(0))
+            .0;
+        let max_levy = d.levy;
         let active = status == BuildingStatus::Active;
         if !sig.is_empty() {
             sig.push(',');
         }
         sig.push_str(&format!(
-            "{}:{:?}:{}",
+            "{}:{:?}:{}:{}:{}",
             building_of.0,
             status,
             finish
                 .map(|building_construction_date| building_construction_date.to_string())
-                .unwrap_or_default()
+                .unwrap_or_default(),
+            is_raised,
+            current_levy,
         ));
-        let g_cell;
-        let l_cell;
+
+        // Cells. ACTIVE buildings show their def's gold/levy values; non-
+        // ACTIVE rows leave the cells empty. Cells stay `value_color` (white
+        // for ACTIVE, grey for non-ACTIVE) regardless of the name's state —
+        // the cell represents "what this building contributes to the
+        // realm's standing pool" (a fixed per-def number), which is
+        // independent of whether the levy is currently raised into an army.
+        let (g_cell, l_cell);
         if active {
             gold += d.gold_profit as i64 - d.gold_upkeep as i64;
             levy += d.levy as u64;
@@ -224,24 +265,43 @@ pub fn update(
             } else {
                 String::new()
             };
-        } else if grey {
-            // Name carries "Building Name (YYYY.MM.DD)"; gold + levy cells
-            // stay empty. The grey tint tells the eye.
-            let name = format!(
-                "{} ({})",
-                d.name,
-                finish
-                    .map(|building_construction_date| building_construction_date.to_string())
-                    .unwrap_or_else(|| "?".into())
-            );
-            rows.push((name, String::new(), String::new(), true));
-            continue;
         } else {
-            // `INACTIVE` — listed but contributes nothing.
             g_cell = String::new();
             l_cell = String::new();
         }
-        rows.push((d.name.clone(), g_cell, l_cell, grey));
+
+        // Name + colour. Priority order: raised > partial > full > non-
+        // ACTIVE. Raised is a strict subset of "pool is drained", but we
+        // show red (no format) over yellow (`Name (current/max)`) because
+        // the flag communicates a different fact: "this levy is currently
+        // in the field" vs "the pool is mid-replenish".
+        let (name_color, value_color, display_name) = match status {
+            BuildingStatus::Building => {
+                let name = format!(
+                    "{} ({})",
+                    d.name,
+                    finish
+                        .map(|building_construction_date| building_construction_date.to_string())
+                        .unwrap_or_else(|| "?".into())
+                );
+                (BUILDING_GREY, BUILDING_GREY, name)
+            }
+            BuildingStatus::Inactive => (BUILDING_GREY, BUILDING_GREY, d.name.clone()),
+            BuildingStatus::Active => {
+                if is_raised {
+                    (RAISED_RED, Color::WHITE, d.name.clone())
+                } else if current_levy < max_levy {
+                    (
+                        PARTIAL_YELLOW,
+                    Color::WHITE,
+                    format!("{} ({}/{})", d.name, current_levy, max_levy),
+                    )
+                } else {
+                    (Color::WHITE, Color::WHITE, d.name.clone())
+                }
+            }
+        };
+        rows.push((display_name, g_cell, l_cell, name_color, value_color));
     }
 
     let (cur_key, total) = if rows.is_empty() {

@@ -30,6 +30,25 @@ pub enum BuildingStatus {
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Building;
 
+/// The current available levy pool this building can contribute to a raise.
+/// Starts at the def's `levy` (the max), drops to `0` when `RaiseArmy`
+/// consumes this building's pool, and grows by `def.levy_rate` each month
+/// via [`crate::game::replenish_levy::replenish`] (capped at the def's
+/// `levy`). When the army is dismissed the levy is distributed back here
+/// (capped at the def's `levy`). Read by `RaiseArmy` to decide how many
+/// troops can be raised.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct BuildingLevy(pub u32);
+
+/// Whether this building's levy has been raised to an army. `false` on
+/// construction and after the army is dismissed; `true` once `RaiseArmy`
+/// drains the pool. Independent of the pool's current value (a building can
+/// be flagged `raised` while its `BuildingLevy` is partially replenished
+/// — the flag is "is the levy currently sitting in an army?", not "is the
+/// pool empty?").
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct BuildingIsRaised(pub bool);
+
 /// The definition id this building is an instance of — a key into the
 /// [`BuildingDefs`](crate::resources::buildings::BuildingDefs) resource. Not an
 /// entity link, because definitions are a read-only roster, not entities.

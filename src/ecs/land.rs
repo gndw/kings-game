@@ -6,6 +6,7 @@
 //! and a [`LandHasBuildings`] collection auto-maintained from each building's
 //! [`BuildingOnLand`](super::building::BuildingOnLand).
 
+use super::army::ArmyOnLand;
 use super::building::BuildingOnLand;
 use super::kingdom::KingdomHold;
 use bevy::ecs::entity::Entity;
@@ -50,3 +51,10 @@ impl LandHeldBy {
 #[derive(Component, Debug, Default)]
 #[relationship_target(relationship = BuildingOnLand)]
 pub struct LandHasBuildings(Vec<Entity>);
+
+/// The armies raised on this land — the auto-maintained reverse of
+/// [`ArmyOnLand`](super::army::ArmyOnLand). Read-only: set `ArmyOnLand` on
+/// each army and Bevy's hook keeps this in sync.
+#[derive(Component, Debug, Default)]
+#[relationship_target(relationship = ArmyOnLand)]
+pub struct LandHasArmies(Vec<Entity>);

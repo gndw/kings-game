@@ -5,11 +5,12 @@
 //! starting state already overlaid.
 
 use crate::content::Content;
+use crate::resources::buildings::BuildingDefs;
 use bevy::ecs::world::World;
 use bevy::prelude::{Component, Entity, Resource};
 use std::collections::HashMap;
 
-use super::building::{Building, BuildingOf, BuildingOnLand};
+use super::building::{Building, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand};
 use super::character::{
     Character, CharacterDateOfBirth, CharacterGold, CharacterGoldYield, CharacterLevy,
     CharacterName, CharacterOfHouse,
@@ -123,10 +124,17 @@ pub fn populate(world: &mut World, content: Content) {
     // per-instance status comes from the state overlay (defaults to
     // `BuildingStatus::Active`); the construction-date is only meaningful on
     // `BUILDING` instances and is set by `ConstructBuilding` at runtime.
+    // `BuildingLevy` starts at the def's `levy` (full pool); `BuildingIsRaised`
+    // starts as `false` (no army in the field yet).
     for (id, b) in content.buildings.into_iter() {
         let Some(land_e) = world.resource::<Registry>().get(&b.land_id) else {
             continue;
         };
+        let def_levy = world
+            .resource::<BuildingDefs>()
+            .get(&b.def_id)
+            .map(|d| d.levy)
+            .unwrap_or(0);
         let eid = world
             .spawn((
                 StringId(id.clone()),
@@ -134,6 +142,8 @@ pub fn populate(world: &mut World, content: Content) {
                 BuildingOf(b.def_id),
                 BuildingOnLand(land_e),
                 b.status,
+                BuildingLevy(def_levy),
+                BuildingIsRaised(false),
             ))
             .id();
         world.resource_mut::<Registry>().insert(id, eid);

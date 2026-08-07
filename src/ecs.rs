@@ -52,6 +52,7 @@
 //! [`kingdom`], [`land`]); the shared spine — [`StringId`], [`Registry`],
 //! [`populate`] — is in [`ecs`] and re-exported here as one flat namespace.
 
+pub mod army;
 pub mod building;
 pub mod character;
 pub mod courtier;
@@ -60,6 +61,7 @@ pub mod house;
 pub mod kingdom;
 pub mod land;
 
+pub use army::*;
 pub use building::*;
 pub use character::*;
 pub use courtier::*;

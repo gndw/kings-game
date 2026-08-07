@@ -266,9 +266,37 @@ sits on, matching the colocated components for that entity kind.
   held land); `CourtierOfCharacter` and `CourtierOfKingdom` are in
   `courtier.rs` (they sit on the courtier); `CharacterHasCourtiers` and
   `KingdomHasCourtiers` likewise land on `character.rs` and `kingdom.rs`.
+- **Army pair:** `ArmyOnLand` and `ArmyBelongsToKingdom` sit on the army
+  entity so they live in `ecs::army`; their reverses `LandHasArmies` and
+  `KingdomHasArmies` sit on the land and kingdom respectively, so they live
+  in `ecs::land` and `ecs::kingdom`.
 - **Rule for new relationships:** when adding a `#[relationship]` or
   `#[relationship_target]`, decide the entity it attaches to first, then put
   the component in that entity's file. If a future generic relationships
   module appears, move them back — but the split by entity kind is the
   default and stays until something forces otherwise.
+
+## `BuildingDef::levy_rate` is the per-month replenishment of an army
+
+Military building definitions carry a `levy_rate: u32` (defaulted to 0 on
+civil kinds). It is the per-month levy contribution a building makes to
+armies raised on its land.
+
+- **Why a separate field:** the static `levy` on a building is the
+  immediate contribution to the realm's standing pool (`CharacterLevy`),
+  summed at construction / destruction time. `levy_rate` is the *flow* into
+  the army's `ArmyLevy` over time. The two are independent: a building
+  still contributes its `levy` to the realm even when no army has been
+  raised; once an army exists on the land, `levy_rate` adds to the army
+  each month.
+- **Not yet consumed.** This commit declares the field; the per-month
+  replenishment loop that reads it (likely a new `OnMonth` observer or a
+  step in `game::payout`) is the next change. Until then the field is just
+  declared and the base mod sets it per the formula below.
+- **Rule of thumb for the catalogue:** `levy_rate = max(1, round(levy *
+  0.025))`. At the base game's levy magnitudes (10–50) the formula floors
+  at 1 for every military kind, so the base mod starts every military
+  building at `levy_rate: 1`. A mod can override per kind (a special drill
+  ground at `levy_rate: 5`, for example) without changing the field's
+  default of `0` on civil kinds.
 

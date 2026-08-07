@@ -13,10 +13,18 @@ use std::sync::Arc;
 
 use super::construct_building::ConstructBuilding;
 use super::destroy_building::DestroyBuilding;
+use super::dismiss_army::DismissArmy;
+use super::raise_army::RaiseArmy;
 use crate::app::Game;
-use crate::ecs::{CharacterLeads, KingdomHold, LandHeldBy, LandName, Registry, StringId};
+use crate::ecs::{
+    BuildingIsRaised, BuildingLevy, BuildingOf, BuildingStatus, CharacterLeads, KingdomHold,
+    LandHasBuildings, LandHeldBy, LandName, Registry, StringId,
+};
+use crate::resources::buildings::BuildingDefs;
 use crate::resources::chronicle::Chronicles;
+use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
+use bevy::prelude::RelationshipTarget;
 use bevy::prelude::Resource;
 use rand::TryRng;
 
@@ -90,6 +98,8 @@ impl Default for CommandRegistry {
         let mut r = CommandRegistry { commands: Vec::new() };
         r.register(Arc::new(ConstructBuilding));
         r.register(Arc::new(DestroyBuilding));
+        r.register(Arc::new(RaiseArmy));
+        r.register(Arc::new(DismissArmy));
         r
     }
 }
@@ -171,4 +181,116 @@ pub(super) fn next_id(world: &mut World) -> String {
 /// Append `line` to the chronicle.
 pub(crate) fn note(world: &mut World, line: String) {
     world.resource_mut::<Chronicles>().0.push(line);
+}
+
+// --- building-levy helpers ---------------------------------------------------
+// The raise / dismiss pair share three operations on `BuildingLevy` and
+// `BuildingIsRaised`: sum the available pool, drain it to the army, and
+// distribute it back. Kept here so both commands reach for the same code
+// path; not in `game/yields.rs` because they're command-internal.
+
+/// Sum every ACTIVE building's `BuildingLevy` on `land_e`. Returns
+/// `(total, has_any)` — `has_any` distinguishes "no ACTIVE buildings" from
+/// "ACTIVE buildings exist but their pools are all drained". The raise
+/// gate is `has_any && total > 0`; the second is implied by the first
+/// (`has_any` requires at least one contributing building), but kept
+/// explicit so a future `BuildingLevy` default of `0` doesn't slip past
+/// the check.
+pub(super) fn available_levy(world: &World, land_e: Entity) -> (u64, bool) {
+    let Some(land_has_buildings) = world.get::<LandHasBuildings>(land_e) else {
+        return (0, false);
+    };
+    let mut total: u64 = 0;
+    let mut any = false;
+    for b_e in land_has_buildings.iter() {
+        if !is_active_building(world, b_e) {
+            continue;
+        }
+        if let Some(building_levy) = world.get::<BuildingLevy>(b_e) {
+            total += building_levy.0 as u64;
+            any = true;
+        }
+    }
+    (total, any)
+}
+
+/// Drain every ACTIVE building's `BuildingLevy` on `land_e` to `0` and flag
+/// it as raised. Called by `RaiseArmy` after the army bundle is spawned;
+/// `BuildingLevy == 0` plus `BuildingIsRaised == true` is the "this
+/// building's levy is currently in an army" state.
+pub(super) fn drain_buildings(world: &mut World, land_e: Entity) {
+    // Snapshot entities, drop the borrow before any `get_mut` — see
+    // `distribute_levy_back` for the rationale.
+    let entities: Vec<Entity> = match world.get::<LandHasBuildings>(land_e) {
+        Some(land_has_buildings) => land_has_buildings.iter().collect(),
+        None => return,
+    };
+    for b_e in entities {
+        if !is_active_building(world, b_e) {
+            continue;
+        }
+        if let Some(mut building_levy) = world.get_mut::<BuildingLevy>(b_e) {
+            building_levy.0 = 0;
+        }
+        if let Some(mut building_is_raised) = world.get_mut::<BuildingIsRaised>(b_e) {
+            building_is_raised.0 = true;
+        }
+    }
+}
+
+/// Distribute `army_levy` back into each ACTIVE building's `BuildingLevy`
+/// on `land_e`, capped at the def's `levy`. Sets `BuildingIsRaised` back
+/// to `false` for every ACTIVE building on the land (a no-op for ones that
+/// weren't raised — defensive against torn edge cases). Levy that won't fit
+/// in any building (rare — only if the army outgrew the buildings' caps) is
+/// dropped, since there's no "overflow" building to pour into.
+pub(super) fn distribute_levy_back(world: &mut World, land_e: Entity, army_levy: u64) {
+    // Snapshot entities, then drop the borrow before any `get_mut` —
+    // holding `&LandHasBuildings` across the mutation loop would conflict.
+    let entities: Vec<Entity> = match world.get::<LandHasBuildings>(land_e) {
+        Some(land_has_buildings) => land_has_buildings.iter().collect(),
+        None => return,
+    };
+    let mut remaining = army_levy;
+    for b_e in entities {
+        if !is_active_building(world, b_e) {
+            continue;
+        }
+        // Cap lookup in its own scope so `defs` drops before the `get_mut`
+        // below — otherwise the immutable `defs` borrow collides with the
+        // mutable `get_mut` borrow of `world`.
+        let cap = {
+            let defs = world.resource::<BuildingDefs>();
+            world
+                .get::<BuildingOf>(b_e)
+                .and_then(|bo| defs.get(&bo.0).map(|d| d.levy))
+                .unwrap_or(0)
+        };
+        if remaining > 0
+            && cap > 0
+            && let Some(mut building_levy) = world.get_mut::<BuildingLevy>(b_e)
+        {
+            // Pour up to `cap` (or the rest of the army's levy, whichever is
+            // smaller) into this building's pool. Order of iteration isn't
+            // weighted — archetype order is deterministic, so the "first
+            // building" always wins any overflow race. A future
+            // weighted/proportional fill is the obvious upgrade.
+            let space = cap.saturating_sub(building_levy.0);
+            let add = space.min(remaining as u32);
+            building_levy.0 += add;
+            remaining = remaining.saturating_sub(add as u64);
+        }
+        if let Some(mut building_is_raised) = world.get_mut::<BuildingIsRaised>(b_e) {
+            building_is_raised.0 = false;
+        }
+    }
+}
+
+/// True if `b_e` is a building entity with status `Active`. Used by the
+/// levy helpers so they only touch the buildings that count toward raising.
+fn is_active_building(world: &World, b_e: Entity) -> bool {
+    world
+        .get::<BuildingStatus>(b_e)
+        .map(|status| *status == BuildingStatus::Active)
+        .unwrap_or(false)
 }

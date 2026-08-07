@@ -5,24 +5,34 @@
 // `construction_price` is the one-off gold cost to build one of these. Balanced
 // as a rough rule of thumb: civil = gold_profit × 10, military = levy + gold_upkeep × 5
 // — stronger buildings cost more, weak ones are cheap.
+//
+// `levy_rate` is the per-month replenishment a building contributes to armies
+// raised on its land (military only; civil stays 0). Not consumed yet — this
+// commit just declares the field.
+//
+// Rule of thumb for the catalogue: `levy_rate = max(1, round(levy * 0.025))`.
+// At the base game's levy magnitudes (10–50) the formula floors at 1 for
+// every military kind, so all five start at `1`. A mod can override the
+// value per kind if it wants different replenishment (a special drill ground
+// at `levy_rate: 5`, for example).
 (
     buildings: [
         // military — quarters and drills the levy, earns nothing
-        (id: "building-barracks",      name: "Barracks",       gold_upkeep: 2, levy: 50, construction_price:  75, construction_time: 300),
-        (id: "building-stables",       name: "Stables",        gold_upkeep: 1, levy: 40, construction_price:  60, construction_time: 240),
-        (id: "building-training-yard", name: "Training Yard",   gold_upkeep: 1, levy: 30, construction_price:  45, construction_time: 220),
-        (id: "building-archery-range", name: "Archery Range",   gold_upkeep: 1, levy: 20, construction_price:  30, construction_time: 200),
-        (id: "building-watchtower",    name: "Watchtower",      gold_upkeep: 1, levy: 10, construction_price:  15, construction_time: 180),
+        (id: "building-barracks",      name: "Barracks",       gold_upkeep: 2, levy: 50, levy_rate:  1, construction_price:  75, construction_time: 300),
+        (id: "building-stables",       name: "Stables",        gold_upkeep: 1, levy: 40, levy_rate:  1, construction_price:  60, construction_time: 240),
+        (id: "building-training-yard", name: "Training Yard",   gold_upkeep: 1, levy: 30, levy_rate:  1, construction_price:  45, construction_time: 220),
+        (id: "building-archery-range", name: "Archery Range",   gold_upkeep: 1, levy: 20, levy_rate:  1, construction_price:  30, construction_time: 200),
+        (id: "building-watchtower",    name: "Watchtower",      gold_upkeep: 1, levy: 10, levy_rate:  1, construction_price:  15, construction_time: 180),
         // civil — no troops, but the coin that pays for them
-        (id: "building-vineyard",      name: "Vineyard",        gold_profit: 1, construction_price:  30, construction_time: 240),
-        (id: "building-wharf",         name: "Fishing Wharf",   gold_profit: 1, construction_price:  40, construction_time: 240),
-        (id: "building-tannery",       name: "Tannery",         gold_profit: 2, construction_price:  50, construction_time: 260),
-        (id: "building-mill",          name: "Grain Mill",      gold_profit: 2, construction_price:  60, construction_time: 270),
-        (id: "building-brewery",       name: "Brewery",         gold_profit: 2, construction_price:  70, construction_time: 250),
-        (id: "building-quarry",        name: "Stone Quarry",    gold_profit: 3, construction_price:  80, construction_time: 270),
-        (id: "building-smithy",        name: "Smithy",          gold_profit: 3, construction_price:  90, construction_time: 300),
-        (id: "building-market",        name: "Market Square",   gold_profit: 3, construction_price: 100, construction_time: 330),
-        (id: "building-lumber-camp",   name: "Lumber Camp",     gold_profit: 4, construction_price: 110, construction_time: 350),
-        (id: "building-guildhall",     name: "Guildhall",       gold_profit: 4, construction_price: 120, construction_time: 360),
+        (id: "building-vineyard",      name: "Vineyard",        gold_profit: 1, levy_rate: 0, construction_price:  30, construction_time: 240),
+        (id: "building-wharf",         name: "Fishing Wharf",   gold_profit: 1, levy_rate: 0, construction_price:  40, construction_time: 240),
+        (id: "building-tannery",       name: "Tannery",         gold_profit: 2, levy_rate: 0, construction_price:  50, construction_time: 260),
+        (id: "building-mill",          name: "Grain Mill",      gold_profit: 2, levy_rate: 0, construction_price:  60, construction_time: 270),
+        (id: "building-brewery",       name: "Brewery",         gold_profit: 2, levy_rate: 0, construction_price:  70, construction_time: 250),
+        (id: "building-quarry",        name: "Stone Quarry",    gold_profit: 3, levy_rate: 0, construction_price:  80, construction_time: 270),
+        (id: "building-smithy",        name: "Smithy",          gold_profit: 3, levy_rate: 0, construction_price:  90, construction_time: 300),
+        (id: "building-market",        name: "Market Square",   gold_profit: 3, levy_rate: 0, construction_price: 100, construction_time: 330),
+        (id: "building-lumber-camp",   name: "Lumber Camp",     gold_profit: 4, levy_rate: 0, construction_price: 110, construction_time: 350),
+        (id: "building-guildhall",     name: "Guildhall",       gold_profit: 4, levy_rate: 0, construction_price: 120, construction_time: 360),
     ],
 )

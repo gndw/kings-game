@@ -18,6 +18,11 @@ use serde::Deserialize;
 /// `construction_time` is how many in-game days it takes (the new building
 /// spawns as `BuildingStatus::Building` and flips to `Active` once the date
 /// advances past the start date + this value).
+///
+/// `levy_rate` is the per-month replenishment the building contributes to
+/// armies raised on its land (military only — defaults to 0 on civil kinds).
+/// Read by future replenishment code, not yet consumed: this commit just
+/// declares the field.
 #[derive(Clone, Debug, Deserialize)]
 pub struct BuildingDef {
     pub id: String,
@@ -28,6 +33,8 @@ pub struct BuildingDef {
     pub gold_upkeep: u32,
     #[serde(default)]
     pub levy: u32,
+    #[serde(default)]
+    pub levy_rate: u32,
     #[serde(default)]
     pub construction_price: u32,
     #[serde(default)]

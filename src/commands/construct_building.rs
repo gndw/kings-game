@@ -12,8 +12,8 @@
 
 use super::core::{Choice, Command, MenuItem, next_id, note, ruled_lands};
 use crate::ecs::{
-    Building, BuildingConstructionDate, BuildingOf, BuildingOnLand, BuildingStatus, CharacterGold,
-    CharacterLeads, LandHeldBy, LandName, Registry, StringId,
+    Building, BuildingConstructionDate, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand,
+    BuildingStatus, CharacterGold, CharacterLeads, LandHeldBy, LandName, Registry, StringId,
 };
 use crate::resources::buildings::BuildingDefs;
 use crate::resources::calendar::Calendar;
@@ -98,6 +98,10 @@ struct Go {
     def_name: String,
     def_id: String,
     construction_time: u32,
+    /// Def's `levy` — used at spawn time to seed `BuildingLevy` with the
+    /// full pool. Captured here so `construct` doesn't need to re-look-up
+    /// the def.
+    def_levy: u32,
     /// Land name captured during the read-only `validate` so the chronicle
     /// line can name the land rather than its bare id.
     land_name: String,
@@ -152,6 +156,7 @@ fn validate(world: &World, actor: &str, land_id: &str, def_id: &str) -> Result<G
         def_name: def.name.clone(),
         def_id: def_id.to_string(),
         construction_time: def.construction_time,
+        def_levy: def.levy,
         land_name,
     })
 }
@@ -192,6 +197,10 @@ fn construct(world: &mut World, actor: &str, land_id: &str, def_id: &str) {
             BuildingOnLand(go.land_e),
             BuildingStatus::Building,
             BuildingConstructionDate(finish_date),
+            // Spawn-time seed: full pool, not raised. `BuildingIsRaised` stays
+            // `false` until `RaiseArmy` actually drains this building.
+            BuildingLevy(go.def_levy),
+            BuildingIsRaised(false),
         ))
         .id();
     world.resource_mut::<Registry>().insert(id, eid);

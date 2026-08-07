@@ -3,7 +3,7 @@
 //! itself lives in `super::camera`; the map geometry lives in the entity
 //! world (see `crate::ecs::Land`).
 
-use super::flag;
+use super::{flag, FONT_SIZE};
 use crate::app::Game;
 use crate::ecs::{
     BuildingOf, BuildingStatus, CharacterLeads, KingdomHold, LandBorders, LandHasBuildings,
@@ -104,7 +104,7 @@ pub fn startup(
         for (dx, dy) in LABEL_BORDER_SHADOWS {
             commands.spawn((
                 Text2d::new(name.0.clone()),
-                TextFont::from_font_size(18.0).with_font_weight(FontWeight::EXTRA_BOLD),
+                TextFont::from_font_size(FONT_SIZE).with_font_weight(FontWeight::EXTRA_BOLD),
                 TextColor(Color::Srgba(css::BLACK)),
                 TextLayout::new(Justify::Center, LineBreak::WordBoundary),
                 Anchor::TOP_CENTER,
@@ -115,7 +115,7 @@ pub fn startup(
         // Main label on top of the outline.
         commands.spawn((
             Text2d::new(name.0.clone()),
-            TextFont::from_font_size(18.0).with_font_weight(FontWeight::EXTRA_BOLD),
+            TextFont::from_font_size(FONT_SIZE).with_font_weight(FontWeight::EXTRA_BOLD),
             TextColor(Color::Srgba(css::WHITE)),
             TextLayout::new(Justify::Center, LineBreak::WordBoundary),
             Anchor::TOP_CENTER,

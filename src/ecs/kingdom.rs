@@ -7,6 +7,7 @@
 //! kingdom ↔ 1 land makes the seat implicit, so there is no separate
 //! `KingdomSeat` component.
 
+use super::army::ArmyBelongsToKingdom;
 use super::character::CharacterLeads;
 use super::courtier::CourtierOfKingdom;
 use bevy::ecs::entity::Entity;
@@ -36,3 +37,11 @@ pub struct KingdomHold(pub Entity);
 #[derive(Component, Debug, Default)]
 #[relationship_target(relationship = CourtierOfKingdom)]
 pub struct KingdomHasCourtiers(Vec<Entity>);
+
+/// The armies raised under this kingdom — the auto-maintained reverse of
+/// [`ArmyBelongsToKingdom`](super::army::ArmyBelongsToKingdom). Read-only:
+/// set `ArmyBelongsToKingdom` on each army and Bevy's hook keeps this in
+/// sync.
+#[derive(Component, Debug, Default)]
+#[relationship_target(relationship = ArmyBelongsToKingdom)]
+pub struct KingdomHasArmies(Vec<Entity>);

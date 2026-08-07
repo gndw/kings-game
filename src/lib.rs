@@ -5,6 +5,7 @@ pub mod ctx;
 pub mod debug;
 pub mod resources;
 pub mod ecs;
+pub mod map;
 pub mod mods;
 pub mod rng;
 pub mod state;

@@ -201,7 +201,7 @@ pub fn update(
 /// decides its own steps/queries) and the last step calls the command's
 /// `execute`, an `&mut World` method.
 pub fn input(world: &mut World) {
-    let (toggle, up, down, enter, escape, build, destroy) = {
+    let (toggle, up, down, enter, escape, build, destroy, raise) = {
         let keys = world.resource::<ButtonInput<KeyCode>>();
         (
             keys.just_pressed(KeyCode::KeyC),
@@ -211,6 +211,7 @@ pub fn input(world: &mut World) {
             keys.just_pressed(KeyCode::Escape),
             keys.just_pressed(KeyCode::KeyB),
             keys.just_pressed(KeyCode::KeyD),
+            keys.just_pressed(KeyCode::KeyR),
         )
     };
 
@@ -221,6 +222,8 @@ pub fn input(world: &mut World) {
             open_land_action(world, true);
         } else if destroy {
             open_land_action(world, false);
+        } else if raise {
+            raise_army_direct(world);
         }
         return;
     }
@@ -429,5 +432,37 @@ fn open_land_action(world: &mut World, construct: bool) {
             label: land_id.clone(),
             value: land_id,
         }],
+    );
+}
+
+/// Direct raise-army trigger: the actions panel's **R** hotkey. Bypasses the
+/// palette — there's only one selection (the land, already determined by the
+/// selection) and no second step — and runs [`RaiseArmy::execute`] straight
+/// away. Same gate as `open_land_action`: player must rule the selected land.
+fn raise_army_direct(world: &mut World) {
+    let Some(ci) = find_command(world, "Raise Army") else {
+        return;
+    };
+    let (actor, land_id) = {
+        let game = world.resource::<Game>();
+        (
+            game.ctx.player_character_id.clone(),
+            game.ctx.selected_land_id.clone(),
+        )
+    };
+    let Some(land_id) = land_id else {
+        return;
+    };
+    if !crate::commands::rules_land(world, &actor, &land_id) {
+        return;
+    }
+    let cmd = world.resource::<CommandRegistry>().commands[ci].clone();
+    cmd.execute(
+        &[Choice {
+            label: land_id.clone(),
+            value: land_id,
+        }],
+        &actor,
+        world,
     );
 }

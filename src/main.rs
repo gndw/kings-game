@@ -9,6 +9,7 @@ use kings_game::schedules::{OnDay, OnMonth};
 use kings_game::ui;
 use kings_game::ui::command_menu::CommandMenu;
 use kings_game::game;
+use kings_game::map;
 use std::path::Path;
 
 fn main() -> Result<()> {
@@ -125,6 +126,7 @@ fn main() -> Result<()> {
                 ui::map::update_input,
                 ui::actions::update,
                 ui::courts::update,
+                ui::army::update,
                 // Ponytail: keep debug systems last so they don't displace
                 // gameplay systems in the schedule.
                 ui::resource::update,
@@ -142,6 +144,7 @@ fn main() -> Result<()> {
                 // update_draw so gizmos draw against the new view.
                 ui::camera::update_camera,
                 ui::map::update_draw,
+                map::army::update,
             ),
         )
         .add_systems(
@@ -152,7 +155,13 @@ fn main() -> Result<()> {
             game::advance_date::advance.run_if(|g: Res<Game>| g.running()),
         )
         .add_systems(OnDay, game::construction::construction)
-        .add_systems(OnMonth, game::payout::payout)
+        .add_systems(
+            OnMonth,
+            (
+                game::payout::payout,
+                game::replenish_levy::replenish,
+            ),
+        )
         .run();
     Ok(())
 }

@@ -4,6 +4,7 @@
 //! `startup`.
 
 pub mod actions;
+pub mod army;
 pub mod buildings;
 pub mod camera;
 pub mod chronicle;
@@ -17,6 +18,9 @@ pub mod startup;
 pub mod status;
 
 const FONT: f32 = 14.0;
+/// Bigger font for the on-map labels (land names, army labels) — they live in
+/// world-space and need to read at a distance.
+const FONT_SIZE: f32 = 18.0;
 
 /// Panel title colour.
 const TITLE: bevy::color::Color = bevy::color::Color::srgb(0.75, 0.7, 0.45);

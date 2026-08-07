@@ -94,7 +94,7 @@ fn player_rules(
     )
 }
 
-/// Own system: rebuild the actions list each frame. The list is ≤2 rows, so
+/// Own system: rebuild the actions list each frame. The list is ≤3 rows, so
 /// the despawn/populate cost is negligible — no cache needed.
 pub fn update(
     game: Res<Game>,
@@ -110,6 +110,7 @@ pub fn update(
         if ruled {
             action_row(p, "b", "Construct Building");
             action_row(p, "d", "Destroy Building");
+            action_row(p, "r", "Raise Army");
         } else {
             p.spawn((
                 Text::new("(none)"),

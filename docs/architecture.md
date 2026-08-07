@@ -100,9 +100,10 @@ flat. `decision.md` is the authoritative *why* for the component/relationship
 shape; this is the *what*.
 
 - **Entity kinds** are marker-tag components: `House`, `Character`, `Land`,
-  `Kingdom`. Each kind's data is **one field per component** so a system queries
+  `Kingdom`, `Army`. Each kind's data is **one field per component** so a system queries
   only what it touches (payout needs gold + yield, not the date of birth), in its own file:
-  `house.rs`, `character.rs`, `land.rs`, `kingdom.rs`.
+  `house.rs`, `character.rs`, `land.rs`, `kingdom.rs`, `army.rs` (all under
+  `ecs/`).
 
 - **`StringId`** (`ecs/ecs.rs`): every entity carries the id its RON data and
   saves address it by. The Rhai script ABI was string ids; the `Registry`
@@ -122,6 +123,12 @@ shape; this is the *what*.
   - `BuildingOnLand` (on building) ↔ `LandHasBuildings` (on land,
     `Vec<Entity>`) — a building declares its land; the land's
     `LandHasBuildings` auto-fills. Iterate via `RelationshipTarget::iter`.
+  - `ArmyOnLand` (on army) ↔ `LandHasArmies` (on land, `Vec<Entity>`) — an
+    army declares its land; the land's `LandHasArmies` auto-fills.
+  - `ArmyBelongsToKingdom` (on army) ↔ `KingdomHasArmies` (on kingdom,
+    `Vec<Entity>`) — set explicitly on raise rather than derived through the
+    land's `LandHeldBy`, so the link survives a future world where kingdoms
+    hold multiple lands.
   - `CourtierOfCharacter` (courtier→character) ↔ `CharacterHasCourtiers`, and
     `CourtierOfKingdom` (courtier→kingdom) ↔ `KingdomHasCourtiers` — each appointment
     links one character to one kingdom; `CourtierType::Courtier` is the generic role.
@@ -132,8 +139,11 @@ shape; this is the *what*.
     entities), `BuildingStatus` (`Active` / `Inactive` / `Building` — only
     `Active` counts toward yield), and on `Building` instances a
     `BuildingConstructionDate` set to start date + def's `construction_time`
-    (removed once the per-day tick flips the status). The kingdom's seat is
-    implicit: its single held land.
+    (removed once the per-day tick flips the status), `BuildingLevy`
+    (the available levy pool, `0 ≤ x ≤ def.levy` — drained by `RaiseArmy`,
+    filled back by `DismissArmy` + the monthly `replenish_levy`), and
+    `BuildingIsRaised` (`true` while this building's pool sits in an army).
+    The kingdom's seat is implicit: its single held land.
 
 - **`populate(world, content)`** (`ecs/ecs.rs`) builds the world **once** from
   merged+reconciled content, called from `main` before `App::run`. Spawn order is
@@ -265,6 +275,27 @@ the style of `ctx::step`.
   deregisters its id. Despawning auto-removes it from the land's
   `LandHasBuildings` (the relationship hook); `recompute_yields` drops its
   yield next tick.
+- **`RaiseArmy`** validates the actor rules the land, then spawns an army
+  bundle
+  (`StringId`/`Army`/`ArmyName`/`ArmyLevy`/`ArmyOnLand`/`ArmyBelongsToKingdom`)
+  and registers the runtime id. `ArmyName` defaults to `<house> Army`
+  (derived from the leader's `CharacterOfHouse → HouseName`; `"Army"` if
+  the leader has no house). `ArmyLevy` starts at the sum of every ACTIVE
+  building's *available* `BuildingLevy` on the land; the raise then
+  *drains* those pools to `0` and flags the buildings with
+  `BuildingIsRaised = true`. The second raise on the same land is rejected
+  until the pools replenish (via `game::replenish_levy`) or the army is
+  dismissed. One step (pick a ruled land). From the actions panel the
+  **R** hotkey bypasses the palette (`raise_army_direct` in
+  `ui/command_menu`) and runs `execute` straight away with the selected
+  land as the choice.
+- **`DismissArmy`** validates the army belongs to the actor's kingdom
+  (via `ArmyBelongsToKingdom`), then *distributes* the army's `ArmyLevy`
+  back into the land's buildings' `BuildingLevy` pools (capped at each
+  def's `levy`), flags every ACTIVE building on the land as
+  `BuildingIsRaised = false`, despawns + deregisters. Despawning
+  auto-pulls the army out of both `LandHasArmies` and `KingdomHasArmies`.
+  One step (pick an army under the actor's kingdom).
 - **Runtime building id** is a v4 UUID drawn from the seeded `SimRng` (not OS
   entropy), keeping the one-entropy-source invariant; format-only, no `uuid`
   crate.
@@ -368,8 +399,10 @@ asset-loaded sprites.
 - **Read order = archetype order = spawn order = content order.** Anything that
   needs stable iteration order relies on each kind being a single archetype.
 - **Relationships are hook-maintained.** Set the single-`Entity` side
-  (`KingdomLedBy`/`KingdomHold`/`BuildingOnLand`); never hand-edit the reverse
-  (`CharacterLeads`/`LandHeldBy`/`LandHasBuildings`).
+  (`KingdomLedBy`/`KingdomHold`/`BuildingOnLand`/`ArmyOnLand`/
+  `ArmyBelongsToKingdom`); never hand-edit the reverse
+  (`CharacterLeads`/`LandHeldBy`/`LandHasBuildings`/`LandHasArmies`/
+  `KingdomHasArmies`).
 - **Definition refs are fatal; state refs are repaired.** Don't move
   `validate`'s checks into `reconcile` or vice versa — they encode different
   policies (broken mod vs old save).
@@ -387,6 +420,11 @@ asset-loaded sprites.
 | `src/commands/core.rs` | the `Command` trait, `CommandRegistry`, `MenuItem`/`Choice`, shared helpers (`next_id`, `note`, `ruled_lands`) |
 | `src/commands/construct_building.rs` | the `ConstructBuilding` command (validate + spawn as BUILDING + pay) |
 | `src/commands/destroy_building.rs` | the `DestroyBuilding` command (validate + despawn + deregister) |
+| `src/commands/raise_army.rs` | the `RaiseArmy` command (validate + spawn the army bundle + drain `BuildingLevy` pools) |
+| `src/commands/dismiss_army.rs` | the `DismissArmy` command (validate + distribute `ArmyLevy` back into `BuildingLevy` + despawn + deregister) |
+| `src/game/replenish_levy.rs` | the monthly `BuildingLevy` top-up (`OnMonth` — every ACTIVE building's pool += `def.levy_rate`, capped at `def.levy`) |
+| `src/map/army.rs` | on-map army indicators (gizmo marker + `Text2d` label per army, spawned via `Local<HashMap>` and reaped via `RemovedComponents<Army>`; lives in `crate::map` because it draws directly on the world frame) |
+| `src/ui/army.rs` | the `ARMY` right-column panel (one `<ArmyName> (<levy>)` row per army under the selected land's kingdom) |
 | `src/game/construction.rs` | `tick` — flips `BUILDING` buildings to `ACTIVE` once the date passes their finish date |
 | `src/ctx.rs` | `Ctx` (session state: rng, player id, selection), `startup`, selection `step` |
 | `src/content.rs` | `Content`, per-kind structs, `parse_file`, `merge`, `validate` |
@@ -394,7 +432,7 @@ asset-loaded sprites.
 | `src/mods/mod.rs` | `load(dir)` — the two-pass orchestrator |
 | `src/resources/*` | `Border`, `Calendar`(+validate, carries `start`), `Date` (the walking clock), `BuildingDefs`/`BuildingDef` (kind roster), `Chronicles` (log) |
 | `src/ecs/ecs.rs` | `StringId`, `Registry`, `populate` |
-| `src/ecs/{house,character,land,building,kingdom,courtier}.rs` | components + relationships per kind |
+| `src/ecs/{house,character,land,building,kingdom,courtier,army}.rs` | components + relationships per kind |
 | `src/ecs.rs` | module root, re-exports, the component map |
 | `src/schedules.rs` | `OnDay` + `OnMonth` labels |
 | `src/game/advance_date.rs` | the tick (exclusive `&mut World`) |

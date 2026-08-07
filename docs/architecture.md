@@ -295,7 +295,12 @@ the style of `ctx::step`.
   def's `levy`), flags every ACTIVE building on the land as
   `BuildingIsRaised = false`, despawns + deregisters. Despawning
   auto-pulls the army out of both `LandHasArmies` and `KingdomHasArmies`.
-  One step (pick an army under the actor's kingdom).
+  One step (pick an army under the actor's kingdom). From the actions panel
+  the **M** hotkey bypasses the palette (`dismiss_army_direct` in
+  `ui/command_menu`) and runs `execute` straight away with the first army
+  on the selected land whose `ArmyBelongsToKingdom` matches the player's
+  kingdom as the choice; with multiple armies on the land, the player can
+  re-press **M** to dismiss the next one.
 - **Runtime building id** is a v4 UUID drawn from the seeded `SimRng` (not OS
   entropy), keeping the one-entropy-source invariant; format-only, no `uuid`
   crate.
@@ -369,7 +374,11 @@ asset-loaded sprites.
   - `actions` — its own panel between `buildings` and `chronicle`: a title
     (`ACTIONS`) + a `LegendActions` column listing the player's build/destroy
     hotkeys if the player rules the selected land, else a `(none)` placeholder.
-    `update` runs as its own system each frame.
+    Raise Army (**R**) is shown when the player rules the selected land;
+    Dismiss Army (**M**) is shown only when the player rules the selected
+    *and* at least one army on it belongs to the player's kingdom
+    (`player_has_army_on_selected_land` in `ui/actions.rs`). `update` runs as
+    its own system each frame.
   - `chronicle` — last 10 lines of the `Chronicles` resource.
   - `resource` — the player's name, house, gold, yield/mo, levy.
   - `status` — `[PAUSED]`/`[RUNNING]`, the `Date`, current speed, a `C commands`

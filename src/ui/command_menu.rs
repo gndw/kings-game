@@ -18,6 +18,8 @@
 use super::{FONT, TITLE};
 use crate::app::Game;
 use crate::commands::{Choice, CommandRegistry, MenuItem};
+use crate::ecs::army::ArmyBelongsToKingdom;
+use crate::ecs::{CharacterLeads, LandHasArmies, Registry, StringId};
 use bevy::input::ButtonInput;
 use bevy::input::keyboard::KeyCode;
 use bevy::prelude::*;
@@ -201,7 +203,7 @@ pub fn update(
 /// decides its own steps/queries) and the last step calls the command's
 /// `execute`, an `&mut World` method.
 pub fn input(world: &mut World) {
-    let (toggle, up, down, enter, escape, build, destroy, raise) = {
+    let (toggle, up, down, enter, escape, build, destroy, raise, dismiss) = {
         let keys = world.resource::<ButtonInput<KeyCode>>();
         (
             keys.just_pressed(KeyCode::KeyC),
@@ -212,6 +214,7 @@ pub fn input(world: &mut World) {
             keys.just_pressed(KeyCode::KeyB),
             keys.just_pressed(KeyCode::KeyD),
             keys.just_pressed(KeyCode::KeyR),
+            keys.just_pressed(KeyCode::KeyM),
         )
     };
 
@@ -224,6 +227,8 @@ pub fn input(world: &mut World) {
             open_land_action(world, false);
         } else if raise {
             raise_army_direct(world);
+        } else if dismiss {
+            dismiss_army_direct(world);
         }
         return;
     }
@@ -465,4 +470,62 @@ fn raise_army_direct(world: &mut World) {
         &actor,
         world,
     );
+}
+
+/// Direct dismiss-army trigger: the actions panel's **M** hotkey. Mirrors
+/// `raise_army_direct` — the selection (the land) is already known, so the
+/// palette is bypassed. The choice the command needs is the *army* id though,
+/// not the land id, so we resolve the first army on the selected land whose
+/// `ArmyBelongsToKingdom` matches the player's kingdom and hand that to
+/// [`DismissArmy::execute`]. Same gate as `raise_army_direct`: player must
+/// rule the selected land; the row only shows when at least one player's
+/// army sits on it, but we re-check here defensively.
+fn dismiss_army_direct(world: &mut World) {
+    let Some(ci) = find_command(world, "Dismiss Army") else {
+        return;
+    };
+    let (actor, land_id) = {
+        let game = world.resource::<Game>();
+        (
+            game.ctx.player_character_id.clone(),
+            game.ctx.selected_land_id.clone(),
+        )
+    };
+    let Some(land_id) = land_id else {
+        return;
+    };
+    if !crate::commands::rules_land(world, &actor, &land_id) {
+        return;
+    }
+    let Some(army_id) = find_army_on_land_for_player(world, &actor, &land_id) else {
+        return;
+    };
+    let cmd = world.resource::<CommandRegistry>().commands[ci].clone();
+    cmd.execute(
+        &[Choice {
+            label: army_id.clone(),
+            value: army_id,
+        }],
+        &actor,
+        world,
+    );
+}
+
+/// The first army on `land_id` whose `ArmyBelongsToKingdom` matches
+/// `actor`'s kingdom, returned as its runtime id. `None` when the player
+/// doesn't rule the land (already gated by the caller) or no player's army
+/// sits on it. Reads via `world::get` so it stays `&World`-safe.
+fn find_army_on_land_for_player(world: &World, actor: &str, land_id: &str) -> Option<String> {
+    let land_e = world.resource::<Registry>().get(land_id)?;
+    let actor_e = world.resource::<Registry>().get(actor)?;
+    let player_k = world.get::<CharacterLeads>(actor_e)?.kingdom();
+    let land_has_armies = world.get::<LandHasArmies>(land_e)?;
+    land_has_armies.iter().find_map(|army_e| {
+        let belongs = world.get::<ArmyBelongsToKingdom>(army_e)?;
+        if belongs.0 != player_k {
+            return None;
+        }
+        let sid = world.get::<StringId>(army_e)?;
+        Some(sid.0.clone())
+    })
 }

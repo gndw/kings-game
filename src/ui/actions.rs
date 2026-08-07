@@ -4,7 +4,8 @@
 
 use super::{FONT, TITLE};
 use crate::app::Game;
-use crate::ecs::{CharacterLeads, LandHeldBy, Registry};
+use crate::ecs::army::ArmyBelongsToKingdom;
+use crate::ecs::{CharacterLeads, LandHasArmies, LandHeldBy, Registry};
 use bevy::prelude::*;
 
 /// Column container for the actions list. Rebuilt by [`update`] every frame.
@@ -94,23 +95,83 @@ fn player_rules(
     )
 }
 
-/// Own system: rebuild the actions list each frame. The list is ≤3 rows, so
+/// Resolve whether at least one army on the currently selected land belongs
+/// to the player's kingdom (via `ArmyBelongsToKingdom`). Gates the **M
+/// Dismiss Army** row — the M hotkey dismisses the first such army. Empty
+/// selection or "player doesn't rule the land" returns `false`.
+fn player_has_army_on_selected_land(
+    game: &Game,
+    registry: &Registry,
+    character_leads: &Query<&CharacterLeads>,
+    land_held_by: &Query<&LandHeldBy>,
+    land_has_armies: &Query<&LandHasArmies>,
+    army_belongs: &Query<&ArmyBelongsToKingdom>,
+) -> bool {
+    let Some(land_e) = game
+        .ctx
+        .selected_land_id
+        .as_ref()
+        .and_then(|id| registry.get(id))
+    else {
+        return false;
+    };
+    let Some(player_kingdom) = registry
+        .get(&game.ctx.player_character_id)
+        .and_then(|pe| character_leads.get(pe).ok())
+        .map(|character_leads| character_leads.kingdom())
+    else {
+        return false;
+    };
+    if land_held_by
+        .get(land_e)
+        .ok()
+        .map(|land_held_by| land_held_by.kingdom())
+        != Some(player_kingdom)
+    {
+        return false;
+    }
+    let Ok(land_has_armies) = land_has_armies.get(land_e) else {
+        return false;
+    };
+    land_has_armies.iter().any(|army_e| {
+        army_belongs
+            .get(army_e)
+            .map(|army_belongs| army_belongs.0 == player_kingdom)
+            .unwrap_or(false)
+    })
+}
+
+/// Own system: rebuild the actions list each frame. The list is ≤4 rows, so
 /// the despawn/populate cost is negligible — no cache needed.
 pub fn update(
     game: Res<Game>,
     registry: Res<Registry>,
     character_leads: Query<&CharacterLeads>,
     land_held_by: Query<&LandHeldBy>,
+    land_has_armies: Query<&LandHasArmies>,
+    army_belongs: Query<&ArmyBelongsToKingdom>,
     container: Single<Entity, With<LegendActions>>,
     mut commands: Commands,
 ) {
     let ruled = player_rules(&game, &registry, &character_leads, &land_held_by);
+    let has_army = ruled
+        && player_has_army_on_selected_land(
+            &game,
+            &registry,
+            &character_leads,
+            &land_held_by,
+            &land_has_armies,
+            &army_belongs,
+        );
     commands.entity(*container).despawn_children();
     commands.entity(*container).with_children(|p| {
         if ruled {
             action_row(p, "b", "Construct Building");
             action_row(p, "d", "Destroy Building");
             action_row(p, "r", "Raise Army");
+            if has_army {
+                action_row(p, "m", "Dismiss Army");
+            }
         } else {
             p.spawn((
                 Text::new("(none)"),

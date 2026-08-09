@@ -370,16 +370,20 @@ asset-loaded sprites.
   the bottom. `RIGHT_BAR = 0.3` is shared with the camera so the map lands beside
   the column, not under it.
 - **Map** (`ui/map.rs`) and **Camera** (`ui/camera.rs`): the map module owns
-  the gizmo drawing (world border, land outlines + fills, holdings, the
-  selected land's flag, and the per-land yield labels); `startup` there
-  spawns one `Text2d` label per land just below the holding circle. The
-  camera module owns the `Camera2d` entity and its `update_camera` system:
-  `startup` spawns the camera framed on the whole `Border` with an `AutoMin`
-  projection so the island never distorts and never pans, attaching
-  `CameraView` (current rendered view) + `CameraTween` (in-flight
-  `from`/`to`/`t`). `update_draw` draws the world border, each land's outline
-  (gizmos draw lines only, so the fill is a **scanline** routine handling
-  the map's concave shapes), the per-kingdom holding castle via
+  only the arrow-key selection step; the world-border rectangle + sea
+  wash lives in [`border_graphic`](crate::map::components::border_graphic);
+  the per-land polygon outline, scanline fill, and yield label live in
+  [`land_graphic`](crate::map::components::land_graphic); the per-kingdom
+  castle lives in
+  [`holding_icon`](crate::map::components::holding_icon). The camera
+  module owns the `Camera2d` entity and its `update_camera` system:
+  `startup` spawns the camera framed on the whole `Border` with an
+  `AutoMin` projection so the island never distorts and never pans,
+  attaching `CameraView` (current rendered view) + `CameraTween`
+  (in-flight `from`/`to`/`t`). `border_graphic::update` draws the world
+  border; `land_graphic::update` draws each land's outline (gizmos draw
+  lines only, so the fill is a **scanline** routine handling the map's
+  concave shapes), the per-kingdom holding castle via
   [`crate::map::components::holding_icon`] (yellow when selected, brown
   otherwise — the colour flip replaces the old flag-on-selected cue), and
   the player's own holdings tinted green. The waving pennant on the
@@ -481,7 +485,9 @@ asset-loaded sprites.
 | `src/game/marching.rs` | the per-day marching tick (`OnDay` — activate scheduled marchings on the matching source land, move arrived armies, chain into the next marching or return to Idle) |
 | `src/game/replenish_levy.rs` | the monthly `BuildingLevy` top-up (`OnMonth` — every ACTIVE building's pool += `def.levy_rate`, capped at `def.levy`) |
 | `src/map/components/holding_icon.rs` | the castle-icon visual (three crenellated white-line towers with a centre keep, side walls, and a central gate) — reusable gizmo primitive in `pub fn draw(gizmos, at, color)`. `startup` (Startup) spawns one `HoldingIcon` per `Kingdom` with a `UIWithKingdom` back-ref; `update` (PostUpdate) reads `KingdomHold` → `LandHolding` to position each icon at the kingdom's home land and draws the gizmo (yellow when that land is selected, brown otherwise) |
-| `src/map/components/common.rs` | shared back-ref components for icons that follow an entity: `UIWithArmy(Entity)`, `UIWithKingdom(Entity)` |
+| `src/map/components/land_graphic.rs` | per-land polygon outline + scanline fill + name/yield label. `startup` (Startup) spawns one `LandGraphic` per `Land` with a `UIWithLand` back-ref plus five `LandLabel` `Text2d` entities (main label + four shadow siblings forming a 1px black outline) per land. `update` (PostUpdate) reads `LandBorders` + `StringId` to draw the outline (yellow when selected, brown otherwise) + scanline fill (green-tinted when player-owned), and refreshes each label's `Text2d` with the current yield line |
+| `src/map/components/border_graphic.rs` | world-border rectangle + sea wash. `startup` (Startup) spawns the single `BorderGraphic` entity; `update` (PostUpdate) reads `Border` and draws the rect + the scanline fill inside it |
+| `src/map/components/common.rs` | shared back-ref components for icons that follow an entity (`UIWithArmy`, `UIWithKingdom`, `UIWithLand`) + the shared `pub(crate) fn fill` scanline helper reused by `land_graphic` and `border_graphic` |
 | `src/ui/army.rs` | the `ARMY` right-column panel (one `<ArmyName> (<levy>)` row per army under the selected land's kingdom) |
 | `src/game/construction.rs` | `tick` — flips `BUILDING` buildings to `ACTIVE` once the date passes their finish date |
 | `src/ctx.rs` | `Ctx` (session state: rng, player id, selection), `startup`, selection `step` |

@@ -10,7 +10,9 @@ use kings_game::ui;
 use kings_game::ui::command_menu::CommandMenu;
 use kings_game::game;
 use kings_game::map::components::army_icon;
+use kings_game::map::components::border_graphic;
 use kings_game::map::components::holding_icon;
+use kings_game::map::components::land_graphic;
 use std::path::Path;
 
 fn main() -> Result<()> {
@@ -71,10 +73,10 @@ fn main() -> Result<()> {
             }),
     );
     // Register the per-land-border gizmo group with a thinner 1.0px stroke;
-    // `update_draw` draws the polygon outline through `Gizmos<LandBorder...>`
-    // because `linestrip_2d` has no per-call width.
+    // `land_graphic::update` draws the polygon outline through
+    // `Gizmos<LandBorder...>` because `linestrip_2d` has no per-call width.
     app.insert_gizmo_config(
-        ui::map::LandBorderGizmoConfigGroup,
+        land_graphic::LandBorderGizmoConfigGroup,
         GizmoConfig {
             line: GizmoLineConfig {
                 width: 1.0,
@@ -106,10 +108,11 @@ fn main() -> Result<()> {
                 Ctx::startup,
                 ui::startup::startup,
                 ui::camera::startup,
-                ui::map::startup,
                 ui::command_menu::startup,
                 game::yields::recompute_yields,
+                border_graphic::startup,
                 holding_icon::startup,
+                land_graphic::startup,
             ),
         )
         // The construct / destroy commands (and any future code path that
@@ -150,9 +153,10 @@ fn main() -> Result<()> {
                 // update_camera mutates Projection/Transform; must run before
                 // update_draw so gizmos draw against the new view.
                 ui::camera::update_camera,
-                ui::map::update_draw,
+                border_graphic::update,
                 army_icon::update,
                 holding_icon::update,
+                land_graphic::update,
             ),
         )
         .add_systems(

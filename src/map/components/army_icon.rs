@@ -17,7 +17,7 @@
 //! [`holding_icon`](super::holding_icon).
 
 use super::super::FONT_SIZE;
-use crate::ecs::army::{ArmyName, ArmyOnLand};
+use crate::ecs::army::{ArmyLevy, ArmyName, ArmyOnLand};
 use crate::ecs::land::LandHolding;
 use crate::events::{OnArmyDismiss, OnArmyRaised};
 use bevy::color::Srgba;
@@ -153,17 +153,30 @@ fn spawn_label(commands: &mut Commands, text: &str, anchor: Vec2) -> (Entity, En
     (text_e, bg_e)
 }
 
+/// Format the on-map label from the army's name + current levy:
+/// `"Lannister Army (90)"`. Falls back to `"Army"` when the army has no
+/// `ArmyName` (a mod can rename later; the name is read fresh each frame
+/// from `update` so renames propagate without restarting the icon).
+fn format_label(name: Option<&ArmyName>, levy: &ArmyLevy) -> String {
+    let name = name.map(|army_name| army_name.0.as_str()).unwrap_or("Army");
+    format!("{name} ({})", levy.0)
+}
+
 /// Observer for [`OnArmyRaised`]: spawn the icon, text, and bg at the
-/// army's `ArmyOnLand` position. `update` keeps the icon's `Transform` in
-/// sync after this.
+/// army's `ArmyOnLand` position. The initial label is formatted with the
+/// current levy so the first frame already reads `"Name (N)"` — `update`
+/// then keeps it in sync as the levy changes.
 pub fn on_army_raised(
     trigger: On<OnArmyRaised>,
     mut commands: Commands,
-    armies: Query<(&ArmyOnLand, Option<&ArmyName>), With<crate::ecs::army::Army>>,
+    armies: Query<
+        (&ArmyOnLand, Option<&ArmyName>, &ArmyLevy),
+        With<crate::ecs::army::Army>,
+    >,
     lands: Query<&LandHolding>,
 ) {
     let army_e = trigger.event().army;
-    let Ok((army_on_land, army_name)) = armies.get(army_e) else {
+    let Ok((army_on_land, army_name, army_levy)) = armies.get(army_e) else {
         return;
     };
     let Ok(land_holding) = lands.get(army_on_land.0) else {
@@ -171,9 +184,7 @@ pub fn on_army_raised(
     };
 
     let pos = Vec2::new(land_holding.0.0 as f32, land_holding.0.1 as f32);
-    let label = army_name
-        .map(|army_name| army_name.0.clone())
-        .unwrap_or_else(|| "Army".to_string());
+    let label = format_label(army_name, army_levy);
 
     let text_anchor = Vec2::new(pos.x, pos.y + SWORD_H + LABEL_GAP);
     let (text_e, bg_e) = spawn_label(&mut commands, &label, text_anchor);
@@ -210,66 +221,59 @@ pub fn on_army_dismiss(
     }
 }
 
-/// Per-frame icon-position tracking: read the army's current `ArmyOnLand`
-/// and copy its land position into the icon's `Transform`. Per the
-/// directive, this system does ONLY position — the gizmo draw lives in
-/// [`draw_icons`] and the label fitting lives in [`size_labels`].
-pub fn update(
-    mut icons: Query<(&UIWithArmy, &mut Transform), With<ArmyIcon>>,
-    armies: Query<&ArmyOnLand>,
-    lands: Query<&LandHolding>,
-) {
-    for (ui_with_army, mut transform) in &mut icons {
-        let Ok(army_on_land) = armies.get(ui_with_army.0) else {
-            continue;
-        };
-        let Ok(land_holding) = lands.get(army_on_land.0) else {
-            continue;
-        };
-        let pos = Vec2::new(land_holding.0.0 as f32, land_holding.0.1 as f32);
-        transform.translation = pos.extend(transform.translation.z);
-    }
-}
-
-/// Per-frame gizmo draw for every [`ArmyIcon`], at the position
-/// [`update`] wrote into the icon's `Transform`.
-pub fn draw_icons(icons: Query<&Transform, With<ArmyIcon>>, mut gizmos: Gizmos) {
-    for t in &icons {
-        draw(&mut gizmos, t.translation.truncate(), css::WHITE);
-    }
-}
-
-/// Per-frame label fitting: position the text above the icon's sword tip
-/// and size the bg sprite to the text's measured `TextLayoutInfo`.
+/// Per-frame icon update: positions the icon at the army's current land,
+/// draws the sword gizmo, refreshes the text label with the current levy,
+/// and fits the bg sprite to the text. One pass per icon.
 ///
 /// The three queries all touch `Transform`; each one carries `Without<...>`
 /// for the other two markers so Bevy's B0001 disjointness check can see
 /// they're querying three separate entity sets (icon, text, bg).
-pub fn size_labels(
-    icons: Query<
-        (&Transform, &ArmyIconLabelEntities),
-        (With<ArmyIcon>, Without<ArmyIconText>, Without<ArmyIconLabelBg>),
+pub fn update(
+    mut icons: Query<
+        (&UIWithArmy, &mut Transform, &ArmyIconLabelEntities),
+        With<ArmyIcon>,
     >,
     mut text_q: Query<
-        (&mut Transform, &TextLayoutInfo),
-        (With<ArmyIconText>, Without<ArmyIcon>, Without<ArmyIconLabelBg>),
+        (&mut Transform, &mut Text2d, &TextLayoutInfo),
+        (
+            With<ArmyIconText>,
+            Without<ArmyIcon>,
+            Without<ArmyIconLabelBg>,
+        ),
     >,
     mut bg_q: Query<
         (&mut Sprite, &mut Transform),
         (With<ArmyIconLabelBg>, Without<ArmyIcon>, Without<ArmyIconText>),
     >,
+    armies: Query<
+        (&ArmyOnLand, Option<&ArmyName>, &ArmyLevy),
+        With<crate::ecs::army::Army>,
+    >,
+    lands: Query<&LandHolding>,
+    mut gizmos: Gizmos,
 ) {
-    for (icon_t, label_ents) in &icons {
-        let Ok((mut text_t, layout)) = text_q.get_mut(label_ents.text) else {
+    for (ui_with_army, mut icon_t, label_ents) in &mut icons {
+        let Ok((army_on_land, army_name, army_levy)) = armies.get(ui_with_army.0) else {
             continue;
         };
-        let Ok((mut sprite, mut bg_t)) = bg_q.get_mut(label_ents.bg) else {
+        let Ok(land_holding) = lands.get(army_on_land.0) else {
             continue;
         };
 
-        // Position the text anchor just above the sword tip.
+        let pos = Vec2::new(land_holding.0.0 as f32, land_holding.0.1 as f32);
+
+        // Position the icon at the army's current land, then draw the
+        // sword gizmo at that point.
+        icon_t.translation = pos.extend(icon_t.translation.z);
+        draw(&mut gizmos, pos, css::WHITE);
+
+        // Refresh the text content + position it just above the sword tip.
+        let Ok((mut text_t, mut text, layout)) = text_q.get_mut(label_ents.text) else {
+            continue;
+        };
+        text.0 = format_label(army_name, army_levy);
         let text_anchor =
-            Vec2::new(icon_t.translation.x, icon_t.translation.y + SWORD_H + LABEL_GAP);
+            Vec2::new(pos.x, pos.y + SWORD_H + LABEL_GAP);
         text_t.translation = text_anchor.extend(text_t.translation.z);
 
         // Layout info is populated by Bevy after the first frame the text
@@ -282,6 +286,9 @@ pub fn size_labels(
         // Text is `BOTTOM_CENTER`-anchored: bbox runs from `anchor`
         // (bottom) to `anchor + (0, size.y)` (top). Centre the bg sprite
         // on the bbox so it extends symmetrically around the text.
+        let Ok((mut sprite, mut bg_t)) = bg_q.get_mut(label_ents.bg) else {
+            continue;
+        };
         sprite.custom_size = Some(layout.size);
         bg_t.translation =
             Vec3::new(text_anchor.x, text_anchor.y + layout.size.y / 2.0, LABEL_BG_Z);

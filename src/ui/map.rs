@@ -9,7 +9,6 @@ use crate::ecs::{
     BuildingOf, BuildingStatus, CharacterLeads, KingdomHold, LandBorders, LandHasBuildings,
     LandHolding, LandName, Registry, StringId,
 };
-use crate::map::components::holding_icon;
 use crate::resources::border::Border;
 use crate::resources::buildings::BuildingDefs;
 use bevy::color::palettes::css;
@@ -175,7 +174,7 @@ pub fn update_draw(
     defs: Res<BuildingDefs>,
     character_leads: Query<&CharacterLeads>,
     kingdom_holds: Query<&KingdomHold>,
-    lands: Query<(&StringId, &LandBorders, &LandHolding)>,
+    lands: Query<(&StringId, &LandBorders)>,
     string_ids: Query<&StringId>,
     land_has_buildings: Query<&LandHasBuildings>,
     building_of: Query<&BuildingOf>,
@@ -207,11 +206,9 @@ pub fn update_draw(
         .unwrap_or_default();
 
     // Lands in spawn order: one archetype, so `Query` yields content order.
-    let lands_vec: Vec<(String, Vec<(f64, f64)>, (f64, f64))> = lands
+    let lands_vec: Vec<(String, Vec<(f64, f64)>)> = lands
         .iter()
-        .map(|(string_id, land_borders, land_holding)| {
-            (string_id.0.clone(), land_borders.0.clone(), land_holding.0)
-        })
+        .map(|(string_id, land_borders)| (string_id.0.clone(), land_borders.0.clone()))
         .collect();
     // Selected land last, so it draws over its neighbours.
     let order = lands_vec
@@ -220,14 +217,14 @@ pub fn update_draw(
         .chain(lands_vec.iter().filter(|l| Some(l.0.as_str()) == sel));
     for land in order {
         let is_sel = Some(land.0.as_str()) == sel;
-        // Unselected lands: dark brown outline + brown castle. Selected
-        // lands: yellow outline + yellow castle (the colour flip on the
-        // castle is the selection cue; the previous flag-on-selected is
-        // gone, replaced by the castle itself turning yellow).
-        let (outline, castle) = if is_sel {
-            (css::YELLOW, css::YELLOW)
+        // Land polygon outline: brown normally, yellow when selected. The
+        // castle itself is now drawn per-kingdom by `holding_icon::update`
+        // (the new home for the castle gizmo + its selection-driven yellow
+        // flip), so this function only owns the polygon outline + fill.
+        let outline = if is_sel {
+            css::YELLOW
         } else {
-            (Srgba::rgb(0.36, 0.22, 0.12), Srgba::rgb(0.59, 0.29, 0.0))
+            Srgba::rgb(0.36, 0.22, 0.12)
         };
         let land_color = if own.contains(&land.0) {
             Srgba::rgb(0.012, 0.435, 0.165).with_alpha(0.1).into()
@@ -239,8 +236,6 @@ pub fn update_draw(
             land.1.iter().map(|&(x, y)| Vec2::new(x as f32, y as f32)),
             outline,
         );
-        let holding = Vec2::new(land.2.0 as f32, land.2.1 as f32);
-        holding_icon::draw(&mut gizmos, holding, castle);
     }
 
     // Refresh each land label's second line (per-land total yield). The name

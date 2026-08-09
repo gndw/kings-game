@@ -10,6 +10,7 @@ use kings_game::ui;
 use kings_game::ui::command_menu::CommandMenu;
 use kings_game::game;
 use kings_game::map::components::army_icon;
+use kings_game::map::components::holding_icon;
 use std::path::Path;
 
 fn main() -> Result<()> {
@@ -108,6 +109,7 @@ fn main() -> Result<()> {
                 ui::map::startup,
                 ui::command_menu::startup,
                 game::yields::recompute_yields,
+                holding_icon::startup,
             ),
         )
         // The construct / destroy commands (and any future code path that
@@ -150,6 +152,7 @@ fn main() -> Result<()> {
                 ui::camera::update_camera,
                 ui::map::update_draw,
                 army_icon::update,
+                holding_icon::update,
             ),
         )
         .add_systems(

@@ -379,7 +379,7 @@ asset-loaded sprites.
   `CameraView` (current rendered view) + `CameraTween` (in-flight
   `from`/`to`/`t`). `update_draw` draws the world border, each land's outline
   (gizmos draw lines only, so the fill is a **scanline** routine handling
-  the map's concave shapes), the per-land holding castle via
+  the map's concave shapes), the per-kingdom holding castle via
   [`crate::map::components::holding_icon`] (yellow when selected, brown
   otherwise — the colour flip replaces the old flag-on-selected cue), and
   the player's own holdings tinted green. The waving pennant on the
@@ -480,7 +480,8 @@ asset-loaded sprites.
 | `src/ecs/marching.rs` | the `Marching` entity kind — `Marching` marker + `MarchingArmy`/`MarchingFromLand`/`MarchingToLand` relationships + `MarchingBeginDate`/`MarchingArrivedDate` + `MarchingStatus` enum |
 | `src/game/marching.rs` | the per-day marching tick (`OnDay` — activate scheduled marchings on the matching source land, move arrived armies, chain into the next marching or return to Idle) |
 | `src/game/replenish_levy.rs` | the monthly `BuildingLevy` top-up (`OnMonth` — every ACTIVE building's pool += `def.levy_rate`, capped at `def.levy`) |
-| `src/map/components/holding_icon.rs` | the castle-icon visual (three crenellated white-line towers with a centre keep, side walls, and a central gate; optional centred bold-white name label below the gate on a black `Sprite` background that sizes itself to the rendered text via `TextLayoutInfo`) — reusable gizmo primitive in `pub fn draw(gizmos, at)`, plus `HoldingIcon` (marker), `HoldingIconLabel(String)` (label data), `HoldingIconText` (marker on the spawned text entity), `HoldingIconLabelBg(Entity)` (back-ref from bg sprite to its text), and a `PostUpdate` `update` system that draws every entity carrying the marker and lazily spawns / refreshes / reaps the label and its background |
+| `src/map/components/holding_icon.rs` | the castle-icon visual (three crenellated white-line towers with a centre keep, side walls, and a central gate) — reusable gizmo primitive in `pub fn draw(gizmos, at, color)`. `startup` (Startup) spawns one `HoldingIcon` per `Kingdom` with a `UIWithKingdom` back-ref; `update` (PostUpdate) reads `KingdomHold` → `LandHolding` to position each icon at the kingdom's home land and draws the gizmo (yellow when that land is selected, brown otherwise) |
+| `src/map/components/common.rs` | shared back-ref components for icons that follow an entity: `UIWithArmy(Entity)`, `UIWithKingdom(Entity)` |
 | `src/ui/army.rs` | the `ARMY` right-column panel (one `<ArmyName> (<levy>)` row per army under the selected land's kingdom) |
 | `src/game/construction.rs` | `tick` — flips `BUILDING` buildings to `ACTIVE` once the date passes their finish date |
 | `src/ctx.rs` | `Ctx` (session state: rng, player id, selection), `startup`, selection `step` |

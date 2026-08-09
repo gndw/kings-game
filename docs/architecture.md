@@ -218,8 +218,10 @@ Lives in `game/` and `schedules.rs`.
     opening screen shows what a realm renders). After that the construct
     and destroy commands trigger a custom [`OnBuildingUpdated`]
     (`src/events.rs`) event (`kind: BuildingUpdateKind::{Constructed,
-    Updated, Destroyed}`) straight after their structural change; its
-    `On<OnBuildingUpdated>` observer walks
+    Destroyed, Raised, Dismissed}` — lifecycle variants from
+    construct/destroy, state variants from the raise / dismiss army
+    commands, one event per affected ACTIVE building) straight after their
+    structural change; its `On<OnBuildingUpdated>` observer walks
     `land → LandHeldBy → kingdom → KingdomLedBy → leader`, runs the shared
     [`sum_land_yield`] helper over
     `kingdom → KingdomHold → land → LandHasBuildings → BuildingOf →

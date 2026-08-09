@@ -15,6 +15,7 @@ use super::core::{distribute_levy_back, Choice, Command, MenuItem, note};
 use crate::ecs::army::{ArmyBelongsToKingdom, ArmyHasMarching, ArmyLevy, ArmyName};
 use crate::ecs::kingdom::KingdomHold;
 use crate::ecs::{CharacterLeads, KingdomHasArmies, Registry, StringId};
+use crate::events::{BuildingUpdateKind, OnArmyDismiss, OnBuildingUpdated};
 use bevy::ecs::world::World;
 use bevy::prelude::RelationshipTarget;
 
@@ -161,8 +162,11 @@ fn dismiss(world: &mut World, actor: &str, army_id: &str) {
     // Distribute the army's levy back into the kingdom's-land buildings
     // BEFORE the despawn — `distribute_levy_back` walks `LandHasBuildings`
     // on the kingdom's home land. The levy was raised from those pools,
-    // so it returns there regardless of where the army ended up.
-    distribute_levy_back(world, kingdom_land_e, army_levy);
+    // so it returns there regardless of where the army ended up. The
+    // returned list is the buildings that were actually raised before
+    // (so the per-building `OnBuildingUpdated` only fires for real state
+    // transitions, not the defensive flag flips for never-raised buildings).
+    let dismissed = distribute_levy_back(world, kingdom_land_e, army_levy);
 
     // Despawn any queued marchings BEFORE the army goes — otherwise the
     // marchings would be left holding a `MarchingArmy` pointing at a
@@ -191,4 +195,18 @@ fn dismiss(world: &mut World, actor: &str, army_id: &str) {
             "dismissed {army_name} on {army_land_name} ({army_levy} levy returned to {kingdom_land_name})"
         ),
     );
+
+    // Publish after despawn. Observers must not read components on
+    // `army_e` (gone), only its former relationships — most cleanup work
+    // is keyed on the entity id alone.
+    world.trigger(OnArmyDismiss { army: army_e });
+    // Per-building state event: each actually-raised building flipped its
+    // `BuildingIsRaised` flag back to false.
+    for b_e in dismissed {
+        world.trigger(OnBuildingUpdated {
+            building: b_e,
+            land: kingdom_land_e,
+            kind: BuildingUpdateKind::Dismissed,
+        });
+    }
 }

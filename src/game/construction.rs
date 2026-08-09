@@ -1,6 +1,5 @@
 //! Per-day construction completion: any building whose status is `BUILDING`
-//! and whose `BuildingConstructionDate` has been reached flips to `ACTIVE`
-//! and fires `OnBuildingUpdated` so the realm's yields refresh.
+//! and whose `BuildingConstructionDate` has been reached flips to `ACTIVE`.
 //!
 //! Runs on the `OnDay` schedule from [`crate::game::advance_date::advance`],
 //! so a building placed today with `construction_time = 5` finishes at the
@@ -57,10 +56,7 @@ pub fn construction(world: &mut World) {
     }
 
     // Pass 2: mutate. Flip the status, drop the construction date, look
-    // up the def + land names, push the chronicle line, and fire
-    // `OnBuildingUpdated` so the realm's yields refresh through the same
-    // observer `ConstructBuilding` would have used if the building were
-    // already active.
+    // up the def + land names, and push the chronicle line.
     for (b_e, land_e, def_id) in ready {
         if let Some(mut status) = world.get_mut::<BuildingStatus>(b_e) {
             *status = BuildingStatus::Active;
@@ -79,7 +75,7 @@ pub fn construction(world: &mut World) {
         world.trigger(OnBuildingUpdated {
             building: b_e,
             land: land_e,
-            kind: BuildingUpdateKind::Updated,
+            kind: BuildingUpdateKind::Constructed,
         });
     }
 }

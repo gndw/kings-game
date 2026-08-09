@@ -143,14 +143,8 @@ fn destroy(world: &mut World, actor: &str, land_id: &str, building_id: &str) {
         .unwrap_or_else(|| building_id.to_string());
 
     // Despawn + deregister. `BuildingOnLand`'s hook pulls the building out of
-    // the land's `LandHasBuildings` synchronously, so the yield observer can
-    // re-sum authoritative data on the next line.
+    // the land's `LandHasBuildings` synchronously.
     world.entity_mut(b_e).despawn();
-    world.trigger(crate::events::OnBuildingUpdated {
-        building: b_e,
-        land: land_e,
-        kind: crate::events::BuildingUpdateKind::Destroyed,
-    });
     world.resource_mut::<Registry>().by_id.remove(building_id);
 
     note(world, format!("destroyed {} on {}", def_name, land_id));

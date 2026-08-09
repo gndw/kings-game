@@ -219,14 +219,16 @@ pub(super) fn available_levy(world: &World, land_e: Entity) -> (u64, bool) {
 /// Drain every ACTIVE building's `BuildingLevy` on `land_e` to `0` and flag
 /// it as raised. Called by `RaiseArmy` after the army bundle is spawned;
 /// `BuildingLevy == 0` plus `BuildingIsRaised == true` is the "this
-/// building's levy is currently in an army" state.
-pub(super) fn drain_buildings(world: &mut World, land_e: Entity) {
+/// building's levy is currently in an army" state. Returns the affected
+/// buildings so the caller can fire per-building `OnBuildingUpdated` events.
+pub(super) fn drain_buildings(world: &mut World, land_e: Entity) -> Vec<Entity> {
     // Snapshot entities, drop the borrow before any `get_mut` — see
     // `distribute_levy_back` for the rationale.
     let entities: Vec<Entity> = match world.get::<LandHasBuildings>(land_e) {
         Some(land_has_buildings) => land_has_buildings.iter().collect(),
-        None => return,
+        None => return Vec::new(),
     };
+    let mut drained = Vec::new();
     for b_e in entities {
         if !is_active_building(world, b_e) {
             continue;
@@ -237,7 +239,9 @@ pub(super) fn drain_buildings(world: &mut World, land_e: Entity) {
         if let Some(mut building_is_raised) = world.get_mut::<BuildingIsRaised>(b_e) {
             building_is_raised.0 = true;
         }
+        drained.push(b_e);
     }
+    drained
 }
 
 /// Distribute `army_levy` back into each ACTIVE building's `BuildingLevy`
@@ -245,19 +249,32 @@ pub(super) fn drain_buildings(world: &mut World, land_e: Entity) {
 /// to `false` for every ACTIVE building on the land (a no-op for ones that
 /// weren't raised — defensive against torn edge cases). Levy that won't fit
 /// in any building (rare — only if the army outgrew the buildings' caps) is
-/// dropped, since there's no "overflow" building to pour into.
-pub(super) fn distribute_levy_back(world: &mut World, land_e: Entity, army_levy: u64) {
+/// dropped, since there's no "overflow" building to pour into. Returns only
+/// the buildings that were actually raised (so callers can fire per-building
+/// `OnBuildingUpdated` for real state transitions, not the defensive flips).
+pub(super) fn distribute_levy_back(
+    world: &mut World,
+    land_e: Entity,
+    army_levy: u64,
+) -> Vec<Entity> {
     // Snapshot entities, then drop the borrow before any `get_mut` —
     // holding `&LandHasBuildings` across the mutation loop would conflict.
     let entities: Vec<Entity> = match world.get::<LandHasBuildings>(land_e) {
         Some(land_has_buildings) => land_has_buildings.iter().collect(),
-        None => return,
+        None => return Vec::new(),
     };
     let mut remaining = army_levy;
+    let mut dismissed = Vec::new();
     for b_e in entities {
         if !is_active_building(world, b_e) {
             continue;
         }
+        // Snapshot the previous raised state so we only fire events for
+        // buildings that genuinely transitioned raised → not-raised.
+        let was_raised = world
+            .get::<BuildingIsRaised>(b_e)
+            .map(|bir| bir.0)
+            .unwrap_or(false);
         // Cap lookup in its own scope so `defs` drops before the `get_mut`
         // below — otherwise the immutable `defs` borrow collides with the
         // mutable `get_mut` borrow of `world`.
@@ -285,7 +302,11 @@ pub(super) fn distribute_levy_back(world: &mut World, land_e: Entity, army_levy:
         if let Some(mut building_is_raised) = world.get_mut::<BuildingIsRaised>(b_e) {
             building_is_raised.0 = false;
         }
+        if was_raised {
+            dismissed.push(b_e);
+        }
     }
+    dismissed
 }
 
 /// True if `b_e` is a building entity with status `Active`. Used by the

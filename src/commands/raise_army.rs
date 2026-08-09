@@ -23,6 +23,7 @@ use crate::ecs::army::{Army, ArmyBelongsToKingdom, ArmyLevy, ArmyName, ArmyOnLan
 use crate::ecs::{
     CharacterLeads, CharacterOfHouse, HouseName, LandHeldBy, LandName, Registry, StringId,
 };
+use crate::events::{BuildingUpdateKind, OnArmyRaised, OnBuildingUpdated};
 use bevy::ecs::world::World;
 
 /// Raise an army on a land the actor rules.
@@ -143,11 +144,27 @@ fn raise(world: &mut World, actor: &str, land_id: &str) {
 
     // Drain every ACTIVE building's `BuildingLevy` to 0 and flag it. The
     // spawn above is the source of truth for the new `ArmyLevy`; this
-    // keeps the per-building pool in lock-step.
-    drain_buildings(world, land_e);
+    // keeps the per-building pool in lock-step. The returned list is the
+    // buildings that actually transitioned, so we can fire one
+    // `OnBuildingUpdated` per building below.
+    let drained = drain_buildings(world, land_e);
 
     note(
         world,
         format!("raised {army_name} on {land_name} ({initial_levy} levy)"),
     );
+
+    // Publish the per-army event so observers see authoritative
+    // `LandHasArmies` / `KingdomHasArmies` (the relationship hooks filled
+    // them when the bundle spawned above).
+    world.trigger(OnArmyRaised { army: eid });
+    // Per-building state event: each drained building flipped its
+    // `BuildingIsRaised` flag.
+    for b_e in drained {
+        world.trigger(OnBuildingUpdated {
+            building: b_e,
+            land: land_e,
+            kind: BuildingUpdateKind::Raised,
+        });
+    }
 }

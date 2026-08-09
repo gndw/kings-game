@@ -9,6 +9,7 @@ use kings_game::schedules::{OnDay, OnMonth};
 use kings_game::ui;
 use kings_game::ui::command_menu::CommandMenu;
 use kings_game::game;
+use kings_game::map::components::army_icon;
 use std::path::Path;
 
 fn main() -> Result<()> {
@@ -116,6 +117,11 @@ fn main() -> Result<()> {
         // new yield. `ui::resource::update` sits in `PostUpdate` so its read
         // lands on the same frame as the observer's write.
         .add_observer(game::yields::on_building_updated)
+        // `OnArmyRaised` spawns the icon + label trio at the army's
+        // `ArmyOnLand`; `OnArmyDismiss` despawns them. Both run after the
+        // structural change settles Bevy's relationship hooks.
+        .add_observer(army_icon::on_army_raised)
+        .add_observer(army_icon::on_army_dismiss)
         .add_systems(
             Update,
             (
@@ -143,6 +149,11 @@ fn main() -> Result<()> {
                 // update_draw so gizmos draw against the new view.
                 ui::camera::update_camera,
                 ui::map::update_draw,
+                // army-icon pipeline: position the icon at the army's
+                // current land, then draw the gizmo, then fit the label.
+                army_icon::update,
+                army_icon::draw_icons,
+                army_icon::size_labels,
             ),
         )
         .add_systems(

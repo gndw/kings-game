@@ -19,6 +19,7 @@ use super::courtier::{Courtier, CourtierOfCharacter, CourtierOfKingdom};
 use super::house::{House, HouseName};
 use super::kingdom::{Kingdom, KingdomHold, KingdomLedBy};
 use super::land::{Land, LandBorders, LandHolding, LandName};
+use super::road::{Road, RoadBetweenLands, RoadPoints};
 
 /// The id an entity is known by in RON data and save files. Every game entity
 /// has one; the Rhai surface (`ctx.gold("char-tywin")`, …) is built on it.
@@ -186,6 +187,31 @@ pub fn populate(world: &mut World, content: Content) {
                 c.courtier_type,
                 CourtierOfCharacter(character),
                 CourtierOfKingdom(kingdom),
+            ))
+            .id();
+        world.resource_mut::<Registry>().insert(id, eid);
+    }
+
+    // Roads: definition-only, baked once. Spawned after lands so the id→entity
+    // lookup in the registry resolves. `validate` already guarantees the two
+    // land ids exist, so this only guards against logic errors, not bad data.
+    for (id, r) in content.roads {
+        let lands: Vec<Entity> = {
+            let registry = world.resource::<Registry>();
+            r.between_land_ids
+                .iter()
+                .filter_map(|lid| registry.get(lid))
+                .collect()
+        };
+        if lands.len() != 2 {
+            continue;
+        }
+        let eid = world
+            .spawn((
+                StringId(id.clone()),
+                Road,
+                RoadPoints(r.points),
+                RoadBetweenLands(lands),
             ))
             .id();
         world.resource_mut::<Registry>().insert(id, eid);

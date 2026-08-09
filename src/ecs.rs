@@ -23,6 +23,11 @@
 //!   the land), [`BuildingStatus`] (active/inactive/building), and
 //!   optionally [`BuildingConstructionDate`] (set on `BUILDING` instances
 //!   until the date passes the def's `construction_time`).
+//! - **Road** entities: [`StringId`], [`Road`], [`RoadPoints`] (the
+//!   polyline), [`RoadBetweenLands`] (the two lands it joins — plain
+//!   `Vec<Entity>`, not a Bevy relationship, since roads are baked at
+//!   populate time and never change). Drawn as dashed lines by
+//!   [`road_graphic`](crate::map::components::road_graphic).
 //!
 //! Building *definitions* are not entities — they are a read-only roster held
 //! as the [`BuildingDefs`](crate::resources::buildings::BuildingDefs) resource;
@@ -61,6 +66,7 @@ pub mod house;
 pub mod kingdom;
 pub mod land;
 pub mod marching;
+pub mod road;
 
 pub use army::*;
 pub use building::*;
@@ -70,3 +76,4 @@ pub use ecs::*;
 pub use house::*;
 pub use kingdom::*;
 pub use land::*;
+pub use road::*;

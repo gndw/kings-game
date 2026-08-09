@@ -12,7 +12,7 @@ section stops matching the code, fix the section in the same change.
 
 A Bevy `App` runs three schedules — `Startup`, `FixedUpdate` (the tick), and
 `Update` (render + input) — plus one custom `OnMonth`. The world is Bevy ECS
-(not hecs, despite the README): every land, character, house, kingdom, courtier, building, army and marching is an
+(not hecs, despite the README): every land, character, house, kingdom, courtier, building, army, marching and road is an
 entity, and a read-only building-definition roster plus the calendar, date and map border
 and chronicle log are `Resource`s. Session state (rng, player id, map selection)
 lives in a single `Game` resource wrapping `Ctx`. All of the *what exists* comes
@@ -20,7 +20,8 @@ from mod folders of RON data, loaded in two passes — definitions merge by id,
 then state overlays the mutable fields — and is consumed once by `populate` to
 spawn entities, after which the ECS is the whole world. Marchings are run-time
 entities only (spawned by the `MarchingOrder` command, despawned by the daily
-marching tick) — they never appear in mod data.
+marching tick) — they never appear in mod data. Roads are definition-only and
+never change in play.
 
 ## Layers
 
@@ -84,7 +85,7 @@ Lives in `mods/`, `content.rs`, `state.rs`, `resources/`.
 
 - **`Content`** (`content.rs`) is the merged result: `IndexMap`s (id-keyed for
   O(1) lookup, insertion-ordered for deterministic iteration) for lands, houses,
-  characters, kingdoms, building instances; a `BuildingDefs` roster (the
+  characters, kingdoms, building instances, roads; a `BuildingDefs` roster (the
   catalogue of building kinds); a `Border`; a `Calendar`. It exists
   only between `load` and `populate`; afterwards the ECS owns everything.
 
@@ -102,16 +103,20 @@ flat. `decision.md` is the authoritative *why* for the component/relationship
 shape; this is the *what*.
 
 - **Entity kinds** are marker-tag components: `House`, `Character`, `Land`,
-  `Kingdom`, `Army`, `Marching`. Each kind's data is **one field per component** so a system queries
+  `Kingdom`, `Army`, `Marching`, `Road`. Each kind's data is **one field per component** so a system queries
   only what it touches (payout needs gold + yield, not the date of birth), in its own file:
-  `house.rs`, `character.rs`, `land.rs`, `kingdom.rs`, `army.rs`, `marching.rs`
-  (all under `ecs/`). Marching is a run-time entity only — the player spawns
+  `house.rs`, `character.rs`, `land.rs`, `kingdom.rs`, `army.rs`, `marching.rs`,
+  `road.rs` (all under `ecs/`). Marching is a run-time entity only — the player spawns
   them via the `MarchingOrder` command and the daily tick reaps them when the
   army arrives — so they don't appear in `populate` or mod data. Army carries
   `ArmyStatus` (`Idle` / `Marching`) and the active `ArmyMarching`; the
   scheduled-and-active marchings queue is the auto-maintained `ArmyHasMarching`
   `Vec<Entity>` on the army. See the `Army and Marching are separate entity
-  kinds` decision for the *why*.
+  kinds` decision for the *why*. Road is definition-only — the polyline and
+  the two lands it joins (`RoadBetweenLands`, a plain `Vec<Entity>`, not a
+  Bevy relationship since roads are baked at populate time and never change)
+  live on the road entity and are read by
+  [`road_graphic`](src/map/components/road_graphic.rs).
 
 - **`StringId`** (`ecs/ecs.rs`): every entity carries the id its RON data and
   saves address it by. The Rhai script ABI was string ids; the `Registry`
@@ -482,6 +487,8 @@ asset-loaded sprites.
 | `src/commands/dismiss_army.rs` | the `DismissArmy` command (validate + distribute `ArmyLevy` back into `BuildingLevy` + despawn + deregister + reap queued marchings) |
 | `src/commands/marching.rs` | the `MarchingOrder` command (validate + spawn a `Marching` entity with `MarchingStatus::Scheduled` and empty dates) |
 | `src/ecs/marching.rs` | the `Marching` entity kind — `Marching` marker + `MarchingArmy`/`MarchingFromLand`/`MarchingToLand` relationships + `MarchingBeginDate`/`MarchingArrivedDate` + `MarchingStatus` enum |
+| `src/ecs/road.rs` | the `Road` entity kind — `Road` marker + `RoadPoints(Vec<(f64,f64)>)` + `RoadBetweenLands(Vec<Entity>)` (definition-only; no Bevy relationship) |
+| `src/map/components/road_graphic.rs` | per-road dashed-line visual — startup spawns one `RoadGraphic` entity per road, baking the polyline into a `GizmoAsset` and attaching a persistent `Gizmo` component with `GizmoLineStyle::Dashed`; Bevy's retained-gizmo system renders it with no per-frame update |
 | `src/game/marching.rs` | the per-day marching tick (`OnDay` — activate scheduled marchings on the matching source land, move arrived armies, chain into the next marching or return to Idle) |
 | `src/game/replenish_levy.rs` | the monthly `BuildingLevy` top-up (`OnMonth` — every ACTIVE building's pool += `def.levy_rate`, capped at `def.levy`) |
 | `src/map/components/holding_icon.rs` | the castle-icon visual (three crenellated white-line towers with a centre keep, side walls, and a central gate) — reusable gizmo primitive in `pub fn draw(gizmos, at, color)`. `startup` (Startup) spawns one `HoldingIcon` per `Kingdom` with a `UIWithKingdom` back-ref; `update` (PostUpdate) reads `KingdomHold` → `LandHolding` to position each icon at the kingdom's home land and draws the gizmo (yellow when that land is selected, brown otherwise) |

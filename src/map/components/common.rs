@@ -18,6 +18,11 @@ pub struct UIWithArmy(pub Entity);
 #[derive(Component, Debug, Clone, Copy)]
 pub struct UIWithLand(pub Entity);
 
+/// Back-reference from a per-road drawing entity (see
+/// [`road_graphic`](super::road_graphic)) to the road it represents.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct UIWithRoad(pub Entity);
+
 /// Gap between the horizontal lines that stand in for a polygon fill.
 // ponytail: fixed world-space step — re-derive from the camera's current
 // visible-size ratio if zoom gets coarse enough to show gaps.

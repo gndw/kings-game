@@ -13,6 +13,7 @@ use kings_game::map::components::army_icon;
 use kings_game::map::components::border_graphic;
 use kings_game::map::components::holding_icon;
 use kings_game::map::components::land_graphic;
+use kings_game::map::components::road_graphic;
 use std::path::Path;
 
 fn main() -> Result<()> {
@@ -85,6 +86,22 @@ fn main() -> Result<()> {
             ..default()
         },
     );
+    // The road dash style is on the config — `Gizmos` has no per-call style —
+    // so all road draws share `Gizmos<RoadGizmoConfigGroup>`.
+    app.insert_gizmo_config(
+        road_graphic::RoadGizmoConfigGroup,
+        GizmoConfig {
+            line: GizmoLineConfig {
+                width: 2.0,
+                style: GizmoLineStyle::Dashed {
+                    gap_scale: road_graphic::DASH_GAP_SCALE,
+                    line_scale: road_graphic::DASH_LINE_SCALE,
+                },
+                ..default()
+            },
+            ..default()
+        },
+    );
     {
         let world = app.world_mut();
         ecs::populate(world, mods.content);
@@ -113,6 +130,7 @@ fn main() -> Result<()> {
                 border_graphic::startup,
                 holding_icon::startup,
                 land_graphic::startup,
+                road_graphic::startup,
             ),
         )
         // The construct / destroy commands (and any future code path that
@@ -151,13 +169,18 @@ fn main() -> Result<()> {
             PostUpdate,
             (
                 // update_camera mutates Projection/Transform; must run before
-                // update_draw so gizmos draw against the new view.
+                // update_draw so gizmos draw against the new view. `.chain()`
+                // pins the order explicitly: camera → border → land → road →
+                // holding → army, so the road sits over the land fill but
+                // under the castle / sword.
                 ui::camera::update_camera,
                 border_graphic::update,
-                army_icon::update,
-                holding_icon::update,
                 land_graphic::update,
-            ),
+                road_graphic::update,
+                holding_icon::update,
+                army_icon::update,
+            )
+                .chain(),
         )
         .add_systems(
             FixedUpdate,

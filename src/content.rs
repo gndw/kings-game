@@ -49,6 +49,10 @@ pub struct Content {
     /// play — so they arrive only via the state overlay.
     pub kingdoms: IndexMap<String, Kingdom>,
     pub courtiers: IndexMap<String, Courtier>,
+    /// Connections between adjacent lands. Definition-only — the polyline and
+    /// the two lands it joins don't change in play — so a road is built once
+    /// at populate time.
+    pub roads: IndexMap<String, Road>,
 }
 
 /// Hand-written rather than derived because an empty `speeds` list is not a
@@ -65,6 +69,7 @@ impl Default for Content {
             characters: IndexMap::new(),
             kingdoms: IndexMap::new(),
             courtiers: IndexMap::new(),
+            roads: IndexMap::new(),
         }
     }
 }
@@ -97,6 +102,8 @@ pub struct ContentFile {
     pub houses: Vec<House>,
     #[serde(default)]
     pub characters: Vec<Character>,
+    #[serde(default)]
+    pub roads: Vec<Road>,
 }
 
 impl Content {
@@ -122,6 +129,9 @@ impl Content {
         }
         for character in file.characters {
             self.characters.insert(character.id.clone(), character);
+        }
+        for road in file.roads {
+            self.roads.insert(road.id.clone(), road);
         }
     }
 }
@@ -227,6 +237,21 @@ pub struct Courtier {
     pub courtier_type: CourtierType,
 }
 
+/// A connection between two lands — a polyline (one point per segment) and
+/// the two land ids it joins. Definition-only: roads are baked at populate
+/// time into [`crate::ecs::road::Road`] entities and never edited.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Road {
+    pub id: String,
+    #[serde(default)]
+    pub points: Vec<(f64, f64)>,
+    /// Exactly two land ids — the two lands the road joins. Resolved to
+    /// [`crate::ecs::road::RoadBetweenLands`] entities at populate time.
+    #[serde(default)]
+    pub between_land_ids: Vec<String>,
+}
+
 impl Content {
     pub fn character(&self, id: &str) -> Option<&Character> {
         self.characters.get(id)
@@ -267,6 +292,23 @@ pub fn validate(content: &Content) -> Result<()> {
                 c.id,
                 c.house_id
             );
+        }
+    }
+    for (_, r) in &content.roads {
+        if r.points.len() < 2 {
+            bail!("road `{}` needs at least 2 points", r.id);
+        }
+        if r.between_land_ids.len() != 2 {
+            bail!(
+                "road `{}` needs exactly 2 land ids, got {}",
+                r.id,
+                r.between_land_ids.len()
+            );
+        }
+        for lid in &r.between_land_ids {
+            if !content.lands.contains_key(lid) {
+                bail!("road `{}` references unknown land `{lid}`", r.id);
+            }
         }
     }
     Ok(())

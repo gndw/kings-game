@@ -6,3 +6,4 @@ pub mod border_graphic;
 pub mod common;
 pub mod holding_icon;
 pub mod land_graphic;
+pub mod road_graphic;

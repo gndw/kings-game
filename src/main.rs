@@ -9,7 +9,6 @@ use kings_game::schedules::{OnDay, OnMonth};
 use kings_game::ui;
 use kings_game::ui::command_menu::CommandMenu;
 use kings_game::game;
-use kings_game::map;
 use std::path::Path;
 
 fn main() -> Result<()> {
@@ -144,8 +143,6 @@ fn main() -> Result<()> {
                 // update_draw so gizmos draw against the new view.
                 ui::camera::update_camera,
                 ui::map::update_draw,
-                map::army::update,
-                map::components::army_icon::update,
             ),
         )
         .add_systems(

@@ -17,7 +17,7 @@ use crate::ecs::{BuildingConstructionDate, BuildingOf, BuildingOnLand, BuildingS
 use crate::resources::buildings::BuildingDefs;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
-use crate::game::yields::{BUILDING_UPDATED, OnBuildingUpdated};
+use crate::events::{BuildingUpdateKind, OnBuildingUpdated};
 use bevy::ecs::world::World;
 
 /// Walk every `BUILDING` building whose date has been reached, flip it to
@@ -79,7 +79,7 @@ pub fn construction(world: &mut World) {
         world.trigger(OnBuildingUpdated {
             building: b_e,
             land: land_e,
-            r#type: BUILDING_UPDATED,
+            kind: BuildingUpdateKind::Updated,
         });
     }
 }

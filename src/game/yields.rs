@@ -7,27 +7,12 @@ use crate::ecs::{
     KingdomLedBy, LandHasBuildings, LandHeldBy,
 };
 use crate::resources::buildings::BuildingDefs;
+use crate::events::OnBuildingUpdated;
 use bevy::prelude::*;
 
-/// Fired by anything that mutates a building's kingdom-graph footprint
-/// (construct, destroy, future code paths that move a building or hot-swap
-/// its definition). The commands fire this event *after* their structural
-/// change settles Bevy's relationship hooks, so the observer's
-/// [`sum_land_yield`] walk sees authoritative data. Observer is
-/// [`on_building_updated`].
-#[derive(Event)]
-pub struct OnBuildingUpdated {
-    pub building: Entity,
-    pub land: Entity,
-    /// 1 = constructed, 2 = updated (reserved for future code paths), 3 =
-    /// destroyed. Constants [`BUILDING_CONSTRUCTED`], [`BUILDING_UPDATED`],
-    /// [`BUILDING_DESTROYED`] in this module.
-    pub r#type: u8,
-}
-
-pub const BUILDING_CONSTRUCTED: u8 = 1;
-pub const BUILDING_UPDATED: u8 = 2;
-pub const BUILDING_DESTROYED: u8 = 3;
+/// Observer for [`OnBuildingUpdated`] (defined in [`crate::events`]). Fired
+/// after the relevant structural change settles Bevy's relationship hooks,
+/// so the [`sum_land_yield`] walk sees authoritative data.
 
 /// Sum a land's buildings into `(gold, levy)`. Walks
 /// `land → LandHasBuildings → BuildingOf → BuildingDefs` once;
@@ -105,8 +90,8 @@ pub fn recompute_yields(
 
 /// Re-sum the kingdom that holds the event's `land` and write that one
 /// leader's [`CharacterGoldYield`] and [`CharacterLevy`]. Wired up as the
-/// observer for [`OnBuildingUpdated`]; called via
-/// `world.trigger(OnBuildingUpdated { building, land, r#type: ... })`
+/// observer for [`OnBuildingUpdated`] (defined in [`crate::events`]); called
+/// via `world.trigger(OnBuildingUpdated { building, land, kind: ... })`
 /// straight after the relevant structural change settles the relationship
 /// hooks, so `LandHasBuildings` is already authoritative.
 pub fn on_building_updated(

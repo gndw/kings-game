@@ -217,10 +217,9 @@ Lives in `game/` and `schedules.rs`.
   - `recompute_yields` (`game/yields.rs`) — runs in `Startup` (so the
     opening screen shows what a realm renders). After that the construct
     and destroy commands trigger a custom [`OnBuildingUpdated`]
-    (`game/yields.rs`) event (`kind = 1 = constructed` /
-    `3 = destroyed`; `2 = updated` is reserved for future code paths that
-    move a building or hot-swap its definition) straight after their
-    structural change; its `On<OnBuildingUpdated>` observer walks
+    (`src/events.rs`) event (`kind: BuildingUpdateKind::{Constructed,
+    Updated, Destroyed}`) straight after their structural change; its
+    `On<OnBuildingUpdated>` observer walks
     `land → LandHeldBy → kingdom → KingdomLedBy → leader`, runs the shared
     [`sum_land_yield`] helper over
     `kingdom → KingdomHold → land → LandHasBuildings → BuildingOf →
@@ -493,6 +492,7 @@ asset-loaded sprites.
 | `src/schedules.rs` | `OnDay` + `OnMonth` labels |
 | `src/game/advance_date.rs` | the tick (exclusive `&mut World`) |
 | `src/game/yields.rs` | `recompute_yields` (graph walk) |
+| `src/events.rs` | `OnBuildingUpdated` ECS event |
 | `src/game/payout.rs` | `payout` (monthly gold to leaders) |
 | `src/rng.rs` | `SimRng` — seeded, draw-counted for exact replay |
 | `src/ui/*` | flex layout, map/camera gizmos, the four text panels |

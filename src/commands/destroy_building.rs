@@ -146,10 +146,10 @@ fn destroy(world: &mut World, actor: &str, land_id: &str, building_id: &str) {
     // the land's `LandHasBuildings` synchronously, so the yield observer can
     // re-sum authoritative data on the next line.
     world.entity_mut(b_e).despawn();
-    world.trigger(crate::game::yields::OnBuildingUpdated {
+    world.trigger(crate::events::OnBuildingUpdated {
         building: b_e,
         land: land_e,
-        r#type: crate::game::yields::BUILDING_DESTROYED,
+        kind: crate::events::BuildingUpdateKind::Destroyed,
     });
     world.resource_mut::<Registry>().by_id.remove(building_id);
 

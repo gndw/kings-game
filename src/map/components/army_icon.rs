@@ -17,6 +17,7 @@
 //! [`holding_icon`](super::holding_icon).
 
 use super::super::FONT_SIZE;
+use super::common::UIWithArmy;
 use crate::ecs::army::{ArmyLevy, ArmyName, ArmyOnLand};
 use crate::ecs::land::LandHolding;
 use crate::events::{OnArmyDismiss, OnArmyRaised};
@@ -30,12 +31,6 @@ use bevy::text::TextLayoutInfo;
 /// the army-icon visual (the ground at the sword's pommel).
 #[derive(Component, Debug, Clone, Copy)]
 pub struct ArmyIcon;
-
-/// Back-reference from an icon to the army it represents. The per-frame
-/// [`update`] system reads `ArmyOnLand` through this and copies the
-/// resulting position into the icon's `Transform`.
-#[derive(Component, Debug, Clone, Copy)]
-pub struct UIWithArmy(pub Entity);
 
 /// Back-references from the icon entity to its label children. The dismiss
 /// observer uses this to clean up the trio in one pass; [`size_labels`]

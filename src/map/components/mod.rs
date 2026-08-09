@@ -2,4 +2,5 @@
 //! positioning and lifecycle belong to whoever calls into them.
 
 pub mod army_icon;
+pub mod common;
 pub mod holding_icon;

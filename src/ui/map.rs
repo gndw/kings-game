@@ -1,14 +1,15 @@
-//! Gizmo drawing of the map: world border, land outlines + fills, holdings,
-//! the selected land's flag, and the per-land yield labels. The camera
-//! itself lives in `super::camera`; the map geometry lives in the entity
-//! world (see `crate::ecs::Land`).
+//! Gizmo drawing of the map: world border, land outlines + fills, the
+//! per-land holding-icon (castle), and the per-land yield labels. The
+//! camera itself lives in `super::camera`; the map geometry lives in the
+//! entity world (see `crate::ecs::Land`).
 
-use super::{flag, FONT_SIZE};
+use super::FONT_SIZE;
 use crate::app::Game;
 use crate::ecs::{
     BuildingOf, BuildingStatus, CharacterLeads, KingdomHold, LandBorders, LandHasBuildings,
     LandHolding, LandName, Registry, StringId,
 };
+use crate::map::components::holding_icon;
 use crate::resources::border::Border;
 use crate::resources::buildings::BuildingDefs;
 use bevy::color::palettes::css;
@@ -16,7 +17,10 @@ use bevy::prelude::*;
 use bevy::sprite::Anchor;
 use std::collections::HashSet;
 
-const HOLDING_RADIUS: f32 = 12.0;
+/// Gap between the holding's ground point and the per-land label's top
+/// edge. The castle icon's base sits on the holding point, so this is just
+/// a small pad below the gate.
+const HOLDING_LABEL_OFFSET: f32 = 6.0;
 /// World-space offset for the per-label black outline. At the camera's 0.7
 /// scale this is roughly a 1px border, just enough to lift the white text off
 /// the varied land fills without overpowering the names.
@@ -84,7 +88,7 @@ fn fill(gizmos: &mut Gizmos, poly: &[(f64, f64)], color: Color) {
     }
 }
 
-/// Spawn one `Text2d` label per land, just below the holding circle.
+/// Spawn one `Text2d` label per land, just below the holding point.
 /// Spawned once in Startup so `update_draw` stays gizmo-only and the labels
 /// don't get respawned every frame. The name is the first line;
 /// `update_draw` appends the yield line below it. The camera itself is
@@ -97,7 +101,7 @@ pub fn startup(
 ) {
     for (land_e, name, holding) in &lands {
         let x = holding.0.0 as f32;
-        let y = holding.0.1 as f32 - HOLDING_RADIUS - 4.0;
+        let y = holding.0.1 as f32 - HOLDING_LABEL_OFFSET;
         // Black outline: four black copies of the text at cardinal offsets
         // behind the main white text. `Text2dShadow` is a single drop shadow,
         // not a real outline, so the border is faked with sibling entities.
@@ -158,17 +162,16 @@ pub fn update_input(world: &mut World) {
     }
 }
 
-/// World border, land outlines, holdings, and the selected land's flag.
+/// World border, land outlines, holdings, and per-land yield labels.
 pub fn update_draw(
     mut gizmos: Gizmos,
     // ponytail: separate `Gizmos<LandBorderGizmoConfigGroup>` so the per-land
     // polygon outline uses the 1.0px stroke configured on that group; the
-    // world border, fill, holding ring, and flag stay on the default 2.0px.
+    // world border, fill, and castle outline stay on the default 2.0px.
     mut land_border_gizmos: Gizmos<LandBorderGizmoConfigGroup>,
     game: Res<Game>,
     registry: Res<Registry>,
     border: Res<Border>,
-    time: Res<Time>,
     defs: Res<BuildingDefs>,
     character_leads: Query<&CharacterLeads>,
     kingdom_holds: Query<&KingdomHold>,
@@ -217,10 +220,11 @@ pub fn update_draw(
         .chain(lands_vec.iter().filter(|l| Some(l.0.as_str()) == sel));
     for land in order {
         let is_sel = Some(land.0.as_str()) == sel;
-        // Unselected lands: dark brown outline. Selected lands keep the
-        // yellow outline as the selection cue (the holding circle is yellow
-        // too, and the land draws last so it covers its neighbours).
-        let (outline, holder) = if is_sel {
+        // Unselected lands: dark brown outline + brown castle. Selected
+        // lands: yellow outline + yellow castle (the colour flip on the
+        // castle is the selection cue; the previous flag-on-selected is
+        // gone, replaced by the castle itself turning yellow).
+        let (outline, castle) = if is_sel {
             (css::YELLOW, css::YELLOW)
         } else {
             (Srgba::rgb(0.36, 0.22, 0.12), Srgba::rgb(0.59, 0.29, 0.0))
@@ -236,16 +240,7 @@ pub fn update_draw(
             outline,
         );
         let holding = Vec2::new(land.2.0 as f32, land.2.1 as f32);
-        gizmos
-            .circle_2d(
-                Isometry2d::from_translation(holding),
-                HOLDING_RADIUS,
-                holder,
-            )
-            .resolution(24);
-        if is_sel {
-            flag::draw(&mut gizmos, holding, time.elapsed_secs());
-        }
+        holding_icon::draw(&mut gizmos, holding, castle);
     }
 
     // Refresh each land label's second line (per-land total yield). The name

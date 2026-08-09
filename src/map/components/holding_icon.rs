@@ -8,6 +8,7 @@
 //! Visual-only — placement and lifecycle are the caller's job.
 
 use super::super::FONT_SIZE;
+use bevy::color::Srgba;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
@@ -53,14 +54,14 @@ const LABEL_GAP: f32 = 6.0;
 /// text renders on top of it.
 const LABEL_BG_Z: f32 = 0.9;
 
-/// Draw the castle silhouette in white lines at world point `at`. `at` is
-/// the bottom-centre of the castle (ground level).
+/// Draw the castle silhouette in `color` lines at world point `at`. `at`
+/// is the bottom-centre of the castle (ground level).
 ///
 /// Drawn back-to-front by z-order of gizmo draws in the frame: walls
 /// first, then towers (which overlap the wall tops), then crenellations
 /// and the gate last. All in the default gizmo group; the relative order
 /// within a single `draw` call is what matters visually.
-pub fn draw(gizmos: &mut Gizmos, at: Vec2) {
+pub fn draw(gizmos: &mut Gizmos, at: Vec2, color: Srgba) {
     let tower_xs = [at.x - TOWER_SPACING, at.x, at.x + TOWER_SPACING];
     let tower_heights = [SIDE_TOWER_H, TOWER_H, SIDE_TOWER_H];
 
@@ -77,7 +78,7 @@ pub fn draw(gizmos: &mut Gizmos, at: Vec2) {
                 at.y + SIDE_TOWER_H / 2.0,
             )),
             Vec2::new(wall_w, SIDE_TOWER_H),
-            css::WHITE,
+            color,
         );
     }
 
@@ -92,11 +93,11 @@ pub fn draw(gizmos: &mut Gizmos, at: Vec2) {
         gizmos.rect_2d(
             Isometry2d::from_translation(Vec2::new(tx, at.y + h / 2.0)),
             Vec2::new(TOWER_W, h),
-            css::WHITE,
+            color,
         );
 
         // Crenellations on top of every tower.
-        crenellations(gizmos, left, right, top);
+        crenellations(gizmos, left, right, top, color);
     }
 
     // Gate: small rectangle at the centre of the central tower's base.
@@ -105,7 +106,7 @@ pub fn draw(gizmos: &mut Gizmos, at: Vec2) {
     gizmos.rect_2d(
         Isometry2d::from_translation(Vec2::new(at.x, at.y + GATE_H / 2.0)),
         Vec2::new(GATE_W, GATE_H),
-        css::WHITE,
+        color,
     );
 }
 
@@ -113,7 +114,7 @@ pub fn draw(gizmos: &mut Gizmos, at: Vec2) {
 /// zig-zag polyline: alternating short upward segments (teeth) and flat
 /// segments (gaps). Towers narrow enough to fit no teeth at all draw no
 /// crenellations (the constant `pitch` would exceed `tower_w`).
-fn crenellations(gizmos: &mut Gizmos, left: f32, right: f32, top: f32) {
+fn crenellations(gizmos: &mut Gizmos, left: f32, right: f32, top: f32, color: Srgba) {
     let pitch = CRENEL_W + CRENEL_GAP;
     let tower_w = right - left;
     let n_teeth = (tower_w / pitch).floor() as i32;
@@ -137,7 +138,7 @@ fn crenellations(gizmos: &mut Gizmos, left: f32, right: f32, top: f32) {
     }
     path.push(Vec2::new(right, top));
 
-    gizmos.linestrip_2d(path.iter().copied(), css::WHITE);
+    gizmos.linestrip_2d(path.iter().copied(), color);
 }
 
 /// Spawn the `Text2d` and its matching black background `Sprite` at world
@@ -223,7 +224,7 @@ pub fn update(
 
     for (icon_e, t, label) in &icons {
         // Castle visual at the entity's translation.
-        draw(&mut gizmos, t.translation.truncate());
+        draw(&mut gizmos, t.translation.truncate(), css::WHITE);
 
         // Label: spawn on first sight, then refresh text + resize background
         // every frame so a future rename command updates the map live.

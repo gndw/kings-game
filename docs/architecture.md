@@ -378,9 +378,12 @@ asset-loaded sprites.
   `CameraView` (current rendered view) + `CameraTween` (in-flight
   `from`/`to`/`t`). `update_draw` draws the world border, each land's outline
   (gizmos draw lines only, so the fill is a **scanline** routine handling
-  the map's concave shapes), holdings as circles, the selected land in
-  yellow over its neighbours, the player's own holdings tinted green, and a
-  waving pennant (`flag.rs`) on the selection. `update_camera` (PostUpdate,
+  the map's concave shapes), the per-land holding castle via
+  [`crate::map::components::holding_icon`] (yellow when selected, brown
+  otherwise — the colour flip replaces the old flag-on-selected cue), and
+  the player's own holdings tinted green. The waving pennant on the
+  selection is gone; the castle itself turning yellow is the selection
+  cue. `update_camera` (PostUpdate,
   runs *before* `update_draw`) computes the destination from
   `Game::zoomed` + `selected_land_id` each frame — unzoomed → whole `Border`,
   zoomed → selected land's polygon bbox + `ZOOM_MARGIN`, centred on the bbox

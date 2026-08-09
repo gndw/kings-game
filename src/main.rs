@@ -149,11 +149,7 @@ fn main() -> Result<()> {
                 // update_draw so gizmos draw against the new view.
                 ui::camera::update_camera,
                 ui::map::update_draw,
-                // army-icon pipeline: position the icon at the army's
-                // current land, then draw the gizmo, then fit the label.
                 army_icon::update,
-                army_icon::draw_icons,
-                army_icon::size_labels,
             ),
         )
         .add_systems(

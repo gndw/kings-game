@@ -23,6 +23,12 @@ use serde::Deserialize;
 /// armies raised on its land (military only — defaults to 0 on civil kinds).
 /// Read by future replenishment code, not yet consumed: this commit just
 /// declares the field.
+///
+/// `fort_level` is the fortification tier of the building — `0` for
+/// non-fortified kinds (the default; existing buildings don't specify it)
+/// and a positive value for fortified kinds like `Castle`. The field exists
+/// on the roster so future war-resolution code (siege modifiers, conquest
+/// defense) can read it; no sim path consumes it yet.
 #[derive(Clone, Debug, Deserialize)]
 pub struct BuildingDef {
     pub id: String,
@@ -35,6 +41,8 @@ pub struct BuildingDef {
     pub levy: u32,
     #[serde(default)]
     pub levy_rate: u32,
+    #[serde(default)]
+    pub fort_level: u32,
     #[serde(default)]
     pub construction_price: u32,
     #[serde(default)]

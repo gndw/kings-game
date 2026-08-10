@@ -18,6 +18,10 @@
 (
     buildings: [
         // military — quarters and drills the levy, earns nothing
+        // Castles sit at the top of the fortification tier: heavier upkeep than
+        // the barracks, slow to build (720 days = 2 years at the base calendar),
+        // but the only kind that carries `fort_level > 0`.
+        (id: "building-castle",        name: "Castle",         gold_upkeep: 2, levy: 10, levy_rate:  1, fort_level: 1, construction_price: 200, construction_time: 720),
         (id: "building-barracks",      name: "Barracks",       gold_upkeep: 2, levy: 50, levy_rate:  1, construction_price:  75, construction_time: 300),
         (id: "building-stables",       name: "Stables",        gold_upkeep: 1, levy: 40, levy_rate:  1, construction_price:  60, construction_time: 240),
         (id: "building-training-yard", name: "Training Yard",   gold_upkeep: 1, levy: 30, levy_rate:  1, construction_price:  45, construction_time: 220),

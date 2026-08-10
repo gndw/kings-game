@@ -543,3 +543,48 @@ the two relationships to the belligerents (`SiegeAttackerArmy`,
   TBD — adding it (transfer the land to the attacker's kingdom) is the
   obvious next step, and the relationship hooks (Bevy auto-prunes the
   old `LandHeldBy`) keep the change mechanical.
+
+## Command palette search is a palette-owned overlay (substring match, no scoring)
+
+The command palette has a search bar above the list; typed characters move
+matches to the top and dim the rest in place. The search is owned entirely by
+`ui/command_menu.rs` — each `Command` still returns the same flat `Vec<MenuItem>`
+from `step_items`, and the palette reorders, dims, and clamps around the
+result. Commands don't know about the search.
+
+- **Why palette-owned:** every command's `step_items` returns a `Vec<MenuItem>`
+  with a `label` and `value`. The palette has the one place where all of them
+  meet, so it can apply one filter once and reach every list. Threading a
+  search context into every command's `step_items` would have meant a new
+  parameter on the trait (and a new branch in every `step_items` arm) for the
+  same one substring test.
+- **Substring match on the label, case-insensitive.** No fuzzy match, no
+  prefix weighting, no per-item scoring. With the base game's eight commands
+  and the few dozen items each step returns, a fancier ranker would be
+  invisible. If a mod grows a roster to where ordering by relevance matters,
+  swap the matcher in `refresh` — the rest of the system (the `matches` bit
+  vec, the reorder, the cursor snap) is agnostic to *how* an item matched.
+- **Cursor navigates matches only when the query is non-empty.** With an
+  empty query every item matches and navigation is the original full-list
+  walk; with a query the cursor wraps around the matches and ignores the
+  dimmed rows beneath. The dimmed rows are still selectable — `pick` honours
+  the cursor regardless — so the player can still reach them if they really
+  want to, but the search-driven UX is "type, then arrow-down through the
+  matches".
+- **Query clears on every panel change (top-level ↔ step ↔ step), and on
+  open/close.** Each panel gets a fresh filter rather than carrying the
+  previous step's text forward — typing `"co"` at the top-level command list
+  and pressing `Enter` lands the player in `Construct Building`'s step 0 with
+  the bar emptied. Reopening the menu (next `c`) starts fresh; `Esc` closes
+  and clears, since the menu isn't carrying any state past its own window.
+- **`Space` is yielded to the palette while it's open.** Multi-word queries
+  are the obvious use case (`"raise army"`); without yielding the keystroke,
+  every space the player typed would also toggle `Game::paused`. The yield
+  lives in `app::input` next to the existing `Esc`/`Z`/`arrow` yields.
+- **Why the keyboard reading uses a stored `MessageCursor`, not
+  `MessageReader`.** The palette's `input` is exclusive (it needs `&World`
+  for `step_items` and `&mut World` for `execute`), so it can't take a
+  `MessageReader` system param. A `MessageCursor<KeyboardInput>` lives on
+  the `CommandMenu` resource, gets cloned out before the exclusive borrow
+  on `Messages<KeyboardInput>`, then written back — one usize copy per
+  frame, no missed events.

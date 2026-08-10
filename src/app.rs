@@ -59,7 +59,9 @@ pub fn input(
     if !menu.open && keys.just_pressed(KeyCode::KeyZ) {
         game.zoomed = !game.zoomed;
     }
-    if keys.just_pressed(KeyCode::Space) {
+    // Space toggles pause, but only when the palette isn't open — the
+    // palette's search bar eats the keystroke so multi-word queries work.
+    if !menu.open && keys.just_pressed(KeyCode::Space) {
         game.paused = !game.paused;
     }
     // Digits 1–4 jump straight to a speed and unpause, faster than stepping.

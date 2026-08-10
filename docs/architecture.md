@@ -521,18 +521,28 @@ asset-loaded sprites.
 - **Command palette** (`ui/command_menu.rs`): a spotlight-style modal — a
   centered window over a dimmed backdrop, lifted above the panels with
   `GlobalZIndex`. A `CommandMenu` resource holds `open`/active-command/step/
-  cursor plus the cached on-screen list and title; `c` opens it, arrows move the
-  cursor, `enter` drills into the picked command's own steps, `esc` closes. It
-  is the only way to trigger commands, so every command is reached by walking
-  its steps through the palette. It is **command-agnostic**: it drives *any*
-  registered command's steps the same way.
+  cursor plus the cached on-screen list (with a parallel `matches` bit vec
+  driving the search overlay), the search query, and the title; `c` opens it,
+  arrows move the cursor, `enter` drills into the picked command's own steps,
+  `esc` closes. It is the only way to trigger commands, so every command is
+  reached by walking its steps through the palette. It is **command-agnostic**:
+  it drives *any* registered command's steps the same way.
   The exclusive `input` recomputes the current step's list via the command's
   `step_items` (the one path with `&World`) and stores it on the resource; the
-  non-exclusive `update` just renders that stored list, rebuilding rows only when
-  `(command, step, cursor)` changes (the buildings panel's cache idea). The final step's
-  pick hands the accumulated choices to the command's `execute`. While open it
-  owns `esc` and the arrows, so `app::input` and `ui::map::update_input` read its
-  `open` flag and yield them.
+  non-exclusive `update` just renders that stored list, rebuilding rows only
+  when `(command, step, cursor, query)` changes (the buildings panel's cache
+  idea). The final step's pick hands the accumulated choices to the command's
+  `execute`. While open it owns `esc` and the arrows, so `app::input` and
+  `ui::map::update_input` read its `open` flag and yield them; `app::input`
+  also yields `space` so the search bar can take it for multi-word queries.
+  A search bar at the top of the window (a styled Text node carrying the
+  `MenuSearch` marker) takes typed characters from `Messages<KeyboardInput>`
+  and `Backspace`; `refresh` reorders the items so matches sit at the top and
+  re-snaps the cursor to the first match if the current row got filtered out.
+  Non-matches stay in the list, dimmed via a `grayed` style. The query clears
+  when the cursor moves to a different panel (top-level → first step, or any
+  step → the next), so each panel starts with a fresh filter; it also clears
+  on open and close.
 
 ## Key invariants (things that will bite you if broken)
 

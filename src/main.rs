@@ -159,6 +159,8 @@ fn main() -> Result<()> {
                 ui::information::update,
                 ui::buildings::update,
                 ui::chronicle::update,
+                ui::wars::update,
+                ui::army::update,
                 ui::status::update,
                 kings_game::debug::dump_characters,
             ),

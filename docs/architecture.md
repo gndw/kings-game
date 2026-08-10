@@ -104,10 +104,10 @@ flat. `decision.md` is the authoritative *why* for the component/relationship
 shape; this is the *what*.
 
 - **Entity kinds** are marker-tag components: `House`, `Character`, `Land`,
-  `Kingdom`, `Army`, `Marching`, `Road`. Each kind's data is **one field per component** so a system queries
+  `Kingdom`, `Army`, `Marching`, `Road`, `War`, `CasusBelli`. Each kind's data is **one field per component** so a system queries
   only what it touches (payout needs gold + yield, not the date of birth), in its own file:
   `house.rs`, `character.rs`, `land.rs`, `kingdom.rs`, `army.rs`, `marching.rs`,
-  `road.rs` (all under `ecs/`). Marching is a run-time entity only — the player spawns
+  `road.rs`, `war.rs`, `casus_belli.rs` (all under `ecs/`). Marching is a run-time entity only — the player spawns
   them via the `MarchingOrder` command and the daily tick reaps them when the
   army arrives — so they don't appear in `populate` or mod data. One marching
   is one road: `MarchingOnRoad` names it and `MarchingFromLand` /
@@ -170,6 +170,17 @@ shape; this is the *what*.
   - `CourtierOfCharacter` (courtier→character) ↔ `CharacterHasCourtiers`, and
     `CourtierOfKingdom` (courtier→kingdom) ↔ `KingdomHasCourtiers` — each appointment
     links one character to one kingdom; `CourtierType::Courtier` is the generic role.
+  - `WarAttackerKingdom` (on war) ↔ `KingdomHasWarsAttacking` (on kingdom,
+    `Vec<Entity>`) and `WarDefenderKingdom` (on war) ↔ `KingdomHasWarsDefending`
+    (on kingdom, `Vec<Entity>`) — the two belligerents. A kingdom can be
+    attacking in several wars at once.
+  - `WarWithCasusBelli` (on war) ↔ `CasusBelliOnWar` (on CB, `Vec<Entity>`)
+    — every war names one casus belli (the *why*); one CB can back multiple
+    wars.
+  - `CasusBelliKingdom` (on CB) ↔ `KingdomHasCasusBelli` (on kingdom,
+    `Vec<Entity>`) — the kingdom the CB targets. A `Conquest` CB aims to
+    seize that kingdom; other CB shapes (reparations, religious claims, …)
+    would target something else but reuse the same single-`Entity` link.
   - Plain (non-relationship) entity links: `CharacterOfHouse`
     (character→house), `BuildingOf`
     (building→definition id, a string looked up against the `BuildingDefs`
@@ -359,6 +370,17 @@ the style of `ctx::step`.
   is what walks the army hop by hop (each hop costing its road's
   `RoadDistanceDays`; the chronicle line quotes the route's summed total). Two
   steps (pick an army, pick a target land).
+- **`DeclareWar`** declares war on another kingdom under a casus belli.
+  Validates the actor rules a kingdom, the defender is a different
+  kingdom, and the picked CB id resolves (`"conquest"` is the only one
+  today; new CB shapes are additive in `resolve_cb`). Spawns a
+  `CasusBelli` entity with `CasusBelliKingdom(defender)` and the chosen
+  `CasusBelliType`, then a `War` entity linking `WarAttackerKingdom(actor's
+  kingdom)` to `WarDefenderKingdom(defender)` with `WarWithCasusBelli(cb)`.
+  No resolution path yet — no tick, no army interaction, no peace
+  offering — so the entity exists to wire the relationship graph and
+  record the declaration in the chronicle. Two steps (pick a target
+  kingdom, pick a CB type).
 - **Runtime building id** is a v4 UUID drawn from the seeded `SimRng` (not OS
   entropy), keeping the one-entropy-source invariant; format-only, no `uuid`
   crate.
@@ -429,6 +451,21 @@ asset-loaded sprites.
   The exception is the column *container* `LegendBuildings`: its `update`
   holds a `Single<Entity, With<…>>` and rebuilds child rows only when a
   `Local` cache key (selection + building roster) changes.
+  - `wars` — the player's active wars, one per line as `"<WarName> (<WarBeginDate>)"`.
+    Marker `UIWithWars` on the body text; `update` walks the body's
+    `ChildOf` each frame to flip the outer container's `Display` between
+    `Flex` (player has wars) and `None` (player has none) so an empty
+    panel collapses out of the column layout. List source: the player's
+    kingdom's `KingdomHasWarsAttacking`.
+  - `armies` — the player's armies, one per line. Format reads from live
+    entity data: `"<ArmyName> (<ArmyLevy>) at <ArmyOnLand>"` when idle,
+    `"<ArmyName> (<ArmyLevy>) at <ArmyOnLand> marching to <final_dest> at <days> days"`
+    when marching — where `<final_dest>` is the LAST marching in the army's
+    `ArmyHasMarching` queue (the player's queued destination, not the
+    next hop) and `<days>` is the sum of the days left on the OnRoute hop
+    plus each subsequent Scheduled hop's `RoadDistanceDays`. Same
+    `UIWith*` + parent-walk show/hide pattern as `wars`; list source is
+    `KingdomHasArmies`.
   - `information` — the selected land, in one panel: a title (`INFORMATION`)
     + a `LegendInfo` text block holding the land name and the ruler
     (name, house, age). Its `update` clears the text on no selection.
@@ -495,13 +532,18 @@ asset-loaded sprites.
 | `src/commands/raise_army.rs` | the `RaiseArmy` command (validate + spawn the army bundle + drain `BuildingLevy` pools) |
 | `src/commands/dismiss_army.rs` | the `DismissArmy` command (validate + distribute `ArmyLevy` back into `BuildingLevy` + despawn + deregister + reap queued marchings) |
 | `src/commands/marching.rs` | the `MarchingOrder` command (validate + trace the road route + spawn one `Marching` entity per road, each `MarchingStatus::Scheduled` with empty dates) |
+| `src/commands/declare_war.rs` | the `DeclareWar` command (validate + spawn a `CasusBelli` entity + spawn a `War` entity, no resolution path yet) |
 | `src/ecs/marching.rs` | the `Marching` entity kind — `Marching` marker + `MarchingArmy`/`MarchingFromLand`/`MarchingToLand`/`MarchingOnRoad` relationships + `MarchingBeginDate`/`MarchingArrivedDate` + `MarchingStatus` enum |
+| `src/ecs/war.rs` | the `War` entity kind — `War` marker + `WarAttackerKingdom`/`WarDefenderKingdom` (to kingdoms) + `WarWithCasusBelli` (to a CB) + `WarName` (e.g. `"Conquest over Kingdom of Riverrun"`) + `WarBeginDate` (declare-time snapshot) |
+| `src/ecs/casus_belli.rs` | the `CasusBelli` entity kind — `CasusBelli` marker + `CasusBelliType` enum (`Conquest`) + `CasusBelliKingdom` (to the targeted kingdom) + `CasusBelliOnWar` reverse target |
 | `src/ecs/road.rs` | the `Road` entity kind — `Road` marker + `RoadPoints(Vec<(f64,f64)>)` + `RoadBetweenLands(Vec<Entity>)` + `RoadDistanceDays(u32)` (definition-only; no Bevy relationship) + `RoadHasMarchings` (the reverse of `MarchingOnRoad`) |
 | `src/map/components/road_graphic.rs` | per-road dashed-line visual — startup spawns one `RoadGraphic` marker per road (back-reffed by `UIWithRoad`) and a per-frame `update` draws the polyline through the `RoadGizmoConfigGroup` gizmo group, whose config carries the `GizmoLineStyle::Dashed` style; the line colour reports the road's `RoadHasMarchings` (green = an army is on it, gray = a march is queued on it, default otherwise) |
 | `src/game/marching.rs` | the per-day marching tick (`OnDay` — activate scheduled marchings on the matching source land, move arrived armies one road onward, chain into the next marching or return to Idle) + `road_days` (the one place a road's `RoadDistanceDays` is resolved) |
 | `src/game/replenish_levy.rs` | the monthly `BuildingLevy` top-up (`OnMonth` — every ACTIVE building's pool += `def.levy_rate`, capped at `def.levy`) |
 | `src/map/components/holding_icon.rs` | the castle-icon visual (three crenellated white-line towers with a centre keep, side walls, and a central gate) + the per-land name/yield `Text2d` label (anchored to the same land-holding point as the castle). Reusable gizmo primitive in `pub fn draw(gizmos, at, color)`. `startup` (Startup) spawns one `HoldingIcon` per `Kingdom` with a `UIWithKingdom` back-ref plus five `LandLabel` `Text2d` entities (main label + four shadow siblings forming a 1px black outline) per `Land`. `update` (PostUpdate) reads `KingdomHold` → `LandHolding` to position each castle (yellow when that land is selected, brown otherwise), and refreshes each label — `name\ngold/m levy/m` on lands the player's kingdom holds, the name only on foreign lands |
 | `src/map/components/land_graphic.rs` | per-land polygon outline + scanline fill. `startup` (Startup) spawns one `LandGraphic` per `Land` with a `UIWithLand` back-ref. `update` (PostUpdate) reads `LandBorders` + `StringId` to draw the outline (yellow when selected, brown otherwise) + scanline fill (green-tinted when player-owned). The name/yield label moved to `holding_icon` |
+| `src/ui/wars.rs` | the WARS panel (right column, top) — lists the player's wars via `KingdomHasWarsAttacking`; `Display::None` on the outer container hides it when the player has no wars. Marker `UIWithWars` on the body text; container visibility toggled by walking the body's `ChildOf`. |
+| `src/ui/army.rs` | the ARMIES panel (right column, just below WARS) — lists the player's armies via `KingdomHasArmies`; format depends on `ArmyStatus` (`"at <land>"` idle, `"marching to <final_dest> at <days> days"` marching — `final_dest` is the last marching in `ArmyHasMarching`, `days` sums days-left-on-OnRoute plus each scheduled hop's `RoadDistanceDays`). Same `UIWith*` + parent-walk show/hide pattern as `wars`. |
 | `src/map/components/border_graphic.rs` | world-border rectangle + sea wash. `startup` (Startup) spawns the single `BorderGraphic` entity; `update` (PostUpdate) reads `Border` and draws the rect + the scanline fill inside it |
 | `src/map/components/common.rs` | shared back-ref components for icons that follow an entity (`UIWithArmy`, `UIWithKingdom`, `UIWithLand`) + the shared `pub(crate) fn fill` scanline helper reused by `land_graphic` and `border_graphic` |
 | `src/game/construction.rs` | `tick` — flips `BUILDING` buildings to `ACTIVE` once the date passes their finish date |
@@ -511,7 +553,7 @@ asset-loaded sprites.
 | `src/mods/mod.rs` | `load(dir)` — the two-pass orchestrator |
 | `src/resources/*` | `Border`, `Calendar`(+validate, carries `start`), `Date` (the walking clock), `BuildingDefs`/`BuildingDef` (kind roster), `Chronicles` (log) |
 | `src/ecs/ecs.rs` | `StringId`, `Registry`, `populate` |
-| `src/ecs/{house,character,land,building,kingdom,courtier,army}.rs` | components + relationships per kind |
+| `src/ecs/{house,character,land,building,kingdom,courtier,army,war,casus_belli}.rs` | components + relationships per kind |
 | `src/ecs.rs` | module root, re-exports, the component map |
 | `src/schedules.rs` | `OnDay` + `OnMonth` labels |
 | `src/game/advance_date.rs` | the tick (exclusive `&mut World`) |

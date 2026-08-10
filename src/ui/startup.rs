@@ -1,6 +1,6 @@
 //! The flex layout holding the text panels and the two full-width bars.
 
-use super::{GAP, buildings, chronicle, courts, information, resource, status};
+use super::{GAP, army, buildings, chronicle, courts, information, resource, status, wars};
 use bevy::prelude::*;
 
 pub(crate) const RIGHT_BAR: f32 = 0.3;
@@ -39,6 +39,11 @@ pub fn startup(mut commands: Commands) {
                     ..default()
                 })
                 .with_children(|col| {
+                    // WARS + ARMIES sit above INFORMATION and hide themselves
+                    // (Display::None) when the player has none, so they leave
+                    // no gap in the column.
+                    wars::spawn(col, panel);
+                    army::spawn(col, panel);
                     information::spawn(col, panel);
                     courts::spawn(col, panel);
                     buildings::spawn(col, panel);

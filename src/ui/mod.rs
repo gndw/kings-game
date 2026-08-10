@@ -3,6 +3,7 @@
 //! gizmo map drawing in `map`, and the layout that spawns the panels in
 //! `startup`.
 
+pub mod army;
 pub mod buildings;
 pub mod camera;
 pub mod chronicle;
@@ -14,6 +15,7 @@ pub mod map;
 pub mod resource;
 pub mod startup;
 pub mod status;
+pub mod wars;
 
 const FONT: f32 = 14.0;
 

@@ -15,9 +15,11 @@
 //! - [`raise_army`] — raise an army on a ruled land.
 //! - [`dismiss_army`] — dismiss an army the actor rules.
 //! - [`marching`] — queue a marching order to move an army to another land.
+//! - [`declare_war`] — declare war on another kingdom under a casus belli.
 
 pub mod construct_building;
 pub mod core;
+pub mod declare_war;
 pub mod destroy_building;
 pub mod dismiss_army;
 pub mod marching;

@@ -249,6 +249,41 @@ from `KingdomHolds(Vec<Entity>)` (the auto-maintained reverse of each land's
   the `KingdomSeat` component was removed; the held land is read through
   `KingdomHold::land()`.
 
+## War and CasusBelli are separate entity kinds
+
+A war is its own entity (not a marker on the kingdom) and a casus belli is
+its own entity (not a field on the war). They are linked through Bevy
+relationships — `WarAttackerKingdom` / `WarDefenderKingdom` /
+`WarWithCasusBelli` on the war, `CasusBelliKingdom` on the CB — with the
+relationship hooks auto-maintaining the reverses on the kingdom
+(`KingdomHasWarsAttacking`, `KingdomHasWarsDefending`,
+`KingdomHasCasusBelli`) and on the CB (`CasusBelliOnWar`).
+
+- **Why war is an entity, not a field:** the war sits between two kingdoms
+  and one CB, all of which are dynamic (player picks at declare time). An
+  entity is the natural shape for a link in a graph, and the
+  relationship-colocation rule keeps the source on the war and the
+  reverses on the kingdoms — no manual reverse inserts, no drift.
+- **Why CB is an entity, not a field on the war:** a CB could be hoarded
+  (a player gains a claim on a kingdom before choosing to press it into a
+  war) and one CB could back multiple wars over time (a conquest CB that
+  outlives a peace treaty). Putting the CB on the war would have meant
+  every new war spawned a new CB and the player could never carry a claim
+  forward. The CB entity keeps the claim addressable in its own right.
+- **No resolution yet.** The war has no status, no tick, no end
+  condition — the entity exists to wire the relationship graph and the
+  chronicle line records the declaration. Resolution (army interaction,
+  peace offer, conquest transfer) lands in a later change; the entity
+  shape is already ready for it (adding a `WarStatus` enum + a
+  `WarResolutionDate` + a resolution observer are all additive on the
+  same archetype).
+- **CB enum is the only place new CB shapes land.** `resolve_cb` in
+  `commands/declare_war.rs` is the one switchboard between a CB id
+  string and `CasusBelliType`; the menu row in `step_items` is the other
+  spot. Adding a CB shape (e.g. `Reparations`) is a variant on
+  `CasusBelliType` + a `resolve_cb` arm + a menu row — no other code
+  changes, no new entity shape.
+
 ## Relationship components live in the file of their main component
 
 Every ECS relationship component — both `#[relationship]` sources and

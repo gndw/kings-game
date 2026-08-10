@@ -8,8 +8,10 @@
 //! `KingdomSeat` component.
 
 use super::army::ArmyBelongsToKingdom;
+use super::casus_belli::CasusBelliKingdom;
 use super::character::CharacterLeads;
 use super::courtier::CourtierOfKingdom;
+use super::war::{WarAttackerKingdom, WarDefenderKingdom};
 use bevy::ecs::entity::Entity;
 use bevy::prelude::Component;
 
@@ -45,3 +47,25 @@ pub struct KingdomHasCourtiers(Vec<Entity>);
 #[derive(Component, Debug, Default)]
 #[relationship_target(relationship = ArmyBelongsToKingdom)]
 pub struct KingdomHasArmies(Vec<Entity>);
+
+/// The wars this kingdom is attacking in — the auto-maintained reverse of
+/// [`WarAttackerKingdom`](super::war::WarAttackerKingdom). Read-only: set
+/// `WarAttackerKingdom` on each war and Bevy's hook keeps this in sync.
+#[derive(Component, Debug, Default)]
+#[relationship_target(relationship = WarAttackerKingdom)]
+pub struct KingdomHasWarsAttacking(Vec<Entity>);
+
+/// The wars being fought against this kingdom — the auto-maintained reverse
+/// of [`WarDefenderKingdom`](super::war::WarDefenderKingdom). Read-only:
+/// set `WarDefenderKingdom` on each war and Bevy's hook keeps this in sync.
+#[derive(Component, Debug, Default)]
+#[relationship_target(relationship = WarDefenderKingdom)]
+pub struct KingdomHasWarsDefending(Vec<Entity>);
+
+/// The casus belli claims against this kingdom — the auto-maintained
+/// reverse of [`CasusBelliKingdom`](super::casus_belli::CasusBelliKingdom).
+/// Read-only: set `CasusBelliKingdom` on each CB and Bevy's hook keeps
+/// this in sync. A kingdom can be the named target of several CBs at once.
+#[derive(Component, Debug, Default)]
+#[relationship_target(relationship = CasusBelliKingdom)]
+pub struct KingdomHasCasusBelli(Vec<Entity>);

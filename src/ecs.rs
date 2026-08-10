@@ -59,6 +59,7 @@
 
 pub mod army;
 pub mod building;
+pub mod casus_belli;
 pub mod character;
 pub mod courtier;
 pub mod ecs;
@@ -67,9 +68,11 @@ pub mod kingdom;
 pub mod land;
 pub mod marching;
 pub mod road;
+pub mod war;
 
 pub use army::*;
 pub use building::*;
+pub use casus_belli::*;
 pub use character::*;
 pub use courtier::*;
 pub use ecs::*;
@@ -77,3 +80,4 @@ pub use house::*;
 pub use kingdom::*;
 pub use land::*;
 pub use road::*;
+pub use war::*;

@@ -1,7 +1,6 @@
 //! The command palette: a spotlight-style modal that launches player commands.
 //!
-//! Press **C** to open (or **B**/**D** from the actions panel to jump straight into
-//! the selected land's construct/destroy step). The top-level list shows every registered
+//! Press **C** to open. The top-level list shows every registered
 //! [`Command`](crate::commands::Command); up/down moves, **Enter** drills into
 //! the picked command's own selection steps, and the final step's pick runs its
 //! effect. **Escape** closes. While open it captures the arrows (so the map
@@ -18,8 +17,6 @@
 use super::{FONT, TITLE};
 use crate::app::Game;
 use crate::commands::{Choice, CommandRegistry, MenuItem};
-use crate::ecs::army::ArmyBelongsToKingdom;
-use crate::ecs::{CharacterLeads, LandHasArmies, Registry, StringId};
 use bevy::input::ButtonInput;
 use bevy::input::keyboard::KeyCode;
 use bevy::prelude::*;
@@ -197,13 +194,12 @@ pub fn update(
     });
 }
 
-/// Exclusive: open on **C** (or jump straight into a land command via the
-/// actions panel's **B**/**D** hotkeys), navigate, dispatch on the final **Enter**.
+/// Exclusive: open on **C**, navigate, dispatch on the final **Enter**.
 /// Exclusive because it computes the on-screen list via `&World` (each command
 /// decides its own steps/queries) and the last step calls the command's
 /// `execute`, an `&mut World` method.
 pub fn input(world: &mut World) {
-    let (toggle, up, down, enter, escape, build, destroy, raise, dismiss, march) = {
+    let (toggle, up, down, enter, escape) = {
         let keys = world.resource::<ButtonInput<KeyCode>>();
         (
             keys.just_pressed(KeyCode::KeyC),
@@ -211,27 +207,12 @@ pub fn input(world: &mut World) {
             keys.just_pressed(KeyCode::ArrowDown),
             keys.just_pressed(KeyCode::Enter),
             keys.just_pressed(KeyCode::Escape),
-            keys.just_pressed(KeyCode::KeyB),
-            keys.just_pressed(KeyCode::KeyD),
-            keys.just_pressed(KeyCode::KeyR),
-            keys.just_pressed(KeyCode::KeyM),
-            keys.just_pressed(KeyCode::KeyG),
         )
     };
 
     if !world.resource::<CommandMenu>().open {
         if toggle {
             open_menu(world, None, 0, Vec::new());
-        } else if build {
-            open_land_action(world, true);
-        } else if destroy {
-            open_land_action(world, false);
-        } else if raise {
-            raise_army_direct(world);
-        } else if dismiss {
-            dismiss_army_direct(world);
-        } else if march {
-            marching_direct(world);
         }
         return;
     }
@@ -380,9 +361,8 @@ fn close(world: &mut World) {
     m.choices.clear();
 }
 
-/// Open the palette into `command` at `step` with `choices` already made. Used
-/// by the **C** top-level open (`command = None`, step 0) and the actions panel's
-/// **B**/**D** hotkeys (`command = Some(i)`, step 1, land pre-picked).
+/// Open the palette into `command` at `step` with `choices` already made. The
+/// **C** top-level open uses `command = None`, step 0.
 fn open_menu(world: &mut World, command: Option<usize>, step: usize, choices: Vec<Choice>) {
     {
         let mut m = world.resource_mut::<CommandMenu>();
@@ -393,180 +373,4 @@ fn open_menu(world: &mut World, command: Option<usize>, step: usize, choices: Ve
         m.choices = choices;
     }
     refresh(world);
-}
-
-/// Find a command in the registry by its display name. ponytail: coupling the
-/// hotkey to the display name is fine while names are the canonical id; add a
-/// stable command id if a mod ships a renamed variant of a base command.
-fn find_command(world: &World, name: &str) -> Option<usize> {
-    world
-        .resource::<CommandRegistry>()
-        .commands
-        .iter()
-        .position(|c| c.name() == name)
-}
-
-/// Open a land command (Construct/Destroy Building) straight to its building
-/// step with the selected land pre-picked, skipping the command list and the
-/// land step — the actions panel's **B**/**D** hotkeys. Fires only when the player
-/// rules the selected land; otherwise the menu stays closed.
-fn open_land_action(world: &mut World, construct: bool) {
-    let name = if construct {
-        "Construct Building"
-    } else {
-        "Destroy Building"
-    };
-    let Some(ci) = find_command(world, name) else {
-        return;
-    };
-    let (actor, land_id) = {
-        let game = world.resource::<Game>();
-        (
-            game.ctx.player_character_id.clone(),
-            game.ctx.selected_land_id.clone(),
-        )
-    };
-    let Some(land_id) = land_id else {
-        return;
-    };
-    if !crate::commands::rules_land(world, &actor, &land_id) {
-        return;
-    }
-    open_menu(
-        world,
-        Some(ci),
-        1,
-        vec![Choice {
-            label: land_id.clone(),
-            value: land_id,
-        }],
-    );
-}
-
-/// Direct raise-army trigger: the actions panel's **R** hotkey. Bypasses the
-/// palette — there's only one selection (the land, already determined by the
-/// selection) and no second step — and runs [`RaiseArmy::execute`] straight
-/// away. Same gate as `open_land_action`: player must rule the selected land.
-fn raise_army_direct(world: &mut World) {
-    let Some(ci) = find_command(world, "Raise Army") else {
-        return;
-    };
-    let (actor, land_id) = {
-        let game = world.resource::<Game>();
-        (
-            game.ctx.player_character_id.clone(),
-            game.ctx.selected_land_id.clone(),
-        )
-    };
-    let Some(land_id) = land_id else {
-        return;
-    };
-    if !crate::commands::rules_land(world, &actor, &land_id) {
-        return;
-    }
-    let cmd = world.resource::<CommandRegistry>().commands[ci].clone();
-    cmd.execute(
-        &[Choice {
-            label: land_id.clone(),
-            value: land_id,
-        }],
-        &actor,
-        world,
-    );
-}
-
-/// Direct dismiss-army trigger: the actions panel's **M** hotkey. Mirrors
-/// `raise_army_direct` — the selection (the land) is already known, so the
-/// palette is bypassed. The choice the command needs is the *army* id though,
-/// not the land id, so we resolve the first army on the selected land whose
-/// `ArmyBelongsToKingdom` matches the player's kingdom and hand that to
-/// [`DismissArmy::execute`]. Same gate as `raise_army_direct`: player must
-/// rule the selected land; the row only shows when at least one player's
-/// army sits on it, but we re-check here defensively.
-fn dismiss_army_direct(world: &mut World) {
-    let Some(ci) = find_command(world, "Dismiss Army") else {
-        return;
-    };
-    let (actor, land_id) = {
-        let game = world.resource::<Game>();
-        (
-            game.ctx.player_character_id.clone(),
-            game.ctx.selected_land_id.clone(),
-        )
-    };
-    let Some(land_id) = land_id else {
-        return;
-    };
-    if !crate::commands::rules_land(world, &actor, &land_id) {
-        return;
-    }
-    let Some(army_id) = find_army_on_land_for_player(world, &actor, &land_id) else {
-        return;
-    };
-    let cmd = world.resource::<CommandRegistry>().commands[ci].clone();
-    cmd.execute(
-        &[Choice {
-            label: army_id.clone(),
-            value: army_id,
-        }],
-        &actor,
-        world,
-    );
-}
-
-/// The first army on `land_id` whose `ArmyBelongsToKingdom` matches
-/// `actor`'s kingdom, returned as its runtime id. `None` when the player
-/// doesn't rule the land (already gated by the caller) or no player's army
-/// sits on it. Reads via `world::get` so it stays `&World`-safe.
-fn find_army_on_land_for_player(world: &World, actor: &str, land_id: &str) -> Option<String> {
-    let land_e = world.resource::<Registry>().get(land_id)?;
-    let actor_e = world.resource::<Registry>().get(actor)?;
-    let player_k = world.get::<CharacterLeads>(actor_e)?.kingdom();
-    let land_has_armies = world.get::<LandHasArmies>(land_e)?;
-    land_has_armies.iter().find_map(|army_e| {
-        let belongs = world.get::<ArmyBelongsToKingdom>(army_e)?;
-        if belongs.0 != player_k {
-            return None;
-        }
-        let sid = world.get::<StringId>(army_e)?;
-        Some(sid.0.clone())
-    })
-}
-
-/// Direct marching trigger: the actions panel's **G** hotkey. Mirrors
-/// `dismiss_army_direct` in shape — the army is already determined by the
-/// selected land, so the palette is opened directly into step 1 (target
-/// land) with the army pre-picked. The final step picks the target land and
-/// the command's `execute` spawns the marching entity. Same gate as the
-/// dismiss/raise direct paths: player must rule the selected land AND at
-/// least one player's army must sit on it.
-fn marching_direct(world: &mut World) {
-    let Some(ci) = find_command(world, "Marching Army") else {
-        return;
-    };
-    let (actor, land_id) = {
-        let game = world.resource::<Game>();
-        (
-            game.ctx.player_character_id.clone(),
-            game.ctx.selected_land_id.clone(),
-        )
-    };
-    let Some(land_id) = land_id else {
-        return;
-    };
-    if !crate::commands::rules_land(world, &actor, &land_id) {
-        return;
-    }
-    let Some(army_id) = find_army_on_land_for_player(world, &actor, &land_id) else {
-        return;
-    };
-    open_menu(
-        world,
-        Some(ci),
-        1,
-        vec![Choice {
-            label: army_id.clone(),
-            value: army_id,
-        }],
-    );
 }

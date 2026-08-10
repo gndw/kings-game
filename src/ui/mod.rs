@@ -3,8 +3,6 @@
 //! gizmo map drawing in `map`, and the layout that spawns the panels in
 //! `startup`.
 
-pub mod actions;
-pub mod army;
 pub mod buildings;
 pub mod camera;
 pub mod chronicle;

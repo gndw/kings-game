@@ -46,7 +46,7 @@ pub(super) fn spawn(col: &mut ChildSpawnerCommands, panel: Color) {
         Node {
             width: percent(100),
             // Grows to fill whatever `information` leaves in the column
-            // (buildings sits above `actions` + `chronicle`, which are pinned).
+            // (buildings sits above `chronicle`, which is pinned).
             flex_grow: 1.0,
             flex_direction: FlexDirection::Column,
             padding: UiRect::all(px(6)),

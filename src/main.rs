@@ -152,9 +152,7 @@ fn main() -> Result<()> {
                 ui::command_menu::input,
                 ui::command_menu::update,
                 ui::map::update_input,
-                ui::actions::update,
                 ui::courts::update,
-                ui::army::update,
                 // Ponytail: keep debug systems last so they don't displace
                 // gameplay systems in the schedule.
                 ui::resource::update,

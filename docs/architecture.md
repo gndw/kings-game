@@ -325,10 +325,7 @@ the style of `ctx::step`.
   *drains* those pools to `0` and flags the buildings with
   `BuildingIsRaised = true`. The second raise on the same land is rejected
   until the pools replenish (via `game::replenish_levy`) or the army is
-  dismissed. One step (pick a ruled land). From the actions panel the
-  **R** hotkey bypasses the palette (`raise_army_direct` in
-  `ui/command_menu`) and runs `execute` straight away with the selected
-  land as the choice.
+  dismissed. One step (pick a ruled land).
 - **`DismissArmy`** validates the army belongs to the actor's kingdom
   (via `ArmyBelongsToKingdom`), then *distributes* the army's `ArmyLevy`
   back into the kingdom's home land's buildings' `BuildingLevy` pools
@@ -337,11 +334,8 @@ the style of `ctx::step`.
   its levy home. Flags every ACTIVE building on that land as
   `BuildingIsRaised = false`, despawns + deregisters. Despawning
   auto-pulls the army out of both `LandHasArmies` and `KingdomHasArmies`.
-  One step (pick an army under the actor's kingdom). From the actions panel
-  the **M** hotkey bypasses the palette (`dismiss_army_direct` in
-  `ui/command_menu`) and runs `execute` straight away with the first army
-  on the selected land whose `ArmyBelongsToKingdom` matches the player's
-  kingdom as the choice; with multiple armies on the land, the player can
+  One step (pick an army under the actor's kingdom). The palette returns the
+  first matching army, so with multiple armies on the land the player can
   re-press **M** to dismiss the next one. Also walks the army's
   `ArmyHasMarching` collection and despawns any queued marchings first —
   otherwise the marchings would be left holding a `MarchingArmy` pointing
@@ -364,11 +358,7 @@ the style of `ctx::step`.
   the daily marching tick does that when activating each marching, which
   is what walks the army hop by hop (each hop costing its road's
   `RoadDistanceDays`; the chronicle line quotes the route's summed total). Two
-  steps (pick an army, pick a target land). From the actions panel the
-  **G** hotkey bypasses the army step (`marching_direct` in
-  `ui/command_menu`) and opens the palette into step 1 with the first army
-  on the selected land pre-picked. The "G" row only shows when the player
-  rules the selected land AND at least one player's army sits on it.
+  steps (pick an army, pick a target land).
 - **Runtime building id** is a v4 UUID drawn from the seeded `SimRng` (not OS
   entropy), keeping the one-entropy-source invariant; format-only, no `uuid`
   crate.
@@ -391,7 +381,7 @@ asset-loaded sprites.
 
 - **Layout** (`ui/startup.rs`): a column flex tree — `resource` bar on top, a row
   holding the map (left, full remaining width) and the right-hand column
-  (`information` over `courts` over `buildings` over `actions` over `chronicle`, the latter
+  (`information` over `courts` over `buildings` over `chronicle`, the latter
   pinned to 30% height),
   `status` bar on
   the bottom. `RIGHT_BAR = 0.3` is shared with the camera so the map lands beside
@@ -431,12 +421,11 @@ asset-loaded sprites.
   zoom = `OrthographicProjection::scale` (currently constant at
   `CAMERA_SCALE`, 30% zoom-in over a 1:1 view).
 - **Panels** each own a marker `Component` (`LegendInfo`, `LegendBuildings`,
-  `LegendActions`, `Chronicle`, `ResourceBar`, `Status`) and an `update` system
+  `Chronicle`, `ResourceBar`, `Status`) and an `update` system
   that reads the world through `Query`/`Res` and writes into a `Single<&mut Text>`.
-  The exceptions are the column *containers* `LegendBuildings` and
-  `LegendActions`: their `update` holds a `Single<Entity, With<…>>` and rebuilds
-  child rows — buildings only when a `Local` cache key (selection + building
-  roster) changes, actions every frame since the list is ≤2 rows.
+  The exception is the column *container* `LegendBuildings`: its `update`
+  holds a `Single<Entity, With<…>>` and rebuilds child rows only when a
+  `Local` cache key (selection + building roster) changes.
   - `information` — the selected land, in one panel: a title (`INFORMATION`)
     + a `LegendInfo` text block holding the land name and the ruler
     (name, house, age). Its `update` clears the text on no selection.
@@ -446,14 +435,6 @@ asset-loaded sprites.
     `total` row in the same layout. Its `update` clears the table on no
     selection.
   - `courts` — courtiers of the kingdom holding the selected land, showing character name and role.
-  - `actions` — its own panel between `buildings` and `chronicle`: a title
-    (`ACTIONS`) + a `LegendActions` column listing the player's build/destroy
-    hotkeys if the player rules the selected land, else a `(none)` placeholder.
-    Raise Army (**R**) is shown when the player rules the selected land;
-    Dismiss Army (**M**) and Marching Army (**G**) are shown only when the
-    player rules the selected *and* at least one army on it belongs to the
-    player's kingdom (`player_has_army_on_selected_land` in `ui/actions.rs`).
-    `update` runs as its own system each frame.
   - `chronicle` — last 10 lines of the `Chronicles` resource.
   - `resource` — the player's name, house, gold, yield/mo, levy.
   - `status` — `[PAUSED]`/`[RUNNING]`, the `Date`, current speed, a `C commands`
@@ -462,8 +443,10 @@ asset-loaded sprites.
   centered window over a dimmed backdrop, lifted above the panels with
   `GlobalZIndex`. A `CommandMenu` resource holds `open`/active-command/step/
   cursor plus the cached on-screen list and title; `c` opens it, arrows move the
-  cursor, `enter` drills into the picked command's own steps, `esc` closes. It is
-  **command-agnostic**: it drives *any* registered command's steps the same way.
+  cursor, `enter` drills into the picked command's own steps, `esc` closes. It
+  is the only way to trigger commands, so every command is reached by walking
+  its steps through the palette. It is **command-agnostic**: it drives *any*
+  registered command's steps the same way.
   The exclusive `input` recomputes the current step's list via the command's
   `step_items` (the one path with `&World`) and stores it on the resource; the
   non-exclusive `update` just renders that stored list, rebuilding rows only when
@@ -518,7 +501,6 @@ asset-loaded sprites.
 | `src/map/components/land_graphic.rs` | per-land polygon outline + scanline fill + name/yield label. `startup` (Startup) spawns one `LandGraphic` per `Land` with a `UIWithLand` back-ref plus five `LandLabel` `Text2d` entities (main label + four shadow siblings forming a 1px black outline) per land. `update` (PostUpdate) reads `LandBorders` + `StringId` to draw the outline (yellow when selected, brown otherwise) + scanline fill (green-tinted when player-owned), and refreshes each label's `Text2d` with the current yield line |
 | `src/map/components/border_graphic.rs` | world-border rectangle + sea wash. `startup` (Startup) spawns the single `BorderGraphic` entity; `update` (PostUpdate) reads `Border` and draws the rect + the scanline fill inside it |
 | `src/map/components/common.rs` | shared back-ref components for icons that follow an entity (`UIWithArmy`, `UIWithKingdom`, `UIWithLand`) + the shared `pub(crate) fn fill` scanline helper reused by `land_graphic` and `border_graphic` |
-| `src/ui/army.rs` | the `ARMY` right-column panel (one `<ArmyName> (<levy>)` row per army under the selected land's kingdom) |
 | `src/game/construction.rs` | `tick` — flips `BUILDING` buildings to `ACTIVE` once the date passes their finish date |
 | `src/ctx.rs` | `Ctx` (session state: rng, player id, selection), `startup`, selection `step` |
 | `src/content.rs` | `Content`, per-kind structs, `parse_file`, `merge`, `validate` |

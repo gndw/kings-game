@@ -2,11 +2,8 @@
 //! land the actor rules.
 //!
 //! One selection step (pick a ruled land); the action then immediately spawns
-//! the army on enter. From the actions panel the player presses **R** while
-//! holding a land they own and the same [`execute`] runs with the selected
-//! land as the choice — no land re-pick. The actions panel hooks that path
-//! directly via [`crate::ui::actions::direct_raise`] so the palette isn't
-//! involved at all.
+//! the army on enter. Reach it through the command palette (**C** then pick
+//! *Raise Army*).
 //!
 //! Initial levy comes from the per-building `BuildingLevy` pool (not from
 //! the defs directly): the sum of every ACTIVE building's available levy

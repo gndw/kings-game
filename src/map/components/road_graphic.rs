@@ -35,7 +35,7 @@ pub const DASH_GAP_SCALE: f32 = 2.0;
 pub const DASH_LINE_SCALE: f32 = 4.0;
 /// Road line colour. Same warm brown as the holding-icon castle so roads
 /// read as part of the same cartographic family.
-const ROAD_COLOR: Srgba = Srgba::rgb(0.59, 0.29, 0.0);
+const ROAD_COLOR: Srgba = Srgba::new(0.0, 0.0, 0.0, 0.3);
 
 /// Spawn one [`RoadGraphic`] marker per road. `update` then drives the draw
 /// every frame.

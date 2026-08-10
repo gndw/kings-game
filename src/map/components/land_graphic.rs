@@ -1,11 +1,14 @@
-//! Visual marker for a land on the map: the polygon outline + scanline
-//! fill, plus the `Text2d` name + yield label that sits just below the
-//! holding point. One [`LandGraphic`] is spawned per land at startup (via
-//! [`startup`]); the per-frame [`update`] walks every `LandGraphic`, reads
-//! the back-ref'd land's `LandBorders` + `StringId`, and draws the polygon
-//! — brown outline normally, yellow when selected; brown fill normally,
-//! green-tinted when the player owns the land. The label is refreshed each
-//! frame so the yield line tracks construct/destroy.
+//! Visual marker for a land on the map: the polygon outline + scanline fill.
+//! One [`LandGraphic`] is spawned per land at startup (via [`startup`]); the
+//! per-frame [`update`] walks every `LandGraphic`, reads the back-ref'd
+//! land's `LandBorders` + `StringId`, and draws the polygon — brown outline
+//! normally, yellow when selected; brown fill normally, green-tinted when
+//! the player owns the land.
+//!
+//! The name + yield `Text2d` label that sits just below the holding point
+//! lives in `holding_icon` (the castle and the label are both anchored to
+//! the same land-holding point, so they share a module). See
+//! [`crate::map::components::holding_icon`].
 //!
 //! Mirrors the `holding_icon` lifecycle pattern (one startup-spawned icon
 //! per entity, one per-frame update).
@@ -13,25 +16,17 @@
 //! Visual-only — lifecycle is event-free.
 
 use super::common::{fill, UIWithLand};
-use super::super::FONT_SIZE;
 use crate::app::Game;
-use crate::ecs::land::{Land, LandBorders, LandHasBuildings, LandHolding, LandName};
-use crate::ecs::{BuildingOf, BuildingStatus, CharacterLeads, KingdomHold, Registry, StringId};
-use crate::resources::buildings::BuildingDefs;
+use crate::ecs::land::{Land, LandBorders};
+use crate::ecs::{CharacterLeads, KingdomHold, Registry, StringId};
 use bevy::color::Srgba;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
-use bevy::sprite::Anchor;
 use std::collections::HashSet;
 
 /// Marker on an entity that drives the per-land outline + fill draw.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct LandGraphic;
-
-/// Marker on the `Text2d` entities spawned for a land's name + yield label,
-/// so [`update`] can find them and refresh the yield line each frame.
-#[derive(Component)]
-pub struct LandLabel(pub Entity);
 
 /// Gizmo config group dedicated to the per-land polygon outline. Uses a
 /// thinner 1.0px stroke (vs the default 2.0px) so the borders read as
@@ -41,70 +36,23 @@ pub struct LandLabel(pub Entity);
 #[derive(Default, Reflect, GizmoConfigGroup)]
 pub struct LandBorderGizmoConfigGroup;
 
-/// Gap between the holding's ground point and the per-land label's top
-/// edge. The castle icon's base sits on the holding point, so this is just
-/// a small pad below the gate.
-const HOLDING_LABEL_OFFSET: f32 = 6.0;
-/// World-space offset for the per-label black outline. At the camera's 0.7
-/// scale this is roughly a 1px border, just enough to lift the white text off
-/// the varied land fills without overpowering the names.
-const LABEL_BORDER_OFFSET: f32 = 1.5;
-/// Black-text offsets that form a four-direction outline around each label.
-/// `Text2d` has no built-in outline; the trick is to spawn one black copy at
-/// each cardinal direction behind the main white text.
-const LABEL_BORDER_SHADOWS: [(f32, f32); 4] = [
-    (LABEL_BORDER_OFFSET, 0.0),
-    (-LABEL_BORDER_OFFSET, 0.0),
-    (0.0, LABEL_BORDER_OFFSET),
-    (0.0, -LABEL_BORDER_OFFSET),
-];
-
-/// Spawn one [`LandGraphic`] per land (for the polygon draw), plus five
-/// [`LandLabel`] entities per land (one main white label + four black
-/// shadow siblings forming a 1px outline). The per-frame [`update`] system
-/// refreshes the label yield and draws the polygon.
+/// Spawn one [`LandGraphic`] per land (for the polygon draw). The per-frame
+/// [`update`] system walks them and draws the polygon. The name + yield
+/// `Text2d` label is spawned by `holding_icon::startup`.
 pub fn startup(
     mut commands: Commands,
     // populate has already run by the time Startup schedules, so the land
     // entities exist and this query resolves.
-    lands: Query<(Entity, &LandName, &LandHolding), With<Land>>,
+    lands: Query<Entity, With<Land>>,
 ) {
-    for (land_e, name, holding) in &lands {
+    for land_e in &lands {
         commands.spawn((LandGraphic, UIWithLand(land_e)));
-
-        let x = holding.0.0 as f32;
-        let y = holding.0.1 as f32 - HOLDING_LABEL_OFFSET;
-        // Black outline: four black copies of the text at cardinal offsets
-        // behind the main white text. `Text2dShadow` is a single drop
-        // shadow, not a real outline, so the border is faked with sibling
-        // entities.
-        for (dx, dy) in LABEL_BORDER_SHADOWS {
-            commands.spawn((
-                Text2d::new(name.0.clone()),
-                TextFont::from_font_size(FONT_SIZE).with_font_weight(FontWeight::EXTRA_BOLD),
-                TextColor(Color::Srgba(css::BLACK)),
-                TextLayout::new(Justify::Center, LineBreak::WordBoundary),
-                Anchor::TOP_CENTER,
-                LandLabel(land_e),
-                Transform::from_xyz(x + dx, y + dy, 1.0),
-            ));
-        }
-        // Main label on top of the outline.
-        commands.spawn((
-            Text2d::new(name.0.clone()),
-            TextFont::from_font_size(FONT_SIZE).with_font_weight(FontWeight::EXTRA_BOLD),
-            TextColor(Color::Srgba(css::WHITE)),
-            TextLayout::new(Justify::Center, LineBreak::WordBoundary),
-            Anchor::TOP_CENTER,
-            LandLabel(land_e),
-            Transform::from_xyz(x, y, 1.0),
-        ));
     }
 }
 
 /// Per-frame land outline + fill (brown normally, yellow when selected;
-/// brown fill, green-tinted when player-owned), plus the yield-line refresh
-/// for each land's `Text2d` label.
+/// brown fill, green-tinted when player-owned). The yield label lives in
+/// `holding_icon::update`.
 pub fn update(
     icons: Query<&UIWithLand, With<LandGraphic>>,
     lands: Query<&LandBorders, With<Land>>,
@@ -115,12 +63,6 @@ pub fn update(
     registry: Res<Registry>,
     character_leads: Query<&CharacterLeads>,
     kingdom_holds: Query<&KingdomHold>,
-    defs: Res<BuildingDefs>,
-    land_has_buildings: Query<&LandHasBuildings>,
-    building_of: Query<&BuildingOf>,
-    building_status: Query<&BuildingStatus>,
-    land_names: Query<&LandName>,
-    mut labels: Query<(&LandLabel, &mut Text2d)>,
 ) {
     let sel = game.ctx.selected_land_id.as_deref();
     // Player's own lands, via the reverse CharacterLeads → KingdomHold chain.
@@ -180,20 +122,5 @@ pub fn update(
             borders.0.iter().map(|&(x, y)| Vec2::new(x as f32, y as f32)),
             outline,
         );
-    }
-
-    // Refresh each land label's yield line. The name was baked in at
-    // startup; the yield only changes on construct/destroy, but a per-frame
-    // walk is cheap and keeps the code branch-free.
-    for (label, mut text) in &mut labels {
-        let name = land_names.get(label.0).map(|n| n.0.as_str()).unwrap_or("");
-        let (gold, levy) = crate::game::yields::sum_land_yield(
-            label.0,
-            &land_has_buildings,
-            &building_of,
-            &building_status,
-            &defs,
-        );
-        text.0 = format!("{name}\n({gold:+}g/m {levy:+})");
     }
 }

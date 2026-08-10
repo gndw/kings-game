@@ -389,10 +389,14 @@ asset-loaded sprites.
 - **Map** (`ui/map.rs`) and **Camera** (`ui/camera.rs`): the map module owns
   only the arrow-key selection step; the world-border rectangle + sea
   wash lives in [`border_graphic`](crate::map::components::border_graphic);
-  the per-land polygon outline, scanline fill, and yield label live in
+  the per-land polygon outline + scanline fill lives in
   [`land_graphic`](crate::map::components::land_graphic); the per-kingdom
-  castle lives in
-  [`holding_icon`](crate::map::components::holding_icon). The camera
+  castle and the per-land name + yield `Text2d` label live in
+  [`holding_icon`](crate::map::components::holding_icon) (both anchor to
+  the same land-holding point, so they share a module). The label shows
+  the name alone on foreign lands and `name\ngold/m levy/m` on lands the
+  player's kingdom holds — the yield is the player's bookkeeping, not
+  foreign intel. The camera
   module owns the `Camera2d` entity and its `update_camera` system:
   `startup` spawns the camera framed on the whole `Border` with an
   `AutoMin` projection so the island never distorts and never pans,
@@ -400,12 +404,11 @@ asset-loaded sprites.
   (in-flight `from`/`to`/`t`). `border_graphic::update` draws the world
   border; `land_graphic::update` draws each land's outline (gizmos draw
   lines only, so the fill is a **scanline** routine handling the map's
-  concave shapes), the per-kingdom holding castle via
-  [`crate::map::components::holding_icon`] (yellow when selected, brown
-  otherwise — the colour flip replaces the old flag-on-selected cue), and
-  the player's own holdings tinted green. The waving pennant on the
-  selection is gone; the castle itself turning yellow is the selection
-  cue. `update_camera` (PostUpdate,
+  concave shapes); `holding_icon::update` positions the per-kingdom
+  castle gizmo (yellow when selected, brown otherwise — the colour flip
+  replaces the old flag-on-selected cue) and refreshes each land label.
+  The waving pennant on the selection is gone; the castle itself turning
+  yellow is the selection cue. `update_camera` (PostUpdate,
   runs *before* `update_draw`) computes the destination from
   `Game::zoomed` + `selected_land_id` each frame — unzoomed → whole `Border`,
   zoomed → selected land's polygon bbox + `ZOOM_MARGIN`, centred on the bbox
@@ -497,8 +500,8 @@ asset-loaded sprites.
 | `src/map/components/road_graphic.rs` | per-road dashed-line visual — startup spawns one `RoadGraphic` marker per road (back-reffed by `UIWithRoad`) and a per-frame `update` draws the polyline through the `RoadGizmoConfigGroup` gizmo group, whose config carries the `GizmoLineStyle::Dashed` style; the line colour reports the road's `RoadHasMarchings` (green = an army is on it, gray = a march is queued on it, default otherwise) |
 | `src/game/marching.rs` | the per-day marching tick (`OnDay` — activate scheduled marchings on the matching source land, move arrived armies one road onward, chain into the next marching or return to Idle) + `road_days` (the one place a road's `RoadDistanceDays` is resolved) |
 | `src/game/replenish_levy.rs` | the monthly `BuildingLevy` top-up (`OnMonth` — every ACTIVE building's pool += `def.levy_rate`, capped at `def.levy`) |
-| `src/map/components/holding_icon.rs` | the castle-icon visual (three crenellated white-line towers with a centre keep, side walls, and a central gate) — reusable gizmo primitive in `pub fn draw(gizmos, at, color)`. `startup` (Startup) spawns one `HoldingIcon` per `Kingdom` with a `UIWithKingdom` back-ref; `update` (PostUpdate) reads `KingdomHold` → `LandHolding` to position each icon at the kingdom's home land and draws the gizmo (yellow when that land is selected, brown otherwise) |
-| `src/map/components/land_graphic.rs` | per-land polygon outline + scanline fill + name/yield label. `startup` (Startup) spawns one `LandGraphic` per `Land` with a `UIWithLand` back-ref plus five `LandLabel` `Text2d` entities (main label + four shadow siblings forming a 1px black outline) per land. `update` (PostUpdate) reads `LandBorders` + `StringId` to draw the outline (yellow when selected, brown otherwise) + scanline fill (green-tinted when player-owned), and refreshes each label's `Text2d` with the current yield line |
+| `src/map/components/holding_icon.rs` | the castle-icon visual (three crenellated white-line towers with a centre keep, side walls, and a central gate) + the per-land name/yield `Text2d` label (anchored to the same land-holding point as the castle). Reusable gizmo primitive in `pub fn draw(gizmos, at, color)`. `startup` (Startup) spawns one `HoldingIcon` per `Kingdom` with a `UIWithKingdom` back-ref plus five `LandLabel` `Text2d` entities (main label + four shadow siblings forming a 1px black outline) per `Land`. `update` (PostUpdate) reads `KingdomHold` → `LandHolding` to position each castle (yellow when that land is selected, brown otherwise), and refreshes each label — `name\ngold/m levy/m` on lands the player's kingdom holds, the name only on foreign lands |
+| `src/map/components/land_graphic.rs` | per-land polygon outline + scanline fill. `startup` (Startup) spawns one `LandGraphic` per `Land` with a `UIWithLand` back-ref. `update` (PostUpdate) reads `LandBorders` + `StringId` to draw the outline (yellow when selected, brown otherwise) + scanline fill (green-tinted when player-owned). The name/yield label moved to `holding_icon` |
 | `src/map/components/border_graphic.rs` | world-border rectangle + sea wash. `startup` (Startup) spawns the single `BorderGraphic` entity; `update` (PostUpdate) reads `Border` and draws the rect + the scanline fill inside it |
 | `src/map/components/common.rs` | shared back-ref components for icons that follow an entity (`UIWithArmy`, `UIWithKingdom`, `UIWithLand`) + the shared `pub(crate) fn fill` scanline helper reused by `land_graphic` and `border_graphic` |
 | `src/game/construction.rs` | `tick` — flips `BUILDING` buildings to `ACTIVE` once the date passes their finish date |

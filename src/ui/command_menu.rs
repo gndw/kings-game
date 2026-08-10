@@ -4,8 +4,10 @@
 //! [`Command`](crate::commands::Command); up/down moves, **Enter** drills into
 //! the picked command's own selection steps, and the final step's pick runs its
 //! effect. **Escape** closes. While open it captures the arrows (so the map
-//! selection doesn't move) and Escape (so the game doesn't quit) — both gated
-//! by reading [`CommandMenu::open`] from `app::input` and `ui::map::update_input`.
+//! selection doesn't move) and Escape (so the game doesn't quit) — the root
+//! layer flips to [`InputLayer::CommandMenu`](crate::resources::input_layer::InputLayer::CommandMenu)
+//! so [`ui::input`](crate::ui::input)'s root-only systems skip while the
+//! palette is up.
 //!
 //! The palette is command-agnostic: it drives *any* registered command's steps
 //! the same way, so adding a command needs no change here. [`input`] computes
@@ -28,8 +30,9 @@ use bevy::input::keyboard::{KeyCode, KeyboardInput};
 use bevy::prelude::*;
 
 /// The palette's state. Only [`CommandMenu::open`] is read outside this module
-/// (by `app::input` and `ui::map::update_input`, to yield `esc`/arrows). The
-/// rest is driven generically off the [`CommandRegistry`].
+/// (currently unused; the [`InputLayer`](crate::resources::input_layer::InputLayer)
+/// resource is what gates root input now). The rest is driven generically
+/// off the [`CommandRegistry`].
 #[derive(Resource, Default)]
 pub struct CommandMenu {
     pub open: bool,
@@ -520,6 +523,9 @@ fn close(world: &mut World) {
     m.index = 0;
     m.query.clear();
     m.choices.clear();
+    // Hand input back to the root layer so global keys + map arrows work again.
+    *world.resource_mut::<crate::resources::input_layer::InputLayer>() =
+        crate::resources::input_layer::InputLayer::Root;
 }
 
 /// Open the palette into `command` at `step` with `choices` already made. The
@@ -534,5 +540,9 @@ fn open_menu(world: &mut World, command: Option<usize>, step: usize, choices: Ve
         m.query.clear();
         m.choices = choices;
     }
+    // Take over input — the root-layer systems in `ui::input` are gated to
+    // skip while this layer is active.
+    *world.resource_mut::<crate::resources::input_layer::InputLayer>() =
+        crate::resources::input_layer::InputLayer::CommandMenu;
     refresh(world);
 }

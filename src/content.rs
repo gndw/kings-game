@@ -10,7 +10,8 @@
 //! kind, passed whole into [`crate::ecs::populate`].
 //!
 //! `crate::mods` does the loading and merging; the camera and drawing live in
-//! `crate::ui::map`.
+//! `crate::ui::input::map_selection` (root layer) plus the
+//! `map::components` siblings.
 
 use crate::ecs::{BuildingStatus, CourtierType};
 use crate::resources::border::Border;

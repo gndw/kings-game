@@ -1,7 +1,8 @@
 //! The text overlays: the chronicle panel, plus the resource bar along the top
 //! and the status bar along the bottom. The camera lives in `camera`, the
-//! gizmo map drawing in `map`, and the layout that spawns the panels in
-//! `startup`.
+//! gizmo map drawing in `map::components`, the layout that spawns the panels
+//! in `startup`, and the root-layer input handlers (global keys + map
+//! selection) in `input`.
 
 pub mod army;
 pub mod buildings;
@@ -11,7 +12,7 @@ pub mod command_menu;
 pub mod courts;
 pub mod flag;
 pub mod information;
-pub mod map;
+pub mod input;
 pub mod resource;
 pub mod startup;
 pub mod status;

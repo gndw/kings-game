@@ -104,10 +104,10 @@ flat. `decision.md` is the authoritative *why* for the component/relationship
 shape; this is the *what*.
 
 - **Entity kinds** are marker-tag components: `House`, `Character`, `Land`,
-  `Kingdom`, `Army`, `Marching`, `Road`, `War`, `CasusBelli`. Each kind's data is **one field per component** so a system queries
+  `Kingdom`, `Army`, `Marching`, `Road`, `War`, `CasusBelli`, `Siege`. Each kind's data is **one field per component** so a system queries
   only what it touches (payout needs gold + yield, not the date of birth), in its own file:
   `house.rs`, `character.rs`, `land.rs`, `kingdom.rs`, `army.rs`, `marching.rs`,
-  `road.rs`, `war.rs`, `casus_belli.rs` (all under `ecs/`). Marching is a run-time entity only — the player spawns
+  `road.rs`, `war.rs`, `casus_belli.rs`, `siege.rs` (all under `ecs/`). Marching is a run-time entity only — the player spawns
   them via the `MarchingOrder` command and the daily tick reaps them when the
   army arrives — so they don't appear in `populate` or mod data. One marching
   is one road: `MarchingOnRoad` names it and `MarchingFromLand` /
@@ -181,6 +181,14 @@ shape; this is the *what*.
     `Vec<Entity>`) — the kingdom the CB targets. A `Conquest` CB aims to
     seize that kingdom; other CB shapes (reparations, religious claims, …)
     would target something else but reuse the same single-`Entity` link.
+  - `SiegeAttackerArmy` (on siege) ↔ `ArmyHasSiege` (on army, single
+    `Entity` — one army can only besiege one land at a time) and
+    `SiegeDefenderLand` (on siege) ↔ `LandHasSiegesUnderAttack` (on land,
+    `Vec<Entity>` — multiple armies can besiege the same land at once).
+  - `ArmyControlsLand` (on army) ↔ `LandControlledByArmy` (on land, single
+    `Entity`) — set by the siege tick when a siege resolves at 100%; the
+    conquering army claims the land. The land's `LandHeldBy` (kingdom link)
+    is *not* touched yet — conquest transfer is the next change.
   - Plain (non-relationship) entity links: `CharacterOfHouse`
     (character→house), `BuildingOf`
     (building→definition id, a string looked up against the `BuildingDefs`
@@ -381,6 +389,18 @@ the style of `ctx::step`.
   offering — so the entity exists to wire the relationship graph and
   record the declaration in the chronicle. Two steps (pick a target
   kingdom, pick a CB type).
+- **`LaySiege`** lays siege to a land with one of the player's armies.
+  One step (pick an army); the army's current land is the target, and
+  `step_items` filters the list to armies on *foreign* lands (your own
+  capital isn't a siege option). Spawns a `Siege` entity with
+  `SiegeProgress(0)` and `SiegeNextEventDate(today + 10)`, then flips
+  the army's `ArmyStatus` to `Sieging`. From there the per-day
+  [`siege::tick`](src/game/siege.rs) advances progress on each scheduled
+  event; at 100% the siege is won (buildings flip to `Inactive`,
+  `ArmyControlsLand` lands on the army, the army returns to `Idle`).
+  Foreign-land check re-runs in `execute` as defense-in-depth — the
+  step_items filter is the player-facing UX, the execute check catches
+  any caller that bypasses the palette.
 - **Runtime building id** is a v4 UUID drawn from the seeded `SimRng` (not OS
   entropy), keeping the one-entropy-source invariant; format-only, no `uuid`
   crate.
@@ -533,9 +553,11 @@ asset-loaded sprites.
 | `src/commands/dismiss_army.rs` | the `DismissArmy` command (validate + distribute `ArmyLevy` back into `BuildingLevy` + despawn + deregister + reap queued marchings) |
 | `src/commands/marching.rs` | the `MarchingOrder` command (validate + trace the road route + spawn one `Marching` entity per road, each `MarchingStatus::Scheduled` with empty dates) |
 | `src/commands/declare_war.rs` | the `DeclareWar` command (validate + spawn a `CasusBelli` entity + spawn a `War` entity, no resolution path yet) |
+| `src/commands/siege.rs` | the `LaySiege` command (validate foreign-land + spawn a `Siege` entity + flip the army to `Sieging`) |
 | `src/ecs/marching.rs` | the `Marching` entity kind — `Marching` marker + `MarchingArmy`/`MarchingFromLand`/`MarchingToLand`/`MarchingOnRoad` relationships + `MarchingBeginDate`/`MarchingArrivedDate` + `MarchingStatus` enum |
 | `src/ecs/war.rs` | the `War` entity kind — `War` marker + `WarAttackerKingdom`/`WarDefenderKingdom` (to kingdoms) + `WarWithCasusBelli` (to a CB) + `WarName` (e.g. `"Conquest over Kingdom of Riverrun"`) + `WarBeginDate` (declare-time snapshot) |
 | `src/ecs/casus_belli.rs` | the `CasusBelli` entity kind — `CasusBelli` marker + `CasusBelliType` enum (`Conquest`) + `CasusBelliKingdom` (to the targeted kingdom) + `CasusBelliOnWar` reverse target |
+| `src/ecs/siege.rs` | the `Siege` entity kind — `Siege` marker + `SiegeAttackerArmy`/`SiegeDefenderLand` (to the two ends) + `SiegeProgress` (0–100) + `SiegeNextEventDate` |
 | `src/ecs/road.rs` | the `Road` entity kind — `Road` marker + `RoadPoints(Vec<(f64,f64)>)` + `RoadBetweenLands(Vec<Entity>)` + `RoadDistanceDays(u32)` (definition-only; no Bevy relationship) + `RoadHasMarchings` (the reverse of `MarchingOnRoad`) |
 | `src/map/components/road_graphic.rs` | per-road dashed-line visual — startup spawns one `RoadGraphic` marker per road (back-reffed by `UIWithRoad`) and a per-frame `update` draws the polyline through the `RoadGizmoConfigGroup` gizmo group, whose config carries the `GizmoLineStyle::Dashed` style; the line colour reports the road's `RoadHasMarchings` (green = an army is on it, gray = a march is queued on it, default otherwise) |
 | `src/game/marching.rs` | the per-day marching tick (`OnDay` — activate scheduled marchings on the matching source land, move arrived armies one road onward, chain into the next marching or return to Idle) + `road_days` (the one place a road's `RoadDistanceDays` is resolved) |
@@ -553,7 +575,8 @@ asset-loaded sprites.
 | `src/mods/mod.rs` | `load(dir)` — the two-pass orchestrator |
 | `src/resources/*` | `Border`, `Calendar`(+validate, carries `start`), `Date` (the walking clock), `BuildingDefs`/`BuildingDef` (kind roster), `Chronicles` (log) |
 | `src/ecs/ecs.rs` | `StringId`, `Registry`, `populate` |
-| `src/ecs/{house,character,land,building,kingdom,courtier,army,war,casus_belli}.rs` | components + relationships per kind |
+| `src/ecs/{house,character,land,building,kingdom,courtier,army,war,casus_belli,siege}.rs` | components + relationships per kind |
+| `src/game/siege.rs` | the per-day siege tick (`OnDay` — advance `SiegeProgress` by 30 every 10 days; at 100% insert `ArmyControlsLand` on the army, flip every building on the land to `Inactive`, return the army to `Idle`, despawn the siege) |
 | `src/ecs.rs` | module root, re-exports, the component map |
 | `src/schedules.rs` | `OnDay` + `OnMonth` labels |
 | `src/game/advance_date.rs` | the tick (exclusive `&mut World`) |

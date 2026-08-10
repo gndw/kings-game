@@ -15,6 +15,7 @@ use super::construct_building::ConstructBuilding;
 use super::declare_war::DeclareWar;
 use super::destroy_building::DestroyBuilding;
 use super::dismiss_army::DismissArmy;
+use super::lay_siege::LaySiege;
 use super::marching::MarchingOrder;
 use super::raise_army::RaiseArmy;
 use crate::app::Game;
@@ -104,6 +105,7 @@ impl Default for CommandRegistry {
         r.register(Arc::new(DismissArmy));
         r.register(Arc::new(MarchingOrder));
         r.register(Arc::new(DeclareWar));
+        r.register(Arc::new(LaySiege));
         r
     }
 }

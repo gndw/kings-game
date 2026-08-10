@@ -68,6 +68,7 @@ pub mod kingdom;
 pub mod land;
 pub mod marching;
 pub mod road;
+pub mod siege;
 pub mod war;
 
 pub use army::*;
@@ -80,4 +81,5 @@ pub use house::*;
 pub use kingdom::*;
 pub use land::*;
 pub use road::*;
+pub use siege::*;
 pub use war::*;

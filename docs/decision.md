@@ -458,3 +458,44 @@ total.
   `stand_down` there, because leaving it `Marching` with an `ArmyMarching`
   pointing at a despawned entity would freeze it permanently (the tick
   would look up a missing arrived date and skip, every day, forever).
+
+## Siege is its own entity kind; conquest pauses the realm economy
+
+A siege is a separate entity, not a marker on the army or the land. It
+carries the scheduling data (`SiegeProgress`, `SiegeNextEventDate`) plus
+the two relationships to the belligerents (`SiegeAttackerArmy`,
+`SiegeDefenderLand`). The army carries its operational state
+(`ArmyStatus::Sieging`); the land is the target.
+
+- **Why an entity, not a component on the army:** an army can stand on
+  a foreign land without laying siege to it — the siege is a *decision*
+  the player takes, not a state the army is always in. Putting it on
+  the army would have meant every foreign-land army carries siege
+  fields it does not need, and the relationship to the target land
+  would live on the wrong archetype. A separate entity also lets the
+  defender kingdom dispatch relief forces or counter-sieges later
+  without changing the army shape.
+- **Why conquest flips every building on the land to `Inactive`:** the
+  visible consequence of losing a land is the economy stopping. Until
+  the conquest-transfer code lands (the war-resolution piece), this is
+  the player's only signal that something happened — the realm keeps
+  its `LandHeldBy` (the kingdom link) until war resolution moves it,
+  but its buildings stop contributing until then. Reverting to
+  `Active` would be the relief-force outcome, also still TBD.
+- **`ArmyHasSiege` is single, `LandHasSiegesUnderAttack` is `Vec`.** An
+  army can only stand on one land and can't split itself across two
+  sieges — one army = at most one siege. A land can be under attack
+  from multiple armies at once (different kingdoms, different progress
+  schedules). The relationship-colocation rule places the reverses on
+  the army / land files accordingly.
+- **`SiegeProgress` is per-siege, not per-attacker.** All armies
+  besieging the same land march at their own pace; the per-siege
+  counter is the unit of resolution. A siege ends when *its*
+  `SiegeProgress` hits 100 — independent of whether other sieges on the
+  same land are still running.
+- **No resolution of `LandHeldBy` (yet).** When a siege wins, the
+  conquering army gets `ArmyControlsLand` but the defending kingdom's
+  `LandHeldBy` stays put. That's the war-resolution piece, also still
+  TBD — adding it (transfer the land to the attacker's kingdom) is the
+  obvious next step, and the relationship hooks (Bevy auto-prunes the
+  old `LandHeldBy`) keep the change mechanical.

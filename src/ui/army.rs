@@ -15,12 +15,16 @@
 //!   next hop), and `<days>` is the total remaining march time: days left
 //!   on the currently `OnRoute` hop plus each subsequent `Scheduled`
 //!   hop's `RoadDistanceDays`.
+//! - **Sieging** — `"<name> (<levy>) at <land> sieging at <progress>%"`,
+//!   where `<progress>` is the siege's `SiegeProgress` (0–100; resolves
+//!   the land to the attacker when it hits 100).
 
 use super::{FONT, TITLE};
 use crate::app::Game;
-use crate::ecs::army::{ArmyHasMarching, ArmyMarching, ArmyStatus};
+use crate::ecs::army::{ArmyHasMarching, ArmyHasSiege, ArmyMarching, ArmyStatus};
 use crate::ecs::marching::{MarchingArrivedDate, MarchingOnRoad, MarchingStatus, MarchingToLand};
 use crate::ecs::road::RoadDistanceDays;
+use crate::ecs::siege::SiegeProgress;
 use crate::ecs::{
     ArmyLevy, ArmyName, ArmyOnLand, CharacterLeads, KingdomHasArmies, LandName, Registry,
 };
@@ -85,12 +89,14 @@ pub fn update(
         Option<&ArmyMarching>,
     )>,
     army_queues: Query<&ArmyHasMarching>,
+    army_sieges: Query<&ArmyHasSiege>,
     marchings: Query<(
         &MarchingStatus,
         &MarchingToLand,
         &MarchingOnRoad,
         Option<&MarchingArrivedDate>,
     )>,
+    siege_progress: Query<&SiegeProgress>,
     roads: Query<&RoadDistanceDays>,
     lands: Query<&LandName>,
     player_chars: Query<&CharacterLeads>,
@@ -112,7 +118,9 @@ pub fn update(
                         army_e,
                         &armies,
                         &army_queues,
+                        &army_sieges,
                         &marchings,
+                        &siege_progress,
                         &roads,
                         &lands,
                         &calendar,
@@ -139,10 +147,13 @@ pub fn update(
     }
 }
 
-/// Build one army's panel line from its live entity data. Two shapes:
+/// Build one army's panel line from its live entity data. Three shapes:
 ///
 /// - **Idle** — `"<name> (<levy>) at <land>"`.
 /// - **Marching** — `"<name> (<levy>) at <land> marching to <final_dest> at <days> days"`.
+/// - **Sieging** — `"<name> (<levy>) at <land> sieging at <progress>%"`,
+///   reading the siege's [`SiegeProgress`] through the army's `ArmyHasSiege`
+///   reverse target.
 ///
 /// `None` when the army's required components are missing — the caller
 /// filters those out so a torn-world army doesn't crash the panel.
@@ -157,12 +168,14 @@ fn format_army_line(
         Option<&ArmyMarching>,
     )>,
     army_queues: &Query<&ArmyHasMarching>,
+    army_sieges: &Query<&ArmyHasSiege>,
     marchings: &Query<(
         &MarchingStatus,
         &MarchingToLand,
         &MarchingOnRoad,
         Option<&MarchingArrivedDate>,
     )>,
+    siege_progress: &Query<&SiegeProgress>,
     roads: &Query<&RoadDistanceDays>,
     lands: &Query<&LandName>,
     calendar: &Calendar,
@@ -191,6 +204,23 @@ fn format_army_line(
                 date,
             );
             Some(format!("{base} marching to {final_dest} at {total_days} days"))
+        }
+        ArmyStatus::Sieging => {
+            // The siege progress sits on the siege entity, reachable
+            // through `ArmyHasSiege` (the auto-maintained reverse of
+            // `SiegeAttackerArmy`). If the link is missing — the siege
+            // was just despawned by the tick, or a torn world — fall
+            // back to "sieging" with no progress so the line still
+            // shows the army is busy.
+            let progress = army_sieges
+                .get(army_e)
+                .ok()
+                .and_then(|army_has_siege| {
+                    siege_progress.get(army_has_siege.siege()).ok()
+                })
+                .map(|siege_progress| siege_progress.0)
+                .unwrap_or(0);
+            Some(format!("{base} sieging at {progress}%"))
         }
     }
 }

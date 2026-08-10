@@ -194,6 +194,7 @@ fn main() -> Result<()> {
             (
                 game::construction::construction,
                 game::marching::tick,
+                game::siege::tick,
             ),
         )
         .add_systems(

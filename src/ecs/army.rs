@@ -13,8 +13,9 @@
 //! `LandHasArmies` and the kingdom's `KingdomHasArmies`.
 
 use super::kingdom::KingdomHasArmies;
-use super::land::LandHasArmies;
+use super::land::{LandControlledByArmy, LandHasArmies};
 use super::marching::MarchingArmy;
+use super::siege::SiegeAttackerArmy;
 use bevy::ecs::entity::Entity;
 use bevy::prelude::Component;
 
@@ -24,17 +25,23 @@ use bevy::prelude::Component;
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Army;
 
-/// The operational status of an army. `Idle` — sitting on its land, ready for
-/// orders. `Marching` — currently in motion, working through a queue of
-/// marchings. Set to `Idle` on raise; the daily
-/// [`march`](crate::game::marching::tick) tick flips it to `Marching` when a
-/// scheduled marching is activated, and back to `Idle` when the queue runs
-/// dry.
+/// The operational status of an army.
+///
+/// - `Idle` — sitting on its land, ready for orders.
+/// - `Marching` — currently in motion, working through a queue of
+///   marchings. Set to `Idle` on raise; the daily
+///   [`march`](crate::game::marching::tick) tick flips it to `Marching`
+///   when a scheduled marching is activated, and back to `Idle` when the
+///   queue runs dry.
+/// - `Sieging` — committed to a siege on the land it stands on. Set by
+///   [`crate::commands::lay_siege::LaySiege`] on the army the player picks; the
+///   siege tick flips it back to `Idle` when the siege resolves at 100%.
 #[derive(Component, Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum ArmyStatus {
     #[default]
     Idle,
     Marching,
+    Sieging,
 }
 
 /// The number of levy troops in this army. Defaults to 0; future code paths
@@ -79,3 +86,29 @@ pub struct ArmyMarching(pub Entity);
 #[derive(Component, Debug, Default)]
 #[relationship_target(relationship = MarchingArmy)]
 pub struct ArmyHasMarching(Vec<Entity>);
+
+/// The siege this army is currently running — the auto-maintained reverse
+/// of [`SiegeAttackerArmy`](super::siege::SiegeAttackerArmy). Single
+/// `Entity` (not Vec) because an army can only besiege one land at a time
+/// — it's standing on the target land and can't be split. Bevy's hook drops
+/// the older siege if a second one tries to claim the same army.
+#[derive(Component, Debug, Clone, Copy)]
+#[relationship_target(relationship = SiegeAttackerArmy)]
+pub struct ArmyHasSiege(Entity);
+
+impl ArmyHasSiege {
+    /// The siege this army is currently running.
+    pub fn siege(&self) -> Entity {
+        self.0
+    }
+}
+
+/// The land this army controls. Inserted by
+/// [`crate::game::siege::tick`] when a siege resolves at 100%; the
+/// relationship hook fills [`LandControlledByArmy`](super::land::LandControlledByArmy)
+/// on the target land. The army's `ArmyOnLand` already points at the same
+/// land — `ArmyControlsLand` is the *conquered* marker, distinct from
+/// "currently standing on" so future code can tell the two apart.
+#[derive(Component, Debug, Clone, Copy)]
+#[relationship(relationship_target = LandControlledByArmy)]
+pub struct ArmyControlsLand(pub Entity);

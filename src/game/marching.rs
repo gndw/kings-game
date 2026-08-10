@@ -182,6 +182,11 @@ pub fn tick(world: &mut World) {
                     }
                 }
             }
+            // Sieging armies are owned by `game::siege::tick` — the marching
+            // tick leaves them alone so the siege can resolve on its own
+            // schedule. They can't accept new marchings while the siege is
+            // running; the siege tick flips them back to `Idle` at 100%.
+            ArmyStatus::Sieging => {}
         }
     }
 }

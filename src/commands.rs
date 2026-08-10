@@ -16,12 +16,14 @@
 //! - [`dismiss_army`] — dismiss an army the actor rules.
 //! - [`marching`] — queue a marching order to move an army to another land.
 //! - [`declare_war`] — declare war on another kingdom under a casus belli.
+//! - [`lay_siege`] — lay siege to a land with one of the player's armies.
 
 pub mod construct_building;
 pub mod core;
 pub mod declare_war;
 pub mod destroy_building;
 pub mod dismiss_army;
+pub mod lay_siege;
 pub mod marching;
 pub mod raise_army;
 

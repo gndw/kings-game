@@ -69,20 +69,26 @@ pub fn update(
     player_chars: Query<&CharacterLeads>,
     kingdom_wars: Query<&KingdomHasWarsAttacking>,
 ) {
-    // Player → kingdom → wars. Any miss short-circuits to "no wars" and
-    // hides the panel — including the case where the player hasn't been
-    // resolved yet (fresh world, no player character entity).
+    // Player → kingdoms → wars. Any miss short-circuits to "no wars"
+    // and hides the panel — including the case where the player
+    // hasn't been resolved yet (fresh world, no player character
+    // entity). Multi-kingdom: union every kingdom the player leads.
     let war_lines: Vec<String> = registry
         .get(&game.ctx.player_character_id)
         .and_then(|player_e| player_chars.get(player_e).ok())
-        .map(|character_leads| character_leads.kingdom())
-        .and_then(|kingdom_e| kingdom_wars.get(kingdom_e).ok())
-        .map(|kingdom_has_wars_attacking| {
-            kingdom_has_wars_attacking
-                .iter()
-                .filter_map(|war_e| wars.get(war_e).ok())
-                .map(|(name, begin)| format!("{} ({})", name.0, begin.0))
-                .collect()
+        .map(|character_leads| {
+            let mut out = Vec::new();
+            for kingdom_e in character_leads.kingdoms() {
+                let Some(kingdom_has_wars) = kingdom_wars.get(*kingdom_e).ok() else {
+                    continue;
+                };
+                for war_e in kingdom_has_wars.iter() {
+                    if let Ok((name, begin)) = wars.get(war_e) {
+                        out.push(format!("{} ({})", name.0, begin.0));
+                    }
+                }
+            }
+            out
         })
         .unwrap_or_default();
 

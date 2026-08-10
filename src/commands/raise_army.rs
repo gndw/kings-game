@@ -77,17 +77,25 @@ fn raise(world: &mut World, actor: &str, land_id: &str) {
         return note(world, format!("cannot raise on {land_id}: no such land"));
     };
 
-    // Rule check: the actor leads the kingdom that holds the land.
-    let actor_k = world
+    // Rule check: any of the actor's kingdoms holds the land. Multi-kingdom:
+    // the army's kingdom is the specific kingdom that holds the chosen land
+    // (so `ArmyBelongsToKingdom` is the holding kingdom, not "the player's
+    // kingdom" generically — the player can have several).
+    let actor_kingdoms = world
         .get::<CharacterLeads>(actor_e)
-        .map(|character_leads| character_leads.kingdom());
-    let land_k = world
+        .map(|character_leads| character_leads.kingdoms().iter().copied().collect::<Vec<_>>());
+    let land_kingdom = world
         .get::<LandHeldBy>(land_e)
         .map(|land_held_by| land_held_by.kingdom());
-    if actor_k.is_none() || actor_k != land_k {
-        return note(world, format!("cannot raise on {land_id}: you don't rule that land"));
-    }
-    let kingdom_e = actor_k.unwrap();
+    let kingdom_e = match (actor_kingdoms, land_kingdom) {
+        (Some(ks), Some(lk)) if ks.contains(&lk) => lk,
+        _ => {
+            return note(
+                world,
+                format!("cannot raise on {land_id}: you don't rule that land"),
+            );
+        }
+    };
 
     let land_name = world
         .get::<LandName>(land_e)

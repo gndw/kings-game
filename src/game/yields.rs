@@ -52,12 +52,14 @@ pub fn sum_land_yield(
     (gold, levy)
 }
 
-/// Recompute every character's `gold_yield` and `levy` from their holdings: a
-/// leader's realm summed via [`sum_land_yield`] (the kingdom's held land);
-/// everyone else zeroed. Runs in `Startup` so the opening screen already shows
-/// what a realm renders. `Option<&CharacterLeads>` walks every character so a
-/// non-ruler is zeroed, not left stale. After startup the construct/destroy
-/// commands trigger [`OnBuildingUpdated`] for per-realm updates.
+/// Recompute every character's `gold_yield` and `levy` from their
+/// holdings: a leader's realm summed via [`sum_land_yield`] (every
+/// kingdom they hold; multi-kingdom sums across all of them); everyone
+/// else zeroed. Runs in `Startup` so the opening screen already shows
+/// what a realm renders. `Option<&CharacterLeads>` walks every
+/// character so a non-ruler is zeroed, not left stale. After startup
+/// the construct/destroy commands trigger [`OnBuildingUpdated`] for
+/// per-realm updates.
 pub fn recompute_yields(
     mut characters: Query<(
         Option<&CharacterLeads>,
@@ -71,34 +73,48 @@ pub fn recompute_yields(
     defs: Res<BuildingDefs>,
 ) {
     for (character_leads, mut character_gold_yield, mut character_levy) in &mut characters {
-        let (g, l) = character_leads
-            .and_then(|character_leads| kingdom_holds.get(character_leads.kingdom()).ok())
-            .map(|kingdom_hold| {
-                sum_land_yield(
+        // Sum across every kingdom the character leads. Multi-kingdom:
+        // a player who rules three kingdoms sees the union of every
+        // kingdom's buildings in their treasury, not just "the first
+        // kingdom's" (the old single-Entity read picked one and lost
+        // the others).
+        let (mut g, mut l) = (0i64, 0u64);
+        if let Some(character_leads) = character_leads {
+            for kingdom_e in character_leads.kingdoms() {
+                let Ok(kingdom_hold) = kingdom_holds.get(*kingdom_e) else {
+                    continue;
+                };
+                let (dg, dl) = sum_land_yield(
                     kingdom_hold.0,
                     &land_has_buildings,
                     &building_of,
                     &building_status,
                     &defs,
-                )
-            })
-            .unwrap_or((0, 0));
+                );
+                g += dg;
+                l += dl;
+            }
+        }
         character_gold_yield.0 = g;
         character_levy.0 = l;
     }
 }
 
-/// Re-sum the kingdom that holds the event's `land` and write that one
-/// leader's [`CharacterGoldYield`] and [`CharacterLevy`]. Wired up as the
-/// observer for [`OnBuildingUpdated`] (defined in [`crate::events`]); called
-/// via `world.trigger(OnBuildingUpdated { building, land, kind: ... })`
+/// Re-sum every kingdom the affected-land's leader rules and write that
+/// one leader's [`CharacterGoldYield`] and [`CharacterLevy`]. Wired up as
+/// the observer for [`OnBuildingUpdated`] (defined in [`crate::events`]);
+/// called via `world.trigger(OnBuildingUpdated { building, land, kind: ... })`
 /// straight after the relevant structural change settles the relationship
-/// hooks, so `LandHasBuildings` is already authoritative.
+/// hooks, so `LandHasBuildings` is already authoritative. Multi-kingdom:
+/// the affected land's kingdom's leader may rule several kingdoms — the
+/// whole union is re-summed, so any change to one of the leader's lands
+/// refreshes every one.
 pub fn on_building_updated(
     trigger: On<OnBuildingUpdated>,
     game: Option<Res<Game>>,
     land_held_by: Query<&LandHeldBy>,
     kingdom_led_by: Query<&KingdomLedBy>,
+    character_leads: Query<&CharacterLeads>,
     mut character_gold_yields: Query<(&mut CharacterGoldYield, &mut CharacterLevy)>,
     kingdom_holds: Query<&KingdomHold>,
     land_has_buildings: Query<&LandHasBuildings>,
@@ -122,16 +138,25 @@ pub fn on_building_updated(
     else {
         return;
     };
-    let Ok(kingdom_hold) = kingdom_holds.get(kingdom_e) else {
-        return;
-    };
-    let (g, l) = sum_land_yield(
-        kingdom_hold.0,
-        &land_has_buildings,
-        &building_of,
-        &building_status,
-        &defs,
-    );
+    // Sum every kingdom the leader rules — the leader's full realm,
+    // not just the one kingdom holding the affected land.
+    let (mut g, mut l) = (0i64, 0u64);
+    if let Ok(character_leads) = character_leads.get(leader_e) {
+        for kingdom_e in character_leads.kingdoms() {
+            let Ok(kingdom_hold) = kingdom_holds.get(*kingdom_e) else {
+                continue;
+            };
+            let (dg, dl) = sum_land_yield(
+                kingdom_hold.0,
+                &land_has_buildings,
+                &building_of,
+                &building_status,
+                &defs,
+            );
+            g += dg;
+            l += dl;
+        }
+    }
     character_gold_yield.0 = g;
     character_levy.0 = l;
 }

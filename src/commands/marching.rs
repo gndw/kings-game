@@ -101,29 +101,32 @@ impl Command for MarchingOrder {
     }
 }
 
-/// `(army_id, "<land>: <levy>")` for every army under the actor's kingdom,
-/// in `KingdomHasArmies` order. Mirrors `dismiss_army::armies_under` — the
-/// step-0 list for the marching command is the same shape as the step-0 list
-/// for the dismiss command, since both commands pick from the actor's army
-/// pool.
+/// `(army_id, "<land>: <levy>")` for every army in every kingdom the actor
+/// leads, in `CharacterLeads` order followed by `KingdomHasArmies`. Mirrors
+/// `dismiss_army::armies_under` — both commands pick from the actor's army
+/// pool, which is the union across every kingdom the actor leads under
+/// the multi-kingdom model.
 fn armies_under(world: &World, actor: &str) -> Vec<(String, String)> {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return Vec::new();
     };
-    let Some(kingdom_e) = world
-        .get::<CharacterLeads>(actor_e)
-        .map(|character_leads| character_leads.kingdom())
-    else {
+    let Some(character_leads) = world.get::<CharacterLeads>(actor_e) else {
         return Vec::new();
     };
-    let Some(kingdom_has_armies) = world.get::<KingdomHasArmies>(kingdom_e) else {
-        return Vec::new();
-    };
-    kingdom_has_armies
-        .iter()
-        .filter_map(|army_e| {
-            let army_id = world.get::<StringId>(army_e)?.0.clone();
-            let army_on_land = world.get::<ArmyOnLand>(army_e)?;
+    let mut out = Vec::new();
+    for kingdom_e in character_leads.kingdoms() {
+        let Some(kingdom_has_armies) = world.get::<KingdomHasArmies>(*kingdom_e) else {
+            continue;
+        };
+        for army_e in kingdom_has_armies.iter() {
+            let army_id = match world.get::<StringId>(army_e) {
+                Some(s) => s.0.clone(),
+                None => continue,
+            };
+            let army_on_land = match world.get::<ArmyOnLand>(army_e) {
+                Some(a) => a,
+                None => continue,
+            };
             let land_name = world
                 .get::<LandName>(army_on_land.0)
                 .map(|land_name| land_name.0.clone())
@@ -132,9 +135,10 @@ fn armies_under(world: &World, actor: &str) -> Vec<(String, String)> {
                 .get::<ArmyLevy>(army_e)
                 .map(|army_levy| army_levy.0)
                 .unwrap_or(0);
-            Some((army_id, format!("{land_name}: {levy}")))
-        })
-        .collect()
+            out.push((army_id, format!("{land_name}: {levy}")));
+        }
+    }
+    out
 }
 
 /// `(land_id, land_name)` for every land in the world. The player picks
@@ -247,18 +251,25 @@ fn march(world: &mut World, actor: &str, army_id: &str, target_id: &str) {
         return note(world, format!("cannot march to `{target_id}`: no such land"));
     };
 
-    // Rule check: the actor leads the army's kingdom.
-    let actor_k = world
+    // Rule check: the army's `ArmyBelongsToKingdom` is one of the actor's
+    // kingdoms (multi-kingdom: any match counts).
+    let actor_kingdoms = world
         .get::<CharacterLeads>(actor_e)
-        .map(|character_leads| character_leads.kingdom());
-    let army_k = world
+        .map(|character_leads| character_leads.kingdoms().iter().copied().collect::<Vec<_>>());
+    let army_kingdom = world
         .get::<ArmyBelongsToKingdom>(army_e)
         .map(|army_belongs_to_kingdom| army_belongs_to_kingdom.0);
-    if actor_k.is_none() || actor_k != army_k {
-        return note(world, format!(
-            "cannot march `{army_id}`: that army does not belong to your kingdom"
-        ));
-    }
+    let _ = match (actor_kingdoms, army_kingdom) {
+        (Some(aks), Some(ak)) if aks.contains(&ak) => ak,
+        _ => {
+            return note(
+                world,
+                format!(
+                    "cannot march `{army_id}`: that army does not belong to your kingdom"
+                ),
+            );
+        }
+    };
 
     // The army's current land is where the route starts. Capture it before
     // we mutate anything so the chronicle line can name it.

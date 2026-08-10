@@ -104,17 +104,19 @@ pub fn update(
     calendar: Res<Calendar>,
     date: Res<Date>,
 ) {
-    // Player → kingdom → armies. Same shape as the WARS walk.
+    // Player → kingdoms → armies. Multi-kingdom: union every kingdom
+    // the player leads. Same shape as the WARS walk.
     let army_lines: Vec<String> = registry
         .get(&game.ctx.player_character_id)
         .and_then(|player_e| player_chars.get(player_e).ok())
-        .map(|character_leads| character_leads.kingdom())
-        .and_then(|kingdom_e| kingdom_armies.get(kingdom_e).ok())
-        .map(|kingdom_has_armies| {
-            kingdom_has_armies
-                .iter()
-                .filter_map(|army_e| {
-                    format_army_line(
+        .map(|character_leads| {
+            let mut out = Vec::new();
+            for kingdom_e in character_leads.kingdoms() {
+                let Ok(kingdom_has_armies) = kingdom_armies.get(*kingdom_e) else {
+                    continue;
+                };
+                for army_e in kingdom_has_armies.iter() {
+                    if let Some(line) = format_army_line(
                         army_e,
                         &armies,
                         &army_queues,
@@ -125,9 +127,12 @@ pub fn update(
                         &lands,
                         &calendar,
                         &date,
-                    )
-                })
-                .collect()
+                    ) {
+                        out.push(line);
+                    }
+                }
+            }
+            out
         })
         .unwrap_or_default();
 

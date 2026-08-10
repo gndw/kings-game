@@ -66,17 +66,23 @@ pub fn update(
 ) {
     let sel = game.ctx.selected_land_id.as_deref();
     // Player's own lands, via the reverse CharacterLeads → KingdomHold chain.
+    // Multi-kingdom: every kingdom the player leads contributes its held
+    // land to the "own" set.
     let own: HashSet<String> = registry
         .get(&game.ctx.player_character_id)
         .and_then(|pe| character_leads.get(pe).ok())
-        .and_then(|character_leads| kingdom_holds.get(character_leads.kingdom()).ok())
-        .and_then(|kingdom_hold| {
-            lands_id
-                .get(kingdom_hold.0)
-                .ok()
-                .map(|string_id| string_id.0.clone())
+        .map(|character_leads| {
+            let mut out = HashSet::new();
+            for kingdom_e in character_leads.kingdoms() {
+                let Ok(kingdom_hold) = kingdom_holds.get(*kingdom_e) else {
+                    continue;
+                };
+                if let Ok(string_id) = lands_id.get(kingdom_hold.0) {
+                    out.insert(string_id.0.clone());
+                }
+            }
+            out
         })
-        .map(|id| HashSet::from([id]))
         .unwrap_or_default();
 
     // Ponytail: collect to a Vec so we can sort the selected land to the

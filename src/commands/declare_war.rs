@@ -2,14 +2,16 @@
 //!
 //! Two selection steps: step 0 picks a defender kingdom (any kingdom other
 //! than the actor's own), step 1 picks a casus belli type (only `Conquest`
-//! exists today). The pick spawns a [`CasusBelli`](crate::ecs::CasusBelli)
-//! entity targeting the defender, then a [`War`](crate::ecs::War) entity
-//! linking the actor's kingdom (attacker) to the defender with that CB.
+//! exists today). The pick spawns a [`War`](crate::ecs::War) entity
+//! linking the actor's kingdom (attacker) to the defender with a
+//! [`WarCasusBelliType`] and a [`WarDemands`] list — for `Conquest`, the
+//! list is auto-seeded with one [`WarDemandType::Take`] on the defender
+//! kingdom, which the [`EnforceDemands`] command can resolve.
 //!
-//! The war has no resolution path yet — no tick, no army interaction, no
-//! peace offering. The entity exists so the relationship graph is wired
-//! (kingdom → wars → CB → target kingdom) and the chronicle records the
-//! declaration. Resolution is a later change.
+//! The war has no status / no tick / no resolution yet — the entity
+//! exists so the relationship graph is wired (kingdom → wars →
+//! demands → target kingdom) and the chronicle records the declaration.
+//! Resolution lands in [`EnforceDemands`].
 //!
 //! The actor's kingdom is read through [`CharacterLeads`]; the kingdom
 //! has no name field of its own, so the kingdom's display label is the
@@ -18,9 +20,9 @@
 
 use super::core::{Choice, Command, MenuItem, next_id, note};
 use crate::ecs::{
-    CasusBelli, CasusBelliKingdom, CasusBelliType, CharacterLeads, Kingdom, KingdomHold,
-    LandName, Registry, StringId, War, WarAttackerKingdom, WarBeginDate, WarDefenderKingdom,
-    WarName, WarWithCasusBelli,
+    CharacterLeads, Kingdom, KingdomHold, LandName, Registry, StringId, War, WarAttackerKingdom,
+    WarBeginDate, WarCasusBelliType, WarDefenderKingdom, WarDemand, WarDemandType, WarDemands,
+    WarName,
 };
 use crate::resources::date::Date;
 use bevy::ecs::world::World;
@@ -76,16 +78,19 @@ impl Command for DeclareWar {
     }
 }
 
-/// `(kingdom_id, "<land_name>")` for every kingdom in the world except the
-/// actor's own. Walks `World::iter_entities` (the `&World`-safe path — `query`
-/// needs `&mut World`); filters by the [`Kingdom`] marker so we only see
+/// `(kingdom_id, "<land_name>")` for every kingdom in the world except
+/// the actor's. Multi-kingdom: any of the actor's kingdoms counts as
+/// "own", so the filter excludes every entry in `CharacterLeads`.
+/// Walks `World::iter_entities` (the `&World`-safe path — `query` needs
+/// `&mut World`); filters by the [`Kingdom`] marker so we only see
 /// kingdom entities.
 fn other_kingdoms(world: &World, actor: &str) -> Vec<(String, String)> {
-    let own_kingdom = world
+    let own_kingdoms: std::collections::HashSet<bevy::ecs::entity::Entity> = world
         .resource::<Registry>()
         .get(actor)
         .and_then(|actor_e| world.get::<CharacterLeads>(actor_e))
-        .map(|character_leads| character_leads.kingdom());
+        .map(|character_leads| character_leads.kingdoms().iter().copied().collect())
+        .unwrap_or_default();
 
     let mut result = Vec::new();
     for entity_ref in world.iter_entities() {
@@ -93,7 +98,7 @@ fn other_kingdoms(world: &World, actor: &str) -> Vec<(String, String)> {
             continue;
         }
         let kingdom_e = entity_ref.id();
-        if Some(kingdom_e) == own_kingdom {
+        if own_kingdoms.contains(&kingdom_e) {
             continue;
         }
         let Some(string_id) = entity_ref.get::<StringId>() else {
@@ -111,27 +116,45 @@ fn other_kingdoms(world: &World, actor: &str) -> Vec<(String, String)> {
     result
 }
 
-/// Resolve the picked CB id to its [`CasusBelliType`]. Only `Conquest`
+/// Resolve the picked CB id to its [`WarCasusBelliType`]. Only `Conquest`
 /// exists today; unknown ids are rejected. New CB enum variants are added
 /// here (the menu row in `step_items` is the only other place).
-fn resolve_cb(cb_id: &str) -> Option<CasusBelliType> {
+fn resolve_cb(cb_id: &str) -> Option<WarCasusBelliType> {
     match cb_id {
-        "conquest" => Some(CasusBelliType::Conquest),
+        "conquest" => Some(WarCasusBelliType::Conquest),
         _ => None,
     }
 }
 
+/// Seed the war's initial demands from the picked CB type + the defender
+/// kingdom. `Conquest` adds one `Take(defender_kingdom)` demand — the
+/// archetype for a conquest war is "make this kingdom ours". New CB
+/// shapes are additive: a `Reparations` arm would seed a different
+/// demand mix (or none, depending on the shape).
+fn demands_for(cb_type: WarCasusBelliType, defender_kingdom_e: bevy::ecs::entity::Entity) -> Vec<WarDemand> {
+    match cb_type {
+        WarCasusBelliType::Conquest => vec![WarDemand {
+            demand_type: WarDemandType::Take,
+            target: defender_kingdom_e,
+        }],
+    }
+}
+
 /// Validate (actor rules a kingdom; defender is a different kingdom; CB id
-/// resolves), then spawn a [`CasusBelli`] entity targeting the defender and
-/// a [`War`] entity linking the actor's kingdom to the defender with that
-/// CB. Appends a chronicle line on success and on every rejection.
+/// resolves), then spawn a [`War`] entity linking the actor's kingdom to
+/// the defender with the picked CB type and an auto-seeded demand list.
+/// Appends a chronicle line on success and on every rejection.
 fn declare(world: &mut World, actor: &str, defender_id: &str, cb_id: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return note(world, "cannot declare war: unknown actor".into());
     };
+    // Multi-kingdom: pick the first kingdom the actor leads as the
+    // `WarAttackerKingdom`. A future "pick which kingdom declares war"
+    // step would let the player choose; until then the first kingdom
+    // is the attacker.
     let Some(attacker_kingdom_e) = world
         .get::<CharacterLeads>(actor_e)
-        .map(|character_leads| character_leads.kingdom())
+        .and_then(|character_leads| character_leads.kingdoms().first().copied())
     else {
         return note(world, "cannot declare war: you rule no kingdom".into());
     };
@@ -153,23 +176,14 @@ fn declare(world: &mut World, actor: &str, defender_id: &str, cb_id: &str) {
     let attacker_name = kingdom_label(world, attacker_kingdom_e);
     let defender_name = kingdom_label(world, defender_kingdom_e);
 
-    // Spawn the CB first; the war then references it. Both
-    // `CasusBelliKingdom` and `WarAttackerKingdom`/`WarDefenderKingdom`/
-    // `WarWithCasusBelli` are Bevy relationships, so the relationship hooks
-    // fill the reverses (`KingdomHasCasusBelli`, `KingdomHasWarsAttacking`,
-    // `KingdomHasWarsDefending`, `CasusBelliOnWar`) synchronously — any
-    // same-frame reader sees authoritative data.
-    let cb_entity_id = next_id(world);
-    let cb_e = world
-        .spawn((
-            StringId(cb_entity_id.clone()),
-            CasusBelli,
-            cb_type,
-            CasusBelliKingdom(defender_kingdom_e),
-        ))
-        .id();
-    world.resource_mut::<Registry>().insert(cb_entity_id, cb_e);
+    // Seed the demands from the CB type + defender. Conquest → one Take
+    // demand on the defender kingdom.
+    let demands = demands_for(cb_type, defender_kingdom_e);
 
+    // Spawn the war. `WarAttackerKingdom` / `WarDefenderKingdom` are Bevy
+    // relationships — the hooks fill the reverses (`KingdomHasWarsAttacking`,
+    // `KingdomHasWarsDefending`) synchronously, so any same-frame reader
+    // sees authoritative data.
     let war_entity_id = next_id(world);
     // Snapshot the date at declare time so the war carries a stable
     // "declared on" stamp that doesn't drift if the date resource ticks
@@ -183,7 +197,8 @@ fn declare(world: &mut World, actor: &str, defender_id: &str, cb_id: &str) {
             War,
             WarAttackerKingdom(attacker_kingdom_e),
             WarDefenderKingdom(defender_kingdom_e),
-            WarWithCasusBelli(cb_e),
+            cb_type,
+            WarDemands(demands),
             WarName(war_name),
             WarBeginDate(begin_date),
         ))
@@ -218,11 +233,11 @@ fn kingdom_label(world: &World, kingdom_e: bevy::ecs::entity::Entity) -> String 
 /// menu in `step_items`, one arm in `resolve_cb`.
 fn format_name(
     world: &World,
-    cb_type: CasusBelliType,
+    cb_type: WarCasusBelliType,
     defender_kingdom_e: bevy::ecs::entity::Entity,
 ) -> String {
     let land = kingdom_label(world, defender_kingdom_e);
     match cb_type {
-        CasusBelliType::Conquest => format!("Conquest over Kingdom of {land}"),
+        WarCasusBelliType::Conquest => format!("Conquest over Kingdom of {land}"),
     }
 }

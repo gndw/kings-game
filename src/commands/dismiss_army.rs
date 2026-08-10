@@ -59,30 +59,35 @@ impl Command for DismissArmy {
     }
 }
 
-/// `(army_instance_id, "<land>:<levy>")` for every army the actor's kingdom
-/// rules, in `KingdomHasArmies` order. Walks the relationship target via
-/// `world::get` so it stays a `&World` read.
+/// `(army_instance_id, "<land>:<levy>")` for every army in every kingdom
+/// the actor leads, in `CharacterLeads` order followed by `KingdomHasArmies`.
+/// Multi-kingdom: the player can rule several kingdoms at once, so the army
+/// list is the union across every kingdom they lead. Walks the relationship
+/// targets via `world::get` so it stays a `&World` read.
 fn armies_under(world: &World, actor: &str) -> Vec<(String, String)> {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return Vec::new();
     };
-    let Some(kingdom_e) = world
-        .get::<CharacterLeads>(actor_e)
-        .map(|character_leads| character_leads.kingdom())
-    else {
+    let Some(character_leads) = world.get::<CharacterLeads>(actor_e) else {
         return Vec::new();
     };
-    let Some(kingdom_has_armies) = world.get::<KingdomHasArmies>(kingdom_e) else {
-        return Vec::new();
-    };
-    kingdom_has_armies
-        .iter()
-        .filter_map(|army_e| {
-            let string_id = world.get::<StringId>(army_e)?;
+    let mut out = Vec::new();
+    for kingdom_e in character_leads.kingdoms() {
+        let Some(kingdom_has_armies) = world.get::<KingdomHasArmies>(*kingdom_e) else {
+            continue;
+        };
+        for army_e in kingdom_has_armies.iter() {
+            let string_id = match world.get::<StringId>(army_e) {
+                Some(s) => s.0.clone(),
+                None => continue,
+            };
             // For the label we need the land name (army → land → name) and the
             // levy count. Army→land is via `ArmyOnLand`; the levy is
             // `ArmyLevy`. Both reads are `world::get` so they stay `&World`.
-            let army_on_land = world.get::<crate::ecs::army::ArmyOnLand>(army_e)?;
+            let army_on_land = match world.get::<crate::ecs::army::ArmyOnLand>(army_e) {
+                Some(a) => a,
+                None => continue,
+            };
             let land_name = world
                 .get::<crate::ecs::LandName>(army_on_land.0)
                 .map(|land_name| land_name.0.clone())
@@ -91,12 +96,10 @@ fn armies_under(world: &World, actor: &str) -> Vec<(String, String)> {
                 .get::<ArmyLevy>(army_e)
                 .map(|army_levy| army_levy.0)
                 .unwrap_or(0);
-            Some((
-                string_id.0.clone(),
-                format!("{land_name}: {levy}"),
-            ))
-        })
-        .collect()
+            out.push((string_id, format!("{land_name}: {levy}")));
+        }
+    }
+    out
 }
 
 /// Despawn the army `army_id` for `actor`. Validates the actor's kingdom owns
@@ -110,20 +113,25 @@ fn dismiss(world: &mut World, actor: &str, army_id: &str) {
     let Some(army_e) = world.resource::<Registry>().get(army_id) else {
         return note(world, format!("cannot dismiss `{army_id}`: no such army"));
     };
-    // Rule check: the actor leads a kingdom, and that kingdom is the army's
-    // `ArmyBelongsToKingdom` target.
-    let actor_k = world
+    // Rule check: the army's `ArmyBelongsToKingdom` is one of the actor's
+    // kingdoms (multi-kingdom: any of them counts).
+    let actor_kingdoms = world
         .get::<CharacterLeads>(actor_e)
-        .map(|character_leads| character_leads.kingdom());
-    let army_k = world
+        .map(|character_leads| character_leads.kingdoms().iter().copied().collect::<Vec<_>>());
+    let army_kingdom = world
         .get::<ArmyBelongsToKingdom>(army_e)
         .map(|army_belongs_to_kingdom| army_belongs_to_kingdom.0);
-    if actor_k.is_none() || actor_k != army_k {
-        return note(world, format!(
-            "cannot dismiss `{army_id}`: that army does not belong to your kingdom"
-        ));
-    }
-    let kingdom_e = army_k.unwrap();
+    let kingdom_e = match (actor_kingdoms, army_kingdom) {
+        (Some(aks), Some(ak)) if aks.contains(&ak) => ak,
+        _ => {
+            return note(
+                world,
+                format!(
+                    "cannot dismiss `{army_id}`: that army does not belong to your kingdom"
+                ),
+            );
+        }
+    };
 
     // Two lands to distinguish:
     // - `army_land_e`: the land the army is currently sitting on (for the

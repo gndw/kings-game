@@ -46,20 +46,26 @@ pub struct CharacterLevy(pub u64);
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct CharacterGoldYield(pub i64);
 
-/// The kingdom a character leads — the auto-maintained reverse of
-/// [`KingdomLedBy`], for O(1) character→kingdom lookup. Read-only: set
-/// [`KingdomLedBy`] on the kingdom and Bevy's hook keeps this in sync.
+/// The kingdoms a character leads — the auto-maintained reverse of
+/// [`KingdomLedBy`]. **Many-to-many** (`Vec<Entity>`): a character can lead
+/// any number of kingdoms simultaneously. The conquest-transfer flow is
+/// built on this — a player who enforces a `Take` demand on a kingdom keeps
+/// their original realm and adds the conquered one to their list.
 ///
-/// One-to-one (single `Entity`): a character leads at most one kingdom. If a
-/// second kingdom claims the same leader, Bevy drops the older [`KingdomLedBy`].
-#[derive(Component, Debug)]
+/// Bevy's hook keeps this in sync: setting [`KingdomLedBy`] on a kingdom
+/// adds the leader here; removing it drops the entry. Callers that want
+/// "pick one kingdom" should call `.first().copied()` (the war-declare
+/// command and the ctx startup pick the first); callers that want "any of
+/// the character's kingdoms satisfies X" should use `.iter().any(...)`;
+/// callers that want "walk all kingdoms" use `.iter()` directly.
+#[derive(Component, Debug, Default)]
 #[relationship_target(relationship = KingdomLedBy)]
-pub struct CharacterLeads(Entity);
+pub struct CharacterLeads(Vec<Entity>);
 
 impl CharacterLeads {
-    /// The kingdom this character leads.
-    pub fn kingdom(&self) -> Entity {
-        self.0
+    /// The kingdoms this character leads (empty slice if none).
+    pub fn kingdoms(&self) -> &[Entity] {
+        &self.0
     }
 }
 

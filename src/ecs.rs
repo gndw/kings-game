@@ -59,7 +59,6 @@
 
 pub mod army;
 pub mod building;
-pub mod casus_belli;
 pub mod character;
 pub mod courtier;
 pub mod ecs;
@@ -73,7 +72,6 @@ pub mod war;
 
 pub use army::*;
 pub use building::*;
-pub use casus_belli::*;
 pub use character::*;
 pub use courtier::*;
 pub use ecs::*;

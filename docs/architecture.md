@@ -137,8 +137,12 @@ shape; this is the *what*.
   hook-maintained, no manual reverse insert. Every link is named
   `<Attached-to><Verb-or-preposition><Target>` so the component name tells
   you which entity it sits on:
-  - `KingdomLedBy` (on kingdom) ↔ `CharacterLeads` (on leader character) —
-    one-to-one. Read the reverse via `CharacterLeads::kingdom()`.
+  - `KingdomLedBy` (on kingdom) ↔ `CharacterLeads` (on leader character,
+    `Vec<Entity>` — many-to-many). The player can rule any number of
+    kingdoms simultaneously (conquest transfer / multi-kingdom model).
+    Read the reverse via `CharacterLeads::kingdoms()` (a slice; iterate
+    via `.iter()`, predicate via `.iter().any(...)`, pick-one via
+    `.first().copied()`).
   - `KingdomHold` (on kingdom) ↔ `LandHeldBy` (on land, single `Entity`) — a
     kingdom declares its held land; the land's `LandHeldBy` auto-fills. Read
     via `LandHeldBy::kingdom()`.
@@ -381,14 +385,29 @@ the style of `ctx::step`.
 - **`DeclareWar`** declares war on another kingdom under a casus belli.
   Validates the actor rules a kingdom, the defender is a different
   kingdom, and the picked CB id resolves (`"conquest"` is the only one
-  today; new CB shapes are additive in `resolve_cb`). Spawns a
-  `CasusBelli` entity with `CasusBelliKingdom(defender)` and the chosen
-  `CasusBelliType`, then a `War` entity linking `WarAttackerKingdom(actor's
-  kingdom)` to `WarDefenderKingdom(defender)` with `WarWithCasusBelli(cb)`.
-  No resolution path yet — no tick, no army interaction, no peace
-  offering — so the entity exists to wire the relationship graph and
-  record the declaration in the chronicle. Two steps (pick a target
-  kingdom, pick a CB type).
+  today; new CB shapes are additive in `resolve_cb`). Spawns a `War`
+  entity linking `WarAttackerKingdom(actor's kingdom)` to
+  `WarDefenderKingdom(defender)` with the picked `WarCasusBelliType`
+  and a `WarDemands` list auto-seeded from the CB shape (`Conquest` →
+  one `Take(defender_kingdom)` demand; new shapes are additive arms in
+  `demands_for`). Multi-kingdom: the attacker kingdom is the actor's
+  *first* kingdom (a future "pick which of your kingdoms declares war"
+  step would let the player choose when they have several). Two steps
+  (pick a target kingdom, pick a CB type).
+- **`EnforceDemands`** resolves one demand on a war the player is
+  attacking in. Two steps (pick a war, pick a demand). The only demand
+  shape today is `Take`: requires the target kingdom's held land to be
+  controlled by one of the player's armies
+  (`LandControlledByArmy` → `ArmyBelongsToKingdom` is in the player's
+  `CharacterLeads`), then sets `KingdomLedBy(player)` on the target
+  kingdom. Under the multi-kingdom model Bevy's hook adds the entry
+  to the player's `CharacterLeads` `Vec` instead of replacing; the
+  player keeps every kingdom they already led and gains the conquered
+  one. On a successful enforcement the war is despawned + deregistered
+  (Bevy's relationship hooks prune the war from both kingdoms'
+  `KingdomHasWarsAttacking` / `KingdomHasWarsDefending` collections
+  as part of the despawn), and a chronicle line records the
+  resolution.
 - **`LaySiege`** lays siege to a land with one of the player's armies.
   One step (pick an army); the army's current land is the target, and
   `step_items` filters the list to armies on *foreign* lands (your own
@@ -552,11 +571,11 @@ asset-loaded sprites.
 | `src/commands/raise_army.rs` | the `RaiseArmy` command (validate + spawn the army bundle + drain `BuildingLevy` pools) |
 | `src/commands/dismiss_army.rs` | the `DismissArmy` command (validate + distribute `ArmyLevy` back into `BuildingLevy` + despawn + deregister + reap queued marchings) |
 | `src/commands/marching.rs` | the `MarchingOrder` command (validate + trace the road route + spawn one `Marching` entity per road, each `MarchingStatus::Scheduled` with empty dates) |
-| `src/commands/declare_war.rs` | the `DeclareWar` command (validate + spawn a `CasusBelli` entity + spawn a `War` entity, no resolution path yet) |
-| `src/commands/siege.rs` | the `LaySiege` command (validate foreign-land + spawn a `Siege` entity + flip the army to `Sieging`) |
+| `src/commands/declare_war.rs` | the `DeclareWar` command (validate + spawn a `War` entity with `WarCasusBelliType` + auto-seeded `WarDemands`; no resolution tick) |
+| `src/commands/lay_siege.rs` | the `LaySiege` command (validate foreign-land + spawn a `Siege` entity + flip the army to `Sieging`) |
+| `src/commands/enforce_demands.rs` | the `EnforceDemands` command (pick a war, pick a demand; `Take` requires the target's land to be controlled by the player's army, then sets `KingdomLedBy(player)` on the target) |
 | `src/ecs/marching.rs` | the `Marching` entity kind — `Marching` marker + `MarchingArmy`/`MarchingFromLand`/`MarchingToLand`/`MarchingOnRoad` relationships + `MarchingBeginDate`/`MarchingArrivedDate` + `MarchingStatus` enum |
-| `src/ecs/war.rs` | the `War` entity kind — `War` marker + `WarAttackerKingdom`/`WarDefenderKingdom` (to kingdoms) + `WarWithCasusBelli` (to a CB) + `WarName` (e.g. `"Conquest over Kingdom of Riverrun"`) + `WarBeginDate` (declare-time snapshot) |
-| `src/ecs/casus_belli.rs` | the `CasusBelli` entity kind — `CasusBelli` marker + `CasusBelliType` enum (`Conquest`) + `CasusBelliKingdom` (to the targeted kingdom) + `CasusBelliOnWar` reverse target |
+| `src/ecs/war.rs` | the `War` entity kind — `War` marker + `WarAttackerKingdom`/`WarDefenderKingdom` (to kingdoms) + `WarCasusBelliType` enum (`Conquest = 1`) + `WarDemands(Vec<WarDemand>)` + `WarName` (e.g. `"Conquest over Kingdom of Riverrun"`) + `WarBeginDate` (declare-time snapshot) |
 | `src/ecs/siege.rs` | the `Siege` entity kind — `Siege` marker + `SiegeAttackerArmy`/`SiegeDefenderLand` (to the two ends) + `SiegeProgress` (0–100) + `SiegeNextEventDate` |
 | `src/ecs/road.rs` | the `Road` entity kind — `Road` marker + `RoadPoints(Vec<(f64,f64)>)` + `RoadBetweenLands(Vec<Entity>)` + `RoadDistanceDays(u32)` (definition-only; no Bevy relationship) + `RoadHasMarchings` (the reverse of `MarchingOnRoad`) |
 | `src/map/components/road_graphic.rs` | per-road dashed-line visual — startup spawns one `RoadGraphic` marker per road (back-reffed by `UIWithRoad`) and a per-frame `update` draws the polyline through the `RoadGizmoConfigGroup` gizmo group, whose config carries the `GizmoLineStyle::Dashed` style; the line colour reports the road's `RoadHasMarchings` (green = an army is on it, gray = a march is queued on it, default otherwise) |
@@ -575,7 +594,7 @@ asset-loaded sprites.
 | `src/mods/mod.rs` | `load(dir)` — the two-pass orchestrator |
 | `src/resources/*` | `Border`, `Calendar`(+validate, carries `start`), `Date` (the walking clock), `BuildingDefs`/`BuildingDef` (kind roster), `Chronicles` (log) |
 | `src/ecs/ecs.rs` | `StringId`, `Registry`, `populate` |
-| `src/ecs/{house,character,land,building,kingdom,courtier,army,war,casus_belli,siege}.rs` | components + relationships per kind |
+| `src/ecs/{house,character,land,building,kingdom,courtier,army,war,siege}.rs` | components + relationships per kind |
 | `src/game/siege.rs` | the per-day siege tick (`OnDay` — advance `SiegeProgress` by 30 every 10 days; at 100% insert `ArmyControlsLand` on the army, flip every building on the land to `Inactive`, return the army to `Idle`, despawn the siege) |
 | `src/ecs.rs` | module root, re-exports, the component map |
 | `src/schedules.rs` | `OnDay` + `OnMonth` labels |

@@ -8,7 +8,6 @@
 //! `KingdomSeat` component.
 
 use super::army::ArmyBelongsToKingdom;
-use super::casus_belli::CasusBelliKingdom;
 use super::character::CharacterLeads;
 use super::courtier::CourtierOfKingdom;
 use super::war::{WarAttackerKingdom, WarDefenderKingdom};
@@ -61,11 +60,3 @@ pub struct KingdomHasWarsAttacking(Vec<Entity>);
 #[derive(Component, Debug, Default)]
 #[relationship_target(relationship = WarDefenderKingdom)]
 pub struct KingdomHasWarsDefending(Vec<Entity>);
-
-/// The casus belli claims against this kingdom — the auto-maintained
-/// reverse of [`CasusBelliKingdom`](super::casus_belli::CasusBelliKingdom).
-/// Read-only: set `CasusBelliKingdom` on each CB and Bevy's hook keeps
-/// this in sync. A kingdom can be the named target of several CBs at once.
-#[derive(Component, Debug, Default)]
-#[relationship_target(relationship = CasusBelliKingdom)]
-pub struct KingdomHasCasusBelli(Vec<Entity>);

@@ -124,15 +124,16 @@ fn validate(world: &World, actor: &str, land_id: &str, def_id: &str) -> Result<G
         .get(land_id)
         .ok_or_else(|| format!("no land `{land_id}`"))?;
 
-    // Rule check: the actor leads the kingdom that holds the land.
+    // Rule check: any of the actor's kingdoms holds the land.
     let actor_k = world
         .get::<CharacterLeads>(actor_e)
-        .map(|character_leads| character_leads.kingdom());
+        .map(|character_leads| character_leads.kingdoms().iter().copied().collect::<Vec<_>>());
     let land_k = world
         .get::<LandHeldBy>(land_e)
         .map(|land_held_by| land_held_by.kingdom());
-    if actor_k.is_none() || actor_k != land_k {
-        return Err("you don't rule that land".into());
+    match (actor_k, land_k) {
+        (Some(ks), Some(lk)) if ks.contains(&lk) => {}
+        _ => return Err("you don't rule that land".into()),
     }
 
     // Afford: no building into debt (boring default; flip to allow debt).

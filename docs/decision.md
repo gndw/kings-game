@@ -249,40 +249,84 @@ from `KingdomHolds(Vec<Entity>)` (the auto-maintained reverse of each land's
   the `KingdomSeat` component was removed; the held land is read through
   `KingdomHold::land()`.
 
-## War and CasusBelli are separate entity kinds
+## War is an entity; the casus belli and the demands sit on the war
 
-A war is its own entity (not a marker on the kingdom) and a casus belli is
-its own entity (not a field on the war). They are linked through Bevy
-relationships — `WarAttackerKingdom` / `WarDefenderKingdom` /
-`WarWithCasusBelli` on the war, `CasusBelliKingdom` on the CB — with the
-relationship hooks auto-maintaining the reverses on the kingdom
-(`KingdomHasWarsAttacking`, `KingdomHasWarsDefending`,
-`KingdomHasCasusBelli`) and on the CB (`CasusBelliOnWar`).
+A war is its own entity (not a marker on the kingdom) and the casus
+belli + the demands the war is fought over sit on the war as plain
+components — `WarCasusBelliType` (the *shape* of the fight) and
+`WarDemands` (the list of `(WarDemandType, target kingdom)` pairs).
+There is no separate `CasusBelli` entity kind.
 
-- **Why war is an entity, not a field:** the war sits between two kingdoms
-  and one CB, all of which are dynamic (player picks at declare time). An
-  entity is the natural shape for a link in a graph, and the
-  relationship-colocation rule keeps the source on the war and the
-  reverses on the kingdoms — no manual reverse inserts, no drift.
-- **Why CB is an entity, not a field on the war:** a CB could be hoarded
-  (a player gains a claim on a kingdom before choosing to press it into a
-  war) and one CB could back multiple wars over time (a conquest CB that
-  outlives a peace treaty). Putting the CB on the war would have meant
-  every new war spawned a new CB and the player could never carry a claim
-  forward. The CB entity keeps the claim addressable in its own right.
-- **No resolution yet.** The war has no status, no tick, no end
-  condition — the entity exists to wire the relationship graph and the
-  chronicle line records the declaration. Resolution (army interaction,
-  peace offer, conquest transfer) lands in a later change; the entity
-  shape is already ready for it (adding a `WarStatus` enum + a
-  `WarResolutionDate` + a resolution observer are all additive on the
-  same archetype).
+- **Why war is an entity:** the war sits between two kingdoms and a list
+  of demands, all of which are dynamic (player picks at declare time).
+  An entity is the natural shape for a link in a graph, and the
+  relationship-colocation rule keeps the source (`WarAttackerKingdom` /
+  `WarDefenderKingdom`) on the war and the reverses
+  (`KingdomHasWarsAttacking`, `KingdomHasWarsDefending`) on the kingdoms
+  — no manual reverse inserts, no drift.
+- **Why no CB entity, just `WarCasusBelliType` on the war:** the earlier
+  `CasusBelli` entity (a separate `CasusBelli` kind with its own
+  relationship graph and a `CasusBelliKingdom` link) was over-engineered
+  for the gameplay we actually have. A war is the *only* consumer of a
+  CB; CBs don't outlive the war that uses them in any current path, and
+  the player's "hoard a CB, press it later" use case isn't on the
+  roadmap. Folding the CB type onto the war drops an entity kind, a
+  relationship, and a reverse target — the war entity already exists,
+  no new shape needed. If hoarding lands later, splitting CB back out
+  is a mechanical change (the `WarCasusBelliType` enum migrates to a
+  new component on the new CB entity, `WarDemands` adds a
+  `WarWithCasusBelli` relationship).
+- **Why `WarDemands` is a `Vec<WarDemand>`, not a single demand:** a
+  war can carry multiple demands (`Conquest` today seeds one
+  `Take(defender_kingdom)` demand; a future `Conquest + Reparations`
+  CB could seed two). The list lives on the war; the
+  `EnforceDemands` command picks one to resolve at a time.
+- **No automatic resolution.** The war has no status / no tick / no
+  end condition — `EnforceDemands` is the explicit resolution step
+  the player triggers when they've satisfied a demand's gate (e.g.
+  the target's land is controlled by their army for `Take`).
 - **CB enum is the only place new CB shapes land.** `resolve_cb` in
   `commands/declare_war.rs` is the one switchboard between a CB id
-  string and `CasusBelliType`; the menu row in `step_items` is the other
-  spot. Adding a CB shape (e.g. `Reparations`) is a variant on
-  `CasusBelliType` + a `resolve_cb` arm + a menu row — no other code
-  changes, no new entity shape.
+  string and `WarCasusBelliType`; `demands_for` is the one place the
+  CB shape's initial demand list lives. Adding a CB shape is a variant
+  on `WarCasusBelliType` + a `resolve_cb` arm + a `demands_for` arm +
+  a menu row — no other code changes, no new entity shape.
+
+## Conquest transfer is "add the player as the kingdom's leader" (multi-kingdom)
+
+The `EnforceDemands` command's `Take` demand is a single
+`KingdomLedBy(player)` insert on the target kingdom. Bevy's
+relationship hook adds the entry to the player's `CharacterLeads`
+`Vec<Entity>` (the multi-kingdom model) — the player now leads the
+conquered kingdom *and* every kingdom they already led. The
+defender's previous leader (if any) has the entry pruned from their
+`CharacterLeads`.
+
+- **Why multi-kingdom:** a character that takes a kingdom should keep
+  whatever they had before. The one-to-one rule (`CharacterLeads`
+  single-`Entity`) lost the old kingdom on transfer; relaxing
+  `CharacterLeads` to `Vec<Entity>` makes the transfer additive and
+  matches the gameplay — a player conquering multiple kingdoms ends
+  up ruling several.
+- **Why `Vec<Entity>` and not `Entity` with multi-leader rules:** every
+  call site that wanted "the actor's kingdom" had to become "any of
+  the actor's kingdoms" — the `CharacterLeads` shape is the simpler
+  pivot than building a leader-set lookup that callers still have to
+  special-case. `RelationshipTarget::iter` gives the walk for free.
+- **What it costs:** every site that read `CharacterLeads::kingdom()`
+  had to become "walk all kingdoms" (`ruled_lands`, `armies_under`,
+  `player_wars`), "any match" (`rules_land`, the rule checks in
+  every command, `land_graphic`'s own-lands set, `holding_icon`'s
+  kingdom predicate), or "pick one" (`Ctx::startup`, the
+  DeclareWar attacker's pick). All mechanical.
+- **No conquest cleanup on the defender's side (yet):** the
+  defender's `CharacterLeads` loses the kingdom entry (Bevy prunes
+  it), so the defender no longer leads it — good. But the
+  defender's *other* appointments (court appointments, the
+  `LandHeldBy` link, their treasury) stay intact. The defender is
+  effectively exiled from court, not destroyed; transferring the
+  court's courtiers to the player is future work.
+
 
 ## Relationship components live in the file of their main component
 

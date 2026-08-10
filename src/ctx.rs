@@ -46,10 +46,13 @@ impl Ctx {
         }
     }
 
-    /// Resolve the opening selection: the player's own capital, via their
-    /// kingdom's held land. Runs in the `Startup` schedule, after
-    /// [`crate::ecs::populate`] has spawned the entities. Left `None` if the
-    /// player leads no kingdom, or that kingdom holds no land.
+    /// Resolve the opening selection: the player's own capital, via the
+    /// held land of the first kingdom they lead. Runs in the `Startup`
+    /// schedule, after [`crate::ecs::populate`] has spawned the entities.
+    /// Left `None` if the player leads no kingdom, or that kingdom holds
+    /// no land. Multi-kingdom: only the *first* kingdom opens the selection
+    /// — the player can move to their other kingdoms with the arrow
+    /// keys once the game starts.
     pub fn startup(
         mut game: ResMut<Game>,
         registry: Res<Registry>,
@@ -63,7 +66,8 @@ impl Ctx {
         game.ctx.selected_land_id = character_leads
             .get(player_e)
             .ok()
-            .and_then(|character_leads| kingdom_holds.get(character_leads.kingdom()).ok())
+            .and_then(|character_leads| character_leads.kingdoms().first().copied())
+            .and_then(|kingdom_e| kingdom_holds.get(kingdom_e).ok())
             .map(|kingdom_hold| kingdom_hold.0)
             .and_then(|land_e| string_ids.get(land_e).ok())
             .map(|string_id| string_id.0.clone());

@@ -58,51 +58,53 @@ impl Command for LaySiege {
         actor: &str,
         world: &World,
     ) -> Vec<MenuItem> {
-        // Mirrors `marching::armies_under` for the army list, then filters
-        // to armies currently standing on a foreign land. Filtering in
-        // `step_items` (not `execute`) keeps the palette focused — there's
-        // no point showing "siege your own capital" as an option.
-        let Some(actor_k) = world
-            .resource::<Registry>()
-            .get(actor)
-            .and_then(|actor_e| world.get::<CharacterLeads>(actor_e))
-            .map(|character_leads| character_leads.kingdom())
-        else {
+        // Mirrors `marching::armies_under` for the army list (walking
+        // every kingdom the actor leads under the multi-kingdom model),
+        // then filters to armies currently standing on a foreign land.
+        // Filtering in `step_items` (not `execute`) keeps the palette
+        // focused — there's no point showing "siege your own capital" as
+        // an option.
+        let Some(actor_e) = world.resource::<Registry>().get(actor) else {
             return Vec::new();
         };
-        let Some(kingdom_has_armies) = world
-            .get::<KingdomHasArmies>(actor_k)
-            .map(|kha| kha.iter().collect::<Vec<_>>())
-        else {
+        let Some(character_leads) = world.get::<CharacterLeads>(actor_e) else {
             return Vec::new();
         };
+        let actor_kingdoms: std::collections::HashSet<bevy::ecs::entity::Entity> =
+            character_leads.kingdoms().iter().copied().collect();
         let mut out = Vec::new();
-        for army_e in kingdom_has_armies {
-            let (Some(army_id), Some(army_on_land), Some(army_name)) = (
-                world.get::<StringId>(army_e).map(|s| s.0.clone()),
-                world.get::<ArmyOnLand>(army_e).map(|a| a.0),
-                world.get::<ArmyName>(army_e).map(|n| n.0.clone()),
-            ) else {
+        for kingdom_e in character_leads.kingdoms() {
+            let Some(kingdom_has_armies) = world.get::<KingdomHasArmies>(*kingdom_e) else {
                 continue;
             };
-            // Foreign: the land's holding kingdom isn't the actor's. If
-            // `LandHeldBy` is missing (defensive) skip the army rather
-            // than surface it as a siege option on a broken entity.
-            let is_foreign = world
-                .get::<LandHeldBy>(army_on_land)
-                .map(|land_held_by| land_held_by.kingdom() != actor_k)
-                .unwrap_or(false);
-            if !is_foreign {
-                continue;
+            for army_e in kingdom_has_armies.iter() {
+                let (Some(army_id), Some(army_on_land), Some(army_name)) = (
+                    world.get::<StringId>(army_e).map(|s| s.0.clone()),
+                    world.get::<ArmyOnLand>(army_e).map(|a| a.0),
+                    world.get::<ArmyName>(army_e).map(|n| n.0.clone()),
+                ) else {
+                    continue;
+                };
+                // Foreign: the land's holding kingdom isn't one of the
+                // actor's. If `LandHeldBy` is missing (defensive) skip
+                // the army rather than surface it as a siege option on
+                // a broken entity.
+                let is_foreign = world
+                    .get::<LandHeldBy>(army_on_land)
+                    .map(|land_held_by| !actor_kingdoms.contains(&land_held_by.kingdom()))
+                    .unwrap_or(false);
+                if !is_foreign {
+                    continue;
+                }
+                let land_label = world
+                    .get::<LandName>(army_on_land)
+                    .map(|land_name| land_name.0.clone())
+                    .unwrap_or_else(|| "?".into());
+                out.push(MenuItem {
+                    label: format!("{army_name} at {land_label}"),
+                    value: army_id,
+                });
             }
-            let land_label = world
-                .get::<LandName>(army_on_land)
-                .map(|land_name| land_name.0.clone())
-                .unwrap_or_else(|| "?".into());
-            out.push(MenuItem {
-                label: format!("{army_name} at {land_label}"),
-                value: army_id,
-            });
         }
         out
     }
@@ -127,37 +129,48 @@ fn begin_siege(world: &mut World, actor: &str, army_id: &str) {
     let Some(army_e) = world.resource::<Registry>().get(army_id) else {
         return note(world, format!("cannot siege with `{army_id}`: no such army"));
     };
-    let actor_k = world
+    let actor_kingdoms = world
         .get::<CharacterLeads>(actor_e)
-        .map(|character_leads| character_leads.kingdom());
+        .map(|character_leads| character_leads.kingdoms().iter().copied().collect::<Vec<_>>());
     let army_k = world
         .get::<ArmyBelongsToKingdom>(army_e)
         .map(|army_belongs_to_kingdom| army_belongs_to_kingdom.0);
-    if actor_k.is_none() || actor_k != army_k {
-        return note(
-            world,
-            format!("cannot siege with `{army_id}`: that army does not belong to your kingdom"),
-        );
-    }
+    let _ = match (actor_kingdoms, army_k) {
+        (Some(aks), Some(ak)) if aks.contains(&ak) => ak,
+        _ => {
+            return note(
+                world,
+                format!(
+                    "cannot siege with `{army_id}`: that army does not belong to your kingdom"
+                ),
+            );
+        }
+    };
     let Some(land_e) = world
         .get::<ArmyOnLand>(army_e)
         .map(|army_on_land| army_on_land.0)
     else {
         return note(world, format!("cannot siege with `{army_id}`: army has no land"));
     };
-    // Foreign check: refuses to siege your own kingdom's lands. Mirrors the
-    // step_items filter so the chronicle line is informative even if a
-    // player somehow gets here with an army on a friendly land (a stale
-    // step_items cache, modded palette, etc.).
-    if world
+    // Foreign check: refuses to siege your own kingdom's lands. Mirrors
+    // the step_items filter so the chronicle line is informative even if
+    // a player somehow gets here with an army on a friendly land (a stale
+    // step_items cache, modded palette, etc.). Multi-kingdom: any of the
+    // actor's kingdoms holding the land counts as "your own".
+    let actor_kingdoms = world
+        .get::<CharacterLeads>(actor_e)
+        .map(|character_leads| character_leads.kingdoms().iter().copied().collect::<Vec<_>>());
+    let land_kingdom = world
         .get::<LandHeldBy>(land_e)
-        .map(|land_held_by| Some(land_held_by.kingdom()) == actor_k)
-        .unwrap_or(true)
-    {
-        return note(
-            world,
-            format!("cannot siege with `{army_id}`: that land is your own"),
-        );
+        .map(|land_held_by| land_held_by.kingdom());
+    match (actor_kingdoms, land_kingdom) {
+        (Some(aks), Some(lk)) if aks.contains(&lk) => {
+            return note(
+                world,
+                format!("cannot siege with `{army_id}`: that land is your own"),
+            );
+        }
+        _ => {}
     }
 
     let army_name = world

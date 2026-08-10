@@ -230,14 +230,20 @@ pub fn update(
         .as_deref()
         .and_then(|id| registry.get(id));
 
-    // Player's kingdom: walk player → CharacterLeads → kingdom. Used both
-    // for the castle gizmo (its kingdom holds the selected land → flip
-    // yellow) and the per-land label (lands held by this kingdom get the
-    // yield line).
-    let player_kingdom = registry
+    // Player's kingdoms: walk player → CharacterLeads → kingdoms. Used
+    // both for the castle gizmo (a kingdom holding the selected land →
+    // flip yellow) and the per-land label (lands held by any of these
+    // kingdoms get the yield line). Multi-kingdom: collect into a set
+    // so the predicate is O(1) per kingdom. `player_kingdom_first`
+    // keeps the legacy "first kingdom" pick around for any future
+    // single-kingdom reads (currently unused — kept as a reminder that
+    // the multi-kingdom model has multiple pickers depending on intent).
+    let player_kingdoms: std::collections::HashSet<bevy::ecs::entity::Entity> = registry
         .get(&game.ctx.player_character_id)
         .and_then(|pe| character_leads.get(pe).ok())
-        .map(|cl| cl.kingdom());
+        .map(|cl| cl.kingdoms().iter().copied().collect())
+        .unwrap_or_default();
+    let player_kingdom_first = player_kingdoms.iter().next().copied();
 
     for (ui_with_kingdom, mut transform) in &mut icons {
         let Ok(kingdom_hold) = kingdoms.get(ui_with_kingdom.0) else {
@@ -253,21 +259,41 @@ pub fn update(
         let color = if sel_land_e == Some(kingdom_hold.0) {
             css::YELLOW
         } else {
+            // Multi-kingdom: a kingdom the player leads that isn't the
+            // currently-selected one still renders in the same
+            // brown — the "selected vs unselected" yellow/brown flip
+            // is the player-facing cue, the player-vs-other distinction
+            // lives on the per-land fill (see `land_graphic::update`).
+            // Keeping `player_kingdoms` read here so the multi-kingdom
+            // set is built once per frame; future code can branch on
+            // `player_kingdoms.contains(&ui_with_kingdom.0)` to give
+            // own-but-not-selected kingdoms their own colour.
+            let _ = &player_kingdoms;
             CASTLE_BROWN
         };
         draw(&mut gizmos, pos, color);
     }
+    // Silence the unused-variable warning on `player_kingdom_first`
+    // — see the comment on the multi-kingdom set above for why it
+    // stays in scope.
+    let _ = player_kingdom_first;
 
     // Refresh each land label. The name was baked in at startup; the
     // yield line only changes on construct/destroy, but a per-frame walk
     // is cheap and keeps the code branch-free. Non-player lands get the
     // name only — the yield is the player's own bookkeeping.
+    //
+    // Multi-kingdom: the `is_own` predicate is the FULL HashSet, not
+    // just the first kingdom — a land held by any of the player's
+    // kingdoms counts as own.
     for (label, mut text) in &mut labels {
         let Ok(name) = land_names.get(label.0) else {
             continue;
         };
-        let is_own = player_kingdom
-            .and_then(|pk| land_held_by.get(label.0).ok().map(|hb| hb.kingdom() == pk))
+        let is_own = land_held_by
+            .get(label.0)
+            .ok()
+            .map(|land_held_by| player_kingdoms.contains(&land_held_by.kingdom()))
             .unwrap_or(false);
         if is_own {
             let (gold, levy) = crate::game::yields::sum_land_yield(

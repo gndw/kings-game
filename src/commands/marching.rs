@@ -1,7 +1,17 @@
-//! The marching-army command: queue a marching order to move one of the
-//! actor's armies to another land. The marching is a separate entity
+//! The marching-army command: queue marching orders to move one of the
+//! actor's armies to another land. A marching is a separate entity
 //! (`Marching` + relationships + dates) that the daily marching tick
 //! activates when the army is sitting on the marching's source land.
+//!
+//! **Armies travel by road, one marching per road.** From the land the army
+//! stands on, [`march`] traces the road network to the target land (breadth
+//! first, so the fewest roads wins) and spawns one marching per road on that
+//! route — each carrying `MarchingOnRoad` plus the road's two ends as
+//! `MarchingFromLand` / `MarchingToLand`. The chain lands in the army's
+//! `ArmyHasMarching` queue in route order and the daily tick walks it hop by
+//! hop, each hop costing that road's
+//! [`RoadDistanceDays`](crate::ecs::road::RoadDistanceDays). A target with
+//! no road route is rejected.
 //!
 //! Two selection steps: step 0 picks an army (any army under the actor's
 //! kingdom), step 1 picks the target land. The actor must rule the army's
@@ -14,7 +24,7 @@
 //! shows when the player rules the selected land AND at least one player's
 //! army sits on it.
 //!
-//! [`MarchingArmy::execute`] just spawns the marching entity and walks
+//! [`MarchingArmy::execute`] just spawns the marching entities and walks
 //! away — the daily tick does the actual lifting (activating the queued
 //! marching, moving the army, advancing to the next one in the queue).
 //! See [`crate::game::marching::tick`].
@@ -26,17 +36,23 @@ use crate::ecs::army::{
 use crate::ecs::kingdom::KingdomHasArmies;
 use crate::ecs::marching::{
     Marching, MarchingArmy, MarchingArrivedDate, MarchingBeginDate, MarchingFromLand,
-    MarchingStatus, MarchingToLand,
+    MarchingOnRoad, MarchingStatus, MarchingToLand,
 };
+use crate::ecs::road::{Road, RoadBetweenLands};
 use crate::ecs::{CharacterLeads, LandName, Registry, StringId};
+use crate::game::marching::road_days;
+use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
 use bevy::prelude::RelationshipTarget;
+use std::collections::HashMap;
+use std::collections::VecDeque;
 
 /// Queue a marching order for one of the actor's armies. Registered as
 /// "Marching Army" in the command palette (the player-facing name); the
 /// struct is named `MarchingOrder` to avoid colliding with the
 /// [`MarchingArmy`](crate::ecs::marching::MarchingArmy) component in
-/// `ecs::marching`.
+/// `ecs::marching`. One order can spawn several marchings — one per road
+/// between the army and the target.
 pub struct MarchingOrder;
 
 impl Command for MarchingOrder {
@@ -144,9 +160,81 @@ fn all_lands(world: &World) -> Vec<(String, String)> {
     result
 }
 
-/// Validate (actor rules the army; target is a different land), then spawn
-/// the marching entity with `MarchingStatus::Scheduled` and empty dates.
-/// The daily tick will activate it when the army is on the matching source
+/// One road on a traced route: the road entity and the land at each end, in
+/// travel order. Each hop becomes one marching entity.
+struct Hop {
+    road: Entity,
+    from: Entity,
+    to: Entity,
+}
+
+/// The road adjacency of the whole map: `land → [(road, other end)]`. Built
+/// by walking every `Road` entity's `RoadBetweenLands` (roads are baked at
+/// populate time and never change, so this is cheap and always current).
+/// Each land's Vec is in road-spawn order, which makes [`trace`]'s search
+/// deterministic. Uses `world.iter_entities()` (`&World` safe) rather than
+/// `world.query` (which needs `&mut World`).
+fn road_graph(world: &World) -> HashMap<Entity, Vec<(Entity, Entity)>> {
+    let mut graph: HashMap<Entity, Vec<(Entity, Entity)>> = HashMap::new();
+    for entity_ref in world.iter_entities() {
+        if entity_ref.get::<Road>().is_none() {
+            continue;
+        }
+        let Some(between) = entity_ref.get::<RoadBetweenLands>() else {
+            continue;
+        };
+        // `validate` guarantees exactly two lands; skip anything else
+        // rather than index blindly.
+        let [a, b] = between.0[..] else { continue };
+        let road_e = entity_ref.id();
+        graph.entry(a).or_default().push((road_e, b));
+        graph.entry(b).or_default().push((road_e, a));
+    }
+    graph
+}
+
+/// Trace the roads from `from_e` to `to_e`, returning one [`Hop`] per road
+/// in travel order. Breadth-first, so the route with the fewest roads wins;
+/// `None` when no chain of roads connects the two lands (the marching is
+/// then rejected — armies never leave the road network). `Some(vec![])` is
+/// impossible: `march` rejects `from == to` before calling.
+fn trace(world: &World, from_e: Entity, to_e: Entity) -> Option<Vec<Hop>> {
+    let graph = road_graph(world);
+
+    // BFS from the army's land, remembering how each land was first
+    // reached: `land → (road walked, previous land)`.
+    let mut came_from: HashMap<Entity, (Entity, Entity)> = HashMap::new();
+    let mut queue: VecDeque<Entity> = VecDeque::from([from_e]);
+    while let Some(land_e) = queue.pop_front() {
+        if land_e == to_e {
+            break;
+        }
+        for &(road_e, next_e) in graph.get(&land_e).into_iter().flatten() {
+            if next_e == from_e || came_from.contains_key(&next_e) {
+                continue;
+            }
+            came_from.insert(next_e, (road_e, land_e));
+            queue.push_back(next_e);
+        }
+    }
+
+    // Walk the predecessors back from the target, then flip into travel
+    // order. Bails out if the target was never reached.
+    let mut hops = Vec::new();
+    let mut cursor = to_e;
+    while cursor != from_e {
+        let (road_e, prev_e) = *came_from.get(&cursor)?;
+        hops.push(Hop { road: road_e, from: prev_e, to: cursor });
+        cursor = prev_e;
+    }
+    hops.reverse();
+    Some(hops)
+}
+
+/// Validate (actor rules the army; target is a different land; a road route
+/// exists), then spawn one marching entity per road on the route — each
+/// `MarchingStatus::Scheduled` with empty dates. The daily tick activates
+/// them one at a time, each when the army is standing on that hop's source
 /// land.
 fn march(world: &mut World, actor: &str, army_id: &str, target_id: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
@@ -172,8 +260,8 @@ fn march(world: &mut World, actor: &str, army_id: &str, target_id: &str) {
         ));
     }
 
-    // The army's current land is the source. Capture it before we mutate
-    // anything so the chronicle line can name it.
+    // The army's current land is where the route starts. Capture it before
+    // we mutate anything so the chronicle line can name it.
     let from_e = world
         .get::<ArmyOnLand>(army_e)
         .map(|army_on_land| army_on_land.0);
@@ -199,34 +287,65 @@ fn march(world: &mut World, actor: &str, army_id: &str, target_id: &str) {
         .map(|land_name| land_name.0.clone())
         .unwrap_or_else(|| target_id.to_string());
 
-    // Spawn the marching entity. The three relationships
-    // (`MarchingArmy` / `MarchingFromLand` / `MarchingToLand`) hit Bevy's
-    // hooks and auto-fill the reverses on the army and both lands
-    // synchronously. Dates stay empty until the daily tick activates the
-    // marching.
-    let id = next_id(world);
-    let eid = world
-        .spawn((
-            StringId(id.clone()),
-            Marching,
-            MarchingArmy(army_e),
-            MarchingFromLand(from_e),
-            MarchingToLand(target_e),
-            MarchingStatus::Scheduled,
-            MarchingBeginDate(None),
-            MarchingArrivedDate(None),
-        ))
-        .id();
-    world.resource_mut::<Registry>().insert(id, eid);
+    // Trace the road network from the army's land to the target. No chain
+    // of roads, no march — armies only move along roads.
+    let Some(hops) = trace(world, from_e, target_e) else {
+        return note(world, format!(
+            "cannot march `{army_id}`: no road leads from {from_name} to {to_name}"
+        ));
+    };
+
+    // Price the route before committing to it: each hop costs its own road's
+    // `RoadDistanceDays`, and the sum is what the chronicle quotes, so the
+    // player is told exactly what the tick will charge. `None` means a road
+    // on the route has no duration — impossible for validated content, and
+    // not something to paper over with a guessed number, so the order is
+    // refused rather than queued into a march that could never activate.
+    let Some(days) = hops
+        .iter()
+        .map(|hop| road_days(world, hop.road))
+        .sum::<Option<u32>>()
+    else {
+        return note(world, format!(
+            "cannot march `{army_id}`: a road on the way to {to_name} has no distance"
+        ));
+    };
+
+    // One marching entity per road, queued in travel order. The four
+    // relationships (`MarchingArmy` / `MarchingFromLand` / `MarchingToLand`
+    // / `MarchingOnRoad`) hit Bevy's hooks and auto-fill the reverses on the
+    // army, both lands and the road synchronously. Insertion order is what
+    // makes `ArmyHasMarching` a route: the tick activates the hop whose
+    // source land the army is standing on, which walks the chain in order.
+    // Dates stay empty until the daily tick activates each marching.
+    for hop in &hops {
+        let id = next_id(world);
+        let eid = world
+            .spawn((
+                StringId(id.clone()),
+                Marching,
+                MarchingArmy(army_e),
+                MarchingFromLand(hop.from),
+                MarchingToLand(hop.to),
+                MarchingOnRoad(hop.road),
+                MarchingStatus::Scheduled,
+                MarchingBeginDate(None),
+                MarchingArrivedDate(None),
+            ))
+            .id();
+        world.resource_mut::<Registry>().insert(id, eid);
+    }
 
     // ponytail: no `ArmyMarching` insertion here — the daily tick does
-    // that when activating the scheduled marching. Until then the army is
-    // still Idle (or already Marching on an earlier marching) and the
-    // queued marching is just sitting in the army's `ArmyHasMarching`
+    // that when activating the first scheduled marching. Until then the
+    // army is still Idle (or already Marching on an earlier marching) and
+    // the queued hops are just sitting in the army's `ArmyHasMarching`
     // collection waiting for the army to be on the matching source land.
 
+    let roads = hops.len() as u32;
+    let plural = if roads == 1 { "road" } else { "roads" };
     note(
         world,
-        format!("queued {army_name} march: {from_name} → {to_name} (14 days)"),
+        format!("queued {army_name} march: {from_name} → {to_name} ({roads} {plural}, {days} days)"),
     );
 }

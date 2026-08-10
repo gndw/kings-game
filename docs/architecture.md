@@ -20,8 +20,9 @@ from mod folders of RON data, loaded in two passes — definitions merge by id,
 then state overlays the mutable fields — and is consumed once by `populate` to
 spawn entities, after which the ECS is the whole world. Marchings are run-time
 entities only (spawned by the `MarchingOrder` command, despawned by the daily
-marching tick) — they never appear in mod data. Roads are definition-only and
-never change in play.
+marching tick) — they never appear in mod data; each one is a single road hop,
+so an army only ever moves along the road network. Roads are definition-only
+and never change in play.
 
 ## Layers
 
@@ -108,7 +109,10 @@ shape; this is the *what*.
   `house.rs`, `character.rs`, `land.rs`, `kingdom.rs`, `army.rs`, `marching.rs`,
   `road.rs` (all under `ecs/`). Marching is a run-time entity only — the player spawns
   them via the `MarchingOrder` command and the daily tick reaps them when the
-  army arrives — so they don't appear in `populate` or mod data. Army carries
+  army arrives — so they don't appear in `populate` or mod data. One marching
+  is one road: `MarchingOnRoad` names it and `MarchingFromLand` /
+  `MarchingToLand` are that road's two ends, so a move across several lands is
+  a chain of marchings the command traces through the road network. Army carries
   `ArmyStatus` (`Idle` / `Marching`) and the active `ArmyMarching`; the
   scheduled-and-active marchings queue is the auto-maintained `ArmyHasMarching`
   `Vec<Entity>` on the army. See the `Army and Marching are separate entity
@@ -116,7 +120,12 @@ shape; this is the *what*.
   the two lands it joins (`RoadBetweenLands`, a plain `Vec<Entity>`, not a
   Bevy relationship since roads are baked at populate time and never change)
   live on the road entity and are read by
-  [`road_graphic`](src/map/components/road_graphic.rs).
+  [`road_graphic`](src/map/components/road_graphic.rs) and by the marching
+  command's route search. `RoadDistanceDays` is the road's marching cost in
+  days — authored in mod data (the base mod scales it off polyline length,
+  longest road = 30 days), read through `game::marching::road_days`. The
+  road's one live link is `RoadHasMarchings`, the
+  auto-maintained reverse of `MarchingOnRoad`.
 
 - **`StringId`** (`ecs/ecs.rs`): every entity carries the id its RON data and
   saves address it by. The Rhai script ABI was string ids; the `Registry`
@@ -148,10 +157,16 @@ shape; this is the *what*.
     order is preserved by the `RelationshipTarget` Vec.
   - `MarchingFromLand` (on marching) ↔ `LandHasMarchingsFrom` (on land,
     `Vec<Entity>`) and `MarchingToLand` (on marching) ↔ `LandHasMarchingsTo`
-    (on land, `Vec<Entity>`) — the marching's source and destination. The
-    land-side targets are not queried by gameplay code (the marching tick
-    walks `ArmyHasMarching` instead); they exist to satisfy Bevy's
-    `RelationshipTarget` correctness check.
+    (on land, `Vec<Entity>`) — the marching's source and destination, always
+    the two ends of its road. The land-side targets are not queried by
+    gameplay code (the marching tick walks `ArmyHasMarching` instead); they
+    exist to satisfy Bevy's `RelationshipTarget` correctness check.
+  - `MarchingOnRoad` (on marching) ↔ `RoadHasMarchings` (on road,
+    `Vec<Entity>`) — the road the marching travels, one road per marching.
+    The only relationship on a road; the road's own definition data
+    (`RoadPoints` / `RoadBetweenLands`) stays a plain non-relationship, but
+    marchings come and go at run time so the reverse is worth hook-
+    maintaining. Read by `road_graphic` to colour a road by its traffic.
   - `CourtierOfCharacter` (courtier→character) ↔ `CharacterHasCourtiers`, and
     `CourtierOfKingdom` (courtier→kingdom) ↔ `KingdomHasCourtiers` — each appointment
     links one character to one kingdom; `CourtierType::Courtier` is the generic role.
@@ -331,17 +346,24 @@ the style of `ctx::step`.
   `ArmyHasMarching` collection and despawns any queued marchings first —
   otherwise the marchings would be left holding a `MarchingArmy` pointing
   at the despawned army.
-- **`MarchingOrder`** queues a marching order to move one of the actor's
+- **`MarchingOrder`** queues marching orders to move one of the actor's
   armies to another land. Validates the army belongs to the actor's
   kingdom (via `ArmyBelongsToKingdom`) and the target is a different
-  land from the army's current land, then spawns a `Marching` entity with
-  `MarchingStatus::Scheduled`, empty `MarchingBeginDate` /
-  `MarchingArrivedDate`, and the source (`MarchingFromLand`) / target
-  (`MarchingToLand`) relationships filled. The three relationships
-  auto-maintain `ArmyHasMarching` (on the army, the queue) and
-  `LandHasMarchingsFrom` / `LandHasMarchingsTo` (on the two lands); the
+  land from the army's current land, then **traces the road network** from
+  the land the army stands on to the target — breadth-first over every
+  road's `RoadBetweenLands`, so the fewest-roads route wins — and spawns
+  **one `Marching` entity per road** on that route, in travel order. Each
+  carries `MarchingStatus::Scheduled`, empty `MarchingBeginDate` /
+  `MarchingArrivedDate`, that road in `MarchingOnRoad`, and the road's two
+  ends as `MarchingFromLand` / `MarchingToLand`. A target with no road
+  route is rejected with a chronicle note. The four relationships
+  auto-maintain `ArmyHasMarching` (on the army, the queue),
+  `LandHasMarchingsFrom` / `LandHasMarchingsTo` (on the lands) and
+  `RoadHasMarchings` (on the road); the
   `ArmyMarching` "current marching" component is *not* inserted here —
-  the daily marching tick does that when activating the marching. Two
+  the daily marching tick does that when activating each marching, which
+  is what walks the army hop by hop (each hop costing its road's
+  `RoadDistanceDays`; the chronicle line quotes the route's summed total). Two
   steps (pick an army, pick a target land). From the actions panel the
   **G** hotkey bypasses the army step (`marching_direct` in
   `ui/command_menu`) and opens the palette into step 1 with the first army
@@ -462,10 +484,11 @@ asset-loaded sprites.
   needs stable iteration order relies on each kind being a single archetype.
 - **Relationships are hook-maintained.** Set the single-`Entity` side
   (`KingdomLedBy`/`KingdomHold`/`BuildingOnLand`/`ArmyOnLand`/
-  `ArmyBelongsToKingdom`/`MarchingArmy`/`MarchingFromLand`/`MarchingToLand`);
+  `ArmyBelongsToKingdom`/`MarchingArmy`/`MarchingFromLand`/`MarchingToLand`/
+  `MarchingOnRoad`);
   never hand-edit the reverse (`CharacterLeads`/`LandHeldBy`/`LandHasBuildings`/
   `LandHasArmies`/`KingdomHasArmies`/`ArmyHasMarching`/`LandHasMarchingsFrom`/
-  `LandHasMarchingsTo`).
+  `LandHasMarchingsTo`/`RoadHasMarchings`).
 - **Definition refs are fatal; state refs are repaired.** Don't move
   `validate`'s checks into `reconcile` or vice versa — they encode different
   policies (broken mod vs old save).
@@ -485,11 +508,11 @@ asset-loaded sprites.
 | `src/commands/destroy_building.rs` | the `DestroyBuilding` command (validate + despawn + deregister) |
 | `src/commands/raise_army.rs` | the `RaiseArmy` command (validate + spawn the army bundle + drain `BuildingLevy` pools) |
 | `src/commands/dismiss_army.rs` | the `DismissArmy` command (validate + distribute `ArmyLevy` back into `BuildingLevy` + despawn + deregister + reap queued marchings) |
-| `src/commands/marching.rs` | the `MarchingOrder` command (validate + spawn a `Marching` entity with `MarchingStatus::Scheduled` and empty dates) |
-| `src/ecs/marching.rs` | the `Marching` entity kind — `Marching` marker + `MarchingArmy`/`MarchingFromLand`/`MarchingToLand` relationships + `MarchingBeginDate`/`MarchingArrivedDate` + `MarchingStatus` enum |
-| `src/ecs/road.rs` | the `Road` entity kind — `Road` marker + `RoadPoints(Vec<(f64,f64)>)` + `RoadBetweenLands(Vec<Entity>)` (definition-only; no Bevy relationship) |
-| `src/map/components/road_graphic.rs` | per-road dashed-line visual — startup spawns one `RoadGraphic` entity per road, baking the polyline into a `GizmoAsset` and attaching a persistent `Gizmo` component with `GizmoLineStyle::Dashed`; Bevy's retained-gizmo system renders it with no per-frame update |
-| `src/game/marching.rs` | the per-day marching tick (`OnDay` — activate scheduled marchings on the matching source land, move arrived armies, chain into the next marching or return to Idle) |
+| `src/commands/marching.rs` | the `MarchingOrder` command (validate + trace the road route + spawn one `Marching` entity per road, each `MarchingStatus::Scheduled` with empty dates) |
+| `src/ecs/marching.rs` | the `Marching` entity kind — `Marching` marker + `MarchingArmy`/`MarchingFromLand`/`MarchingToLand`/`MarchingOnRoad` relationships + `MarchingBeginDate`/`MarchingArrivedDate` + `MarchingStatus` enum |
+| `src/ecs/road.rs` | the `Road` entity kind — `Road` marker + `RoadPoints(Vec<(f64,f64)>)` + `RoadBetweenLands(Vec<Entity>)` + `RoadDistanceDays(u32)` (definition-only; no Bevy relationship) + `RoadHasMarchings` (the reverse of `MarchingOnRoad`) |
+| `src/map/components/road_graphic.rs` | per-road dashed-line visual — startup spawns one `RoadGraphic` marker per road (back-reffed by `UIWithRoad`) and a per-frame `update` draws the polyline through the `RoadGizmoConfigGroup` gizmo group, whose config carries the `GizmoLineStyle::Dashed` style; the line colour reports the road's `RoadHasMarchings` (green = an army is on it, gray = a march is queued on it, default otherwise) |
+| `src/game/marching.rs` | the per-day marching tick (`OnDay` — activate scheduled marchings on the matching source land, move arrived armies one road onward, chain into the next marching or return to Idle) + `road_days` (the one place a road's `RoadDistanceDays` is resolved) |
 | `src/game/replenish_levy.rs` | the monthly `BuildingLevy` top-up (`OnMonth` — every ACTIVE building's pool += `def.levy_rate`, capped at `def.levy`) |
 | `src/map/components/holding_icon.rs` | the castle-icon visual (three crenellated white-line towers with a centre keep, side walls, and a central gate) — reusable gizmo primitive in `pub fn draw(gizmos, at, color)`. `startup` (Startup) spawns one `HoldingIcon` per `Kingdom` with a `UIWithKingdom` back-ref; `update` (PostUpdate) reads `KingdomHold` → `LandHolding` to position each icon at the kingdom's home land and draws the gizmo (yellow when that land is selected, brown otherwise) |
 | `src/map/components/land_graphic.rs` | per-land polygon outline + scanline fill + name/yield label. `startup` (Startup) spawns one `LandGraphic` per `Land` with a `UIWithLand` back-ref plus five `LandLabel` `Text2d` entities (main label + four shadow siblings forming a 1px black outline) per land. `update` (PostUpdate) reads `LandBorders` + `StringId` to draw the outline (yellow when selected, brown otherwise) + scanline fill (green-tinted when player-owned), and refreshes each label's `Text2d` with the current yield line |

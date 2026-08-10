@@ -3,14 +3,27 @@
 // `between_land_ids` lists the two lands the road joins. Roads through
 // Lannisport's belly have extra intermediate points so they bend slightly
 // instead of running dead straight; the other roads stay at 3 points.
+//
+// `distance_days` is how long an army takes to march the road — one marching
+// entity covers one road, so this is the whole cost of that leg. Scaled off
+// the polyline's total length: the longest road (road-2-3, ~748 units) is 30
+// days and the rest are `round(30 * len / 748)`, floored at 1. Re-derive it
+// when you move a holding or bend a road; it is authored data, not computed
+// at load, so a mod can make a paved highway cheap or a mountain pass dear
+// without touching the geometry.
 (
     roads: [
-        (id: "road-1-2", points: [(330, 345),  (540.0, 390.0),  (750, 435)],   between_land_ids: ["land-1", "land-2"]),
-        // through Lannisport's belly: 5 points, gentle southward dip
-        (id: "road-2-3", points: [(750, 435),  (970, 540),  (1170, 630), (1300, 675), (1440, 720)],  between_land_ids: ["land-2", "land-3"]),
+        // ~430 units
+        (id: "road-1-2", points: [(330, 345),  (540.0, 390.0),  (750, 435)],   between_land_ids: ["land-1", "land-2"], distance_days: 17),
+        // through Lannisport's belly: 5 points, gentle southward dip — the
+        // longest road on the map, so it sets the 30-day ceiling
+        (id: "road-2-3", points: [(750, 435),  (970, 540),  (1170, 630), (1300, 675), (1440, 720)],  between_land_ids: ["land-2", "land-3"], distance_days: 30),
         // leaving Lannisport into Riverrun: 5 points, slight northward kink
-        (id: "road-3-4", points: [(1440, 720), (1510, 755), (1570, 795), (1630, 840), (1680, 870)], between_land_ids: ["land-3", "land-4"]),
-        (id: "road-4-5", points: [(1680, 870), (1890.0, 1065.0),(2100, 1260)], between_land_ids: ["land-4", "land-5"]),
-        (id: "road-5-6", points: [(2100, 1260),(2212.5, 1297.5),(2325, 1335)], between_land_ids: ["land-5", "land-6"]),
+        // — ~284 units, the shortest of the belly roads
+        (id: "road-3-4", points: [(1440, 720), (1510, 755), (1570, 795), (1630, 840), (1680, 870)], between_land_ids: ["land-3", "land-4"], distance_days: 11),
+        // ~573 units
+        (id: "road-4-5", points: [(1680, 870), (1890.0, 1065.0),(2100, 1260)], between_land_ids: ["land-4", "land-5"], distance_days: 23),
+        // ~237 units, the shortest road on the map
+        (id: "road-5-6", points: [(2100, 1260),(2212.5, 1297.5),(2325, 1335)], between_land_ids: ["land-5", "land-6"], distance_days: 10),
     ],
 )

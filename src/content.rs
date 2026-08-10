@@ -237,9 +237,10 @@ pub struct Courtier {
     pub courtier_type: CourtierType,
 }
 
-/// A connection between two lands — a polyline (one point per segment) and
-/// the two land ids it joins. Definition-only: roads are baked at populate
-/// time into [`crate::ecs::road::Road`] entities and never edited.
+/// A connection between two lands — a polyline (one point per segment), the
+/// two land ids it joins, and how many days marching it takes.
+/// Definition-only: roads are baked at populate time into
+/// [`crate::ecs::road::Road`] entities and never edited.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Road {
@@ -250,6 +251,15 @@ pub struct Road {
     /// [`crate::ecs::road::RoadBetweenLands`] entities at populate time.
     #[serde(default)]
     pub between_land_ids: Vec<String>,
+    /// Days an army spends marching this road, the whole cost of one
+    /// marching (one marching entity covers one road). Authored, not
+    /// derived from `points` — the base mod scales it off polyline length
+    /// (longest road = 30 days), but a mod is free to price a road against
+    /// its geometry. Resolved to
+    /// [`crate::ecs::road::RoadDistanceDays`] at populate time; [`validate`]
+    /// rejects 0.
+    #[serde(default)]
+    pub distance_days: u32,
 }
 
 impl Content {
@@ -309,6 +319,11 @@ pub fn validate(content: &Content) -> Result<()> {
             if !content.lands.contains_key(lid) {
                 bail!("road `{}` references unknown land `{lid}`", r.id);
             }
+        }
+        // A free road would let an army teleport (begin and arrive the same
+        // day), so a missing or zero `distance_days` is a mod bug.
+        if r.distance_days == 0 {
+            bail!("road `{}` needs a `distance_days` of at least 1", r.id);
         }
     }
     Ok(())

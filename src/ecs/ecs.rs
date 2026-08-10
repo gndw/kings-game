@@ -19,7 +19,7 @@ use super::courtier::{Courtier, CourtierOfCharacter, CourtierOfKingdom};
 use super::house::{House, HouseName};
 use super::kingdom::{Kingdom, KingdomHold, KingdomLedBy};
 use super::land::{Land, LandBorders, LandHolding, LandName};
-use super::road::{Road, RoadBetweenLands, RoadPoints};
+use super::road::{Road, RoadBetweenLands, RoadDistanceDays, RoadPoints};
 
 /// The id an entity is known by in RON data and save files. Every game entity
 /// has one; the Rhai surface (`ctx.gold("char-tywin")`, …) is built on it.
@@ -212,6 +212,7 @@ pub fn populate(world: &mut World, content: Content) {
                 Road,
                 RoadPoints(r.points),
                 RoadBetweenLands(lands),
+                RoadDistanceDays(r.distance_days),
             ))
             .id();
         world.resource_mut::<Registry>().insert(id, eid);

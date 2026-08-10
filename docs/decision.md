@@ -304,19 +304,23 @@ armies raised on its land.
 
 A marching is a separate entity from the army it moves, not a component on
 the army. The marching carries the scheduling data (`MarchingFromLand` /
-`MarchingToLand`, `MarchingBeginDate` / `MarchingArrivedDate`,
-`MarchingStatus`); the army carries the operational state (`ArmyStatus:`
-`Idle` / `Marching`, plus `ArmyMarching` pointing at the current marching).
+`MarchingToLand`, `MarchingOnRoad`, `MarchingBeginDate` /
+`MarchingArrivedDate`, `MarchingStatus`); the army carries the operational
+state (`ArmyStatus:` `Idle` / `Marching`, plus `ArmyMarching` pointing at the
+current marching).
 They are linked by a Bevy relationship: `MarchingArmy` (on the marching)
 ↔ `ArmyHasMarching` (a `Vec<Entity>` on the army, the queue, insertion-
 order-preserving).
 
 - **Why a separate entity:** the same army can carry multiple marchings at
-  once (a queue of marches the player lined up: A→B→C→D). Putting the
+  once (a queue of marches the player lined up: A→B→C→D — and since a
+  marching is one road, even a single ordered move is usually a chain).
+  Putting the
   scheduling data on the army would have turned `Army` into a `Vec` of
   marchings, or pushed the queue somewhere else; the marching entity kind
-  keeps the data shape small (one marching per ordered move) and lets the
-  daily tick walk a single archetype (`Marching`).
+  keeps the data shape small (one marching per road) and lets the
+  daily tick walk a single archetype (`Marching`). See the `One marching
+  per road` decision.
 - **Why a relationship, not a plain `Entity` field:** Bevy's hook-
   maintained `Vec<Entity>` collection on the army is the queue, free of
   hand-maintained reverse inserts. Insertion order is preserved by the
@@ -331,8 +335,91 @@ order-preserving).
   pointer the marching tick follows day-to-day.
 - **Run-time only.** Marchings never appear in mod data — `populate` does
   not spawn any. They are spawned by the `MarchingOrder` command and
-  despawned by the daily tick when the army reaches the target land and
-  the queue is empty. `DismissArmy` also walks the queue and despawns every
+  despawned by the daily tick as each road is finished (the last one when
+  the army reaches the target land and the queue is empty). `DismissArmy`
+  also walks the queue and despawns every
   marching before despawning the army (otherwise the marchings would be
   left holding a `MarchingArmy` pointing at a despawned entity).
 
+## One marching per road; armies travel the road network
+
+A marching entity covers exactly one road. `MarchingOnRoad` names it and
+`MarchingFromLand` / `MarchingToLand` are always that road's two
+`RoadBetweenLands` ends. An order to a land further off is not one long
+marching — the `MarchingOrder` command traces the road graph from the land
+the army stands on to the target and spawns one marching per road on the
+route, queued in travel order in the army's `ArmyHasMarching`.
+
+- **Why per-road:** the road is where a marching *happens*. Anything that
+  wants to reason about a moving army — where it is between two lands, who
+  else is on that road, an ambush, a blocked or upgraded road — needs the
+  road, and a marching that spanned several roads would have no single
+  answer. It also keeps the entity shape honest: one marching, one leg,
+  one begin/arrived pair.
+- **Route tracing, not free movement.** Armies only move along roads. The
+  command breadth-firsts the graph (built by walking every `Road`'s
+  `RoadBetweenLands`, which never changes after populate), so the
+  **fewest-roads** route wins — not the fewest *days*; with per-road costs
+  those can differ, and hop count is the cheaper, more predictable rule
+  until the map is big enough for the difference to bite. A target with no
+  chain of roads to it is
+  rejected outright rather than silently walked cross-country. Each land's
+  adjacency is in road-spawn order, so the search is deterministic like the
+  rest of the sim.
+- **Why the chain works with no new tick logic.** The daily tick already
+  activates the first scheduled marching whose `MarchingFromLand` matches
+  the army's current land, and on arrival looks for the next one from the
+  new land. A route is exactly that: hop *n*'s target land is hop *n+1*'s
+  source. Travel time falls out as the sum of the route's road costs
+  instead of a flat rate per order, which is also the more sensible cost
+  model.
+- **Why `MarchingOnRoad` is a relationship** (with `RoadHasMarchings` on the
+  road) while the road's own `RoadBetweenLands` is a plain `Vec<Entity>`:
+  the road→land link is definition data baked once at populate, but
+  marchings are spawned and despawned constantly, which is exactly the
+  churn Bevy's hook-maintained reverse handles. It also gives "who is
+  marching on this road" for free.
+- **Not done here:** the army panel still reports the *current hop's* target
+  ("marching to <next land>"), not the route's final destination. Showing
+  the end of the queue means walking `ArmyHasMarching` in the UI; deferred
+  until it actually reads wrong to a player.
+
+## March duration is per-road, authored data (`distance_days`)
+
+How long a march takes is a property of the road, not a constant: each road
+in mod data carries `distance_days`, loaded into the `RoadDistanceDays`
+component and read by `game::marching::road_days`. The daily tick sets a
+marching's arrived date to `begin + road_days(its road)`, and the marching
+command sums the same values across a traced route to quote the player a
+total.
+
+- **Authored, not computed from `points`.** Length is only a proxy for
+  effort. Deriving the days at load would make the number a function of how
+  the polyline happens to be drawn — nudge a holding and every march in the
+  region silently re-prices. As data, a mod can make a paved highway cheap
+  or a mountain pass dear without redrawing anything, and the base mod
+  documents its own scale in `roads.ron`.
+- **The base mod's scale:** the longest road (road-2-3, ~748 units) is 30
+  days, the rest are `round(30 × len / 748)` floored at 1 — 17/30/11/23/10
+  west to east. Re-derive when geometry moves; the comment at the top of
+  `roads.ron` carries the formula.
+- **Zero is fatal.** `content::validate` rejects `distance_days: 0`, which
+  would let an army begin and arrive the same day (and, with the tick's
+  `today >= arrived` test, teleport the whole route in one day). A missing
+  field defaults to 0 via `#[serde(default)]`, so the same check catches
+  "forgot to author it" — consistent with how `points` and
+  `between_land_ids` are defaulted-then-validated rather than made
+  mandatory at the serde level.
+- **One resolver, and no fallback.** `road_days` is the only place the
+  component is read, so the number the command quotes and the number the
+  tick charges cannot drift. It returns `Option<u32>` and there is no
+  default duration to fall back on: every road has a `distance_days`, so a
+  road without one is a torn world, and inventing a number there would hide
+  the bug behind armies that march a plausible-looking length of time.
+  Callers refuse to move instead — the command rejects the order before
+  spawning anything, and the tick's `activate` returns `false`, leaving the
+  marching `Scheduled` to retry. The one case needing care is a `false`
+  mid-route, after the finished marching has been despawned: the army must
+  `stand_down` there, because leaving it `Marching` with an `ArmyMarching`
+  pointing at a despawned entity would freeze it permanently (the tick
+  would look up a missing arrived date and skip, every day, forever).

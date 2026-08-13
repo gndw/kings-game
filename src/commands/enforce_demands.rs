@@ -21,29 +21,24 @@
 //! kingdom leader to player" semantics; the multi-kingdom model is
 //! future work.
 
-use super::core::{note, BaseCommand};
+use super::core::{note, picker_row, set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR,
+    STAT_DIM};
 use crate::ecs::{
     ArmyBelongsToKingdom, CharacterLeads, KingdomHasWarsAttacking, KingdomHold,
-    LandControlledByArmy, LandName, Registry, WarDemandType, WarDemands, WarName,
+    LandControlledByArmy, LandName, Registry, WarBeginDate, WarDefenderKingdom, WarDemandType,
+    WarDemands, WarName,
 };
 use crate::ecs::kingdom::KingdomLedBy;
 use crate::app::Game;
-use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue, CommandMenuUiContext};
+use crate::ui::command_menu::CommandMenuUiContext;
+use crate::resources::calendar::Calendar;
+use crate::resources::date::Date;
 use bevy::ecs::world::World;
 use bevy::prelude::*;
 use bevy::prelude::RelationshipTarget;
 
 /// Resolve one demand on a player's war.
-
-// --- palette UI -------------------------------------------------------------
-// Same shape as the other commands.
-
-/// Per-row background in the palette.
-const ROW_PANEL: Color = Color::srgb(0.16, 0.16, 0.20);
-/// Background when the row is the player's selection.
-const ROW_PANEL_SELECTED: Color = Color::srgb(0.24, 0.40, 0.72);
-/// Hairline border around the card.
-const ROW_BORDER: Color = Color::srgba(0.55, 0.55, 0.62, 0.35);
+pub struct EnforceDemands;
 
 impl BaseCommand for EnforceDemands {
     fn get_command_id(&self) -> &'static str {
@@ -91,30 +86,43 @@ impl BaseCommand for EnforceDemands {
     }
 
     fn update(&self, entity: Entity, is_selected: bool, world: &mut World) {
-        let bg = if is_selected { ROW_PANEL_SELECTED } else { ROW_PANEL };
-        if let Some(mut background) = world.get_mut::<BackgroundColor>(entity) {
-            background.0 = bg;
-        }
+        set_row_selected(world, entity, is_selected);
     }
 }
 
 impl EnforceDemands {
     fn spawn_command_row(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
-        let row = self.spawn_row(world, parent, "Enforce Demands", None);
+        let row = picker_row(
+            world,
+            parent,
+            self.get_command_id(),
+            None,
+            "Enforce Demands",
+            NAME_COLOR,
+            None,
+            None,
+            None,
+        );
         (vec![row], false)
     }
 
     fn spawn_war_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
         let actor = world.resource::<Game>().ctx.player_character_id.clone();
-        // Snapshot the wars list.
-        let wars = player_wars(world, &actor);
+        let calendar = world.resource::<Calendar>();
+        let date = world.resource::<Date>();
+        let rows = player_war_rows(world, &actor, calendar, date);
         let mut entities = Vec::new();
-        for (war_id, label) in wars {
-            let row = self.spawn_row(
+        for row_data in rows {
+            let row = picker_row(
                 world,
                 parent,
-                &label,
-                Some(("war_id".to_string(), war_id)),
+                self.get_command_id(),
+                Some(("war_id".to_string(), row_data.war_id)),
+                &row_data.name,
+                NAME_COLOR,
+                row_data.description.as_deref(),
+                Some((row_data.age.as_str(), STAT_COLOR)),
+                Some((row_data.demands_left.as_str(), STAT_DIM)),
             );
             entities.push(row);
         }
@@ -127,34 +135,20 @@ impl EnforceDemands {
         parent: Entity,
         war_id: &str,
     ) -> (Vec<Entity>, bool) {
-        // Read the war's demands (or use a placeholder if the war is gone).
-        let war_e = world.resource::<Registry>().get(war_id);
-        let demands_label = match war_e.and_then(|e| world.get::<WarDemands>(e)) {
-            Some(wd) if !wd.0.is_empty() => wd
-                .0
-                .iter()
-                .enumerate()
-                .map(|(idx, d)| {
-                    let shape = match d.demand_type {
-                        WarDemandType::Take => "Take",
-                    };
-                    let target_label = world
-                        .get::<KingdomHold>(d.target)
-                        .and_then(|kh| world.get::<crate::ecs::LandName>(kh.0))
-                        .map(|ln| ln.0.clone())
-                        .unwrap_or_else(|| "?".into());
-                    (idx.to_string(), format!("{shape} Kingdom of {target_label}"))
-                })
-                .collect::<Vec<_>>(),
-            _ => Vec::new(),
-        };
+        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let demands = demand_rows(world, &actor, war_id);
         let mut entities = Vec::new();
-        for (idx, label) in demands_label {
-            let row = self.spawn_row(
+        for row_data in demands {
+            let row = picker_row(
                 world,
                 parent,
-                &label,
-                Some(("demand_idx".to_string(), idx)),
+                self.get_command_id(),
+                Some(("demand_idx".to_string(), row_data.idx)),
+                &row_data.name,
+                row_data.name_color,
+                None,
+                None,
+                Some((row_data.gate.as_str(), row_data.gate_color)),
             );
             entities.push(row);
         }
@@ -178,51 +172,27 @@ impl EnforceDemands {
         enforce(world, &actor, &war_id, &demand_idx);
         (Vec::new(), true)
     }
-
-    fn spawn_row(
-        &self,
-        world: &mut World,
-        parent: Entity,
-        title: &str,
-        key_value: Option<(String, String)>,
-    ) -> Entity {
-        let mut entity = world.spawn((
-            Node {
-                width: percent(100),
-                padding: UiRect::all(px(8)),
-                border: UiRect::all(px(1)),
-                border_radius: BorderRadius::all(px(4)),
-                flex_direction: FlexDirection::Column,
-                ..default()
-            },
-            BackgroundColor(ROW_PANEL),
-            BorderColor::all(ROW_BORDER),
-            ChildOf(parent),
-            CommandHasId(self.get_command_id().to_string()),
-        ));
-        if let Some((k, v)) = key_value {
-            entity.insert((CommandHasKey(k), CommandHasValue(v)));
-        }
-        let row = entity.id();
-        world.entity_mut(row).with_children(|c| {
-            c.spawn((
-                Text::new(title),
-                TextFont::from_font_size(16.0),
-                TextColor(Color::srgb(0.96, 0.96, 0.98)),
-            ));
-        });
-        row
-    }
 }
-/// Resolve one demand on a player's war.
-pub struct EnforceDemands;
 
+/// One war's picker row data. `age` is the time since `WarBeginDate`
+/// (formatted via `Calendar::format_duration`); `demands_left` is the
+/// remaining count in `WarDemands`.
+struct WarRowData {
+    war_id: String,
+    name: String,
+    description: Option<String>,
+    age: String,
+    demands_left: String,
+}
 
-/// `(war_id, "<WarName>")` for every war any of the player's kingdoms
-/// is attacking in. Multi-kingdom: walks every kingdom the player leads
-/// and unions their `KingdomHasWarsAttacking` lists, in
-/// `CharacterLeads` order.
-fn player_wars(world: &World, actor: &str) -> Vec<(String, String)> {
+/// Walk every kingdom the actor leads and union their
+/// `KingdomHasWarsAttacking` lists, in `CharacterLeads` order.
+fn player_war_rows(
+    world: &World,
+    actor: &str,
+    calendar: &Calendar,
+    date: &Date,
+) -> Vec<WarRowData> {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return Vec::new();
     };
@@ -242,8 +212,123 @@ fn player_wars(world: &World, actor: &str) -> Vec<(String, String)> {
                 .get::<WarName>(war_e)
                 .map(|wn| wn.0.clone())
                 .unwrap_or_else(|| "?".into());
-            out.push((war_id, war_name));
+            // War age: today − `WarBeginDate`, formatted. Missing
+            // begin date → empty.
+            let age = world
+                .get::<WarBeginDate>(war_e)
+                .map(|WarBeginDate(begin)| {
+                    let dur = (date.ordinal(calendar) - begin.ordinal(calendar)).max(0) as u32;
+                    calendar.format_duration(dur)
+                })
+                .unwrap_or_default();
+            let demands_left = world
+                .get::<WarDemands>(war_e)
+                .map(|wd| wd.0.len().to_string())
+                .unwrap_or_default();
+            // Description: defender's kingdom label.
+            let defender_name = world
+                .get::<WarDefenderKingdom>(war_e)
+                .and_then(|war_defender_kingdom| {
+                    world
+                        .get::<KingdomHold>(war_defender_kingdom.0)
+                        .and_then(|kh| world.get::<LandName>(kh.0))
+                })
+                .map(|ln| ln.0.clone())
+                .unwrap_or_default();
+            out.push(WarRowData {
+                war_id,
+                name: war_name,
+                description: if defender_name.is_empty() {
+                    None
+                } else {
+                    Some(format!("vs {defender_name}"))
+                },
+                age,
+                demands_left: if demands_left.is_empty() {
+                    String::new()
+                } else {
+                    format!("{demands_left} left")
+                },
+            });
         }
+    }
+    out
+}
+
+/// One demand's picker row data. `gate` is `ready` / `block: hold <land>`
+/// depending on whether the `Take` demand's gate (target land controlled
+/// by a player's army) is currently met; unmet demands get a red name
+/// tint + `(blocked)` suffix so the player sees the pick will fail.
+struct DemandRowData {
+    idx: String,
+    name: String,
+    name_color: Color,
+    gate: String,
+    gate_color: Color,
+}
+
+/// Resolve each demand on the picked war into picker-row data. `Take` is
+/// the only shape today; the gate is `ready` if the target kingdom's
+/// held land is controlled by one of the actor's armies, otherwise
+/// `block: hold <land>`.
+fn demand_rows(world: &World, actor: &str, war_id: &str) -> Vec<DemandRowData> {
+    let Some(war_e) = world.resource::<Registry>().get(war_id) else {
+        return Vec::new();
+    };
+    let Some(wd) = world.get::<WarDemands>(war_e) else {
+        return Vec::new();
+    };
+    let actor_kingdoms: std::collections::HashSet<bevy::ecs::entity::Entity> = world
+        .resource::<Registry>()
+        .get(actor)
+        .and_then(|actor_e| world.get::<CharacterLeads>(actor_e))
+        .map(|character_leads| character_leads.kingdoms().iter().copied().collect())
+        .unwrap_or_default();
+    let mut out = Vec::new();
+    for (idx, demand) in wd.0.iter().enumerate() {
+        let shape = match demand.demand_type {
+            WarDemandType::Take => "Take",
+        };
+        let target_label = world
+            .get::<KingdomHold>(demand.target)
+            .and_then(|kh| world.get::<LandName>(kh.0))
+            .map(|ln| ln.0.clone())
+            .unwrap_or_else(|| "?".into());
+        let (gate, met) = match demand.demand_type {
+            WarDemandType::Take => {
+                // Gate: target land must be controlled by one of the
+                // actor's armies (any of their kingdoms).
+                let target_land = world
+                    .get::<KingdomHold>(demand.target)
+                    .map(|kh| kh.0);
+                let controlling_army = target_land.and_then(|l| world.get::<LandControlledByArmy>(l));
+                let army_ok = controlling_army
+                    .and_then(|lca| world.get::<ArmyBelongsToKingdom>(lca.army()))
+                    .map(|abtk| actor_kingdoms.contains(&abtk.0))
+                    .unwrap_or(false);
+                if army_ok {
+                    ("ready".to_string(), true)
+                } else {
+                    (format!("block: hold {target_label}"), false)
+                }
+            }
+        };
+        let (name, name_color) = if met {
+            (format!("{shape} Kingdom of {target_label}"), NAME_COLOR)
+        } else {
+            (
+                format!("{shape} Kingdom of {target_label} (blocked)"),
+                super::core::HINT_RED,
+            )
+        };
+        let gate_color = if met { STAT_COLOR } else { STAT_DIM };
+        out.push(DemandRowData {
+            idx: idx.to_string(),
+            name,
+            name_color,
+            gate,
+            gate_color,
+        });
     }
     out
 }

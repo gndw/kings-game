@@ -13,29 +13,21 @@
 //! [`replenish_levy`](crate::game::replenish_levy::replenish) loop fills
 //! the pools back up over time.
 
-use super::core::{available_levy, drain_buildings, next_id, note, ruled_lands, BaseCommand};
+use super::core::{
+    available_levy, drain_buildings, next_id, note, picker_row, ruled_lands, set_row_selected,
+    BaseCommand, NAME_COLOR, STAT_COLOR, STAT_DIM,
+};
 use crate::app::Game;
 use crate::ecs::army::{Army, ArmyBelongsToKingdom, ArmyLevy, ArmyName, ArmyOnLand, ArmyStatus};
 use crate::ecs::{
-    CharacterLeads, CharacterOfHouse, HouseName, LandHeldBy, LandName, Registry, StringId,
+    CharacterLeads, CharacterOfHouse, HouseName, LandHasArmies, LandHeldBy, LandName, Registry,
+    StringId,
 };
 use crate::events::{BuildingUpdateKind, OnArmyRaised, OnBuildingUpdated};
-use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue};
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
 use bevy::prelude::*;
-
-// --- palette UI -------------------------------------------------------------
-// Same shape as `construct_building`: a single padded card whose title
-// text is the command's display name. The shared `update` swaps the
-// background between `ROW_PANEL` and `ROW_PANEL_SELECTED`.
-
-/// Per-row background in the palette. One shade lighter than the panel.
-const ROW_PANEL: Color = Color::srgb(0.16, 0.16, 0.20);
-/// Background when the row is the player's selection.
-const ROW_PANEL_SELECTED: Color = Color::srgb(0.24, 0.40, 0.72);
-/// Hairline border around the card.
-const ROW_BORDER: Color = Color::srgba(0.55, 0.55, 0.62, 0.35);
+use bevy::prelude::RelationshipTarget;
 
 /// Raise an army on a land the actor rules.
 pub struct RaiseArmy;
@@ -58,29 +50,17 @@ impl BaseCommand for RaiseArmy {
 
         // No `"command"` key → render the command row.
         if command_pick.is_none() {
-            let row = world
-                .spawn((
-                    Node {
-                        width: percent(100),
-                        padding: UiRect::all(px(8)),
-                        border: UiRect::all(px(1)),
-                        border_radius: BorderRadius::all(px(4)),
-                        flex_direction: FlexDirection::Column,
-                        ..default()
-                    },
-                    BackgroundColor(ROW_PANEL),
-                    BorderColor::all(ROW_BORDER),
-                    ChildOf(parent),
-                    CommandHasId(self.get_command_id().to_string()),
-                ))
-                .id();
-            world.entity_mut(row).with_children(|c| {
-                c.spawn((
-                    Text::new("Raise Army"),
-                    TextFont::from_font_size(16.0),
-                    TextColor(Color::srgb(0.96, 0.96, 0.98)),
-                ));
-            });
+            let row = picker_row(
+                world,
+                parent,
+                self.get_command_id(),
+                None,
+                "Raise Army",
+                NAME_COLOR,
+                None,
+                None,
+                None,
+            );
             return (vec![row], false);
         }
 
@@ -89,7 +69,10 @@ impl BaseCommand for RaiseArmy {
             return (Vec::new(), false);
         }
 
-        // Step 1: render one row per land the player rules.
+        // Step 1: render one row per land the player rules. Available
+        // levy and armies already on the land go in the right cells;
+        // lands with no available levy get a `(-no levy)` suffix +
+        // dim stat so the player sees it but knows it'll fail.
         let land_pick = choices
             .iter()
             .find(|(k, _)| k == "land_id")
@@ -103,31 +86,32 @@ impl BaseCommand for RaiseArmy {
             let lands = ruled_lands(world, &actor);
             let mut entities = Vec::new();
             for (land_id, land_name) in lands {
-                let row = world
-                    .spawn((
-                        Node {
-                            width: percent(100),
-                            padding: UiRect::all(px(8)),
-                            border: UiRect::all(px(1)),
-                            border_radius: BorderRadius::all(px(4)),
-                            flex_direction: FlexDirection::Column,
-                            ..default()
-                        },
-                        BackgroundColor(ROW_PANEL),
-                        BorderColor::all(ROW_BORDER),
-                        ChildOf(parent),
-                        CommandHasId(self.get_command_id().to_string()),
-                        CommandHasKey("land_id".to_string()),
-                        CommandHasValue(land_id),
-                    ))
-                    .id();
-                world.entity_mut(row).with_children(|c| {
-                    c.spawn((
-                        Text::new(land_name),
-                        TextFont::from_font_size(16.0),
-                        TextColor(Color::srgb(0.96, 0.96, 0.98)),
-                    ));
-                });
+                let land_e = world.resource::<Registry>().get(&land_id);
+                let (pool, has_any) = land_e
+                    .map(|e| available_levy(world, e))
+                    .unwrap_or((0, false));
+                let armies_here = land_e
+                    .and_then(|e| world.get::<LandHasArmies>(e))
+                    .map(|lha| lha.iter().count())
+                    .unwrap_or(0);
+                let pool_text = if has_any { pool.to_string() } else { String::new() };
+                let pool_color = if has_any && pool > 0 { STAT_COLOR } else { STAT_DIM };
+                let (name, name_color) = if !has_any || pool == 0 {
+                    (format!("{land_name} (no levy)"), super::core::HINT_RED)
+                } else {
+                    (land_name.clone(), NAME_COLOR)
+                };
+                let row = picker_row(
+                    world,
+                    parent,
+                    self.get_command_id(),
+                    Some(("land_id".to_string(), land_id)),
+                    &name,
+                    name_color,
+                    None,
+                    Some((&pool_text, pool_color)),
+                    Some((&format!("{armies_here} here"), STAT_DIM)),
+                );
                 entities.push(row);
             }
             return (entities, false);
@@ -147,10 +131,7 @@ impl BaseCommand for RaiseArmy {
     }
 
     fn update(&self, entity: Entity, is_selected: bool, world: &mut World) {
-        let bg = if is_selected { ROW_PANEL_SELECTED } else { ROW_PANEL };
-        if let Some(mut background) = world.get_mut::<BackgroundColor>(entity) {
-            background.0 = bg;
-        }
+        set_row_selected(world, entity, is_selected);
     }
 }
 

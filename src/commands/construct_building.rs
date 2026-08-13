@@ -10,10 +10,12 @@
 //!
 //! [`recompute_yields`]: crate::game::yields::recompute_yields
 
-use super::core::{next_id, note, ruled_lands, BaseCommand};
+use super::core::{
+    land_yield, next_id, note, picker_row, ruled_lands, set_row_selected, BaseCommand, HINT_RED,
+    NAME_COLOR, STAT_COLOR,
+};
 use crate::app::Game;
 use crate::resources::buildings::BuildingDefs;
-use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue};
 use crate::ecs::{
     Building, BuildingConstructionDate, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand,
     BuildingStatus, CharacterGold, CharacterLeads, LandHeldBy, LandName, Registry, StringId,
@@ -26,16 +28,6 @@ use bevy::prelude::*;
 
 /// Build a building kind on a land the actor rules.
 pub struct ConstructBuilding;
-
-// --- palette UI -------------------------------------------------------------
-// For now: a single padded card with the command's title text.
-
-/// Per-row background in the palette. One shade lighter than the panel.
-const ROW_PANEL: Color = Color::srgb(0.16, 0.16, 0.20);
-/// Background when the row is the player's selection.
-const ROW_PANEL_SELECTED: Color = Color::srgb(0.24, 0.40, 0.72);
-/// Hairline border around the card.
-const ROW_BORDER: Color = Color::srgba(0.55, 0.55, 0.62, 0.35);
 
 impl BaseCommand for ConstructBuilding {
     fn get_command_id(&self) -> &'static str {
@@ -60,29 +52,17 @@ impl BaseCommand for ConstructBuilding {
         // usual. Sits above the land render so the source follows the
         // player's selection order: pick a command first, then a land.
         if command_pick.is_none() {
-            let row = world
-                .spawn((
-                    Node {
-                        width: percent(100),
-                        padding: UiRect::all(px(8)),
-                        border: UiRect::all(px(1)),
-                        border_radius: BorderRadius::all(px(4)),
-                        flex_direction: FlexDirection::Column,
-                        ..default()
-                    },
-                    BackgroundColor(ROW_PANEL),
-                    BorderColor::all(ROW_BORDER),
-                    ChildOf(parent),
-                    CommandHasId(self.get_command_id().to_string()),
-                ))
-                .id();
-            world.entity_mut(row).with_children(|c| {
-                c.spawn((
-                    Text::new("Construct Building"),
-                    TextFont::from_font_size(16.0),
-                    TextColor(Color::srgb(0.96, 0.96, 0.98)),
-                ));
-            });
+            let row = picker_row(
+                world,
+                parent,
+                self.get_command_id(),
+                None,
+                "Construct Building",
+                NAME_COLOR,
+                None,
+                None,
+                None,
+            );
             return (vec![row], false);
         }
 
@@ -104,7 +84,8 @@ impl BaseCommand for ConstructBuilding {
             .map(|(_, v)| v.clone());
 
         // Step 1: command picked, no land yet → render one row per
-        // land the player currently rules.
+        // land the player currently rules, with the land's net gold
+        // yield and total levy on the right.
         if land_pick.is_none() {
             let actor = world
                 .resource::<Game>()
@@ -114,74 +95,75 @@ impl BaseCommand for ConstructBuilding {
             let lands = ruled_lands(world, &actor);
             let mut entities = Vec::new();
             for (land_id, land_name) in lands {
-                let row = world
-                    .spawn((
-                        Node {
-                            width: percent(100),
-                            padding: UiRect::all(px(8)),
-                            border: UiRect::all(px(1)),
-                            border_radius: BorderRadius::all(px(4)),
-                            flex_direction: FlexDirection::Column,
-                            ..default()
-                        },
-                        BackgroundColor(ROW_PANEL),
-                        BorderColor::all(ROW_BORDER),
-                        ChildOf(parent),
-                        CommandHasId(self.get_command_id().to_string()),
-                        CommandHasKey("land_id".to_string()),
-                        CommandHasValue(land_id),
-                    ))
-                    .id();
-                world.entity_mut(row).with_children(|c| {
-                    c.spawn((
-                        Text::new(land_name),
-                        TextFont::from_font_size(16.0),
-                        TextColor(Color::srgb(0.96, 0.96, 0.98)),
-                    ));
-                });
+                let land_e = world.resource::<Registry>().get(&land_id);
+                let (g, l) = land_e
+                    .map(|e| land_yield(world, e))
+                    .unwrap_or((0, 0));
+                let row = picker_row(
+                    world,
+                    parent,
+                    self.get_command_id(),
+                    Some(("land_id".to_string(), land_id)),
+                    &land_name,
+                    NAME_COLOR,
+                    None,
+                    Some((&format_gold(g), STAT_COLOR)),
+                    Some((&format_levy(l), STAT_COLOR)),
+                );
                 entities.push(row);
             }
             return (entities, false);
         }
 
         // Step 2: land picked, no building yet → render one row per
-        // building kind from `BuildingDefs`. Snapshot the defs first so
-        // the immutable `Resource` borrow drops before we spawn.
+        // building kind from `BuildingDefs`, with cost + time on the
+        // right and the building's effect on a smaller line under the
+        // name. Rows the player can't afford get a red tint + `(-cost)`
+        // suffix. Snapshot the defs first so the immutable `Resource`
+        // borrow drops before we spawn.
         if building_pick.is_none() {
-            let snapshot: Vec<(String, String)> = {
+            let actor = world
+                .resource::<Game>()
+                .ctx
+                .player_character_id
+                .clone();
+            let gold = world
+                .resource::<Registry>()
+                .get(&actor)
+                .and_then(|actor_e| world.get::<CharacterGold>(actor_e))
+                .map(|character_gold| character_gold.0)
+                .unwrap_or(0);
+            let snapshot: Vec<(String, crate::resources::buildings::BuildingDef)> = {
                 let defs = world.resource::<BuildingDefs>();
-                defs.0
-                    .iter()
-                    .map(|(id, def)| (id.clone(), def.name.clone()))
-                    .collect()
+                defs.0.iter().map(|(id, d)| (id.clone(), d.clone())).collect()
             };
             let mut entities = Vec::new();
-            for (id, name) in snapshot {
-                let row = world
-                    .spawn((
-                        Node {
-                            width: percent(100),
-                            padding: UiRect::all(px(8)),
-                            border: UiRect::all(px(1)),
-                            border_radius: BorderRadius::all(px(4)),
-                            flex_direction: FlexDirection::Column,
-                            ..default()
-                        },
-                        BackgroundColor(ROW_PANEL),
-                        BorderColor::all(ROW_BORDER),
-                        ChildOf(parent),
-                        CommandHasId(self.get_command_id().to_string()),
-                        CommandHasKey("building_id".to_string()),
-                        CommandHasValue(id),
-                    ))
-                    .id();
-                world.entity_mut(row).with_children(|c| {
-                    c.spawn((
-                        Text::new(name),
-                        TextFont::from_font_size(16.0),
-                        TextColor(Color::srgb(0.96, 0.96, 0.98)),
-                    ));
-                });
+            for (id, def) in snapshot {
+                let cant_afford = (def.construction_price as i64) > gold;
+                let name_color = if cant_afford { HINT_RED } else { NAME_COLOR };
+                let name = if cant_afford {
+                    format!("{} (-cost)", def.name)
+                } else {
+                    def.name.clone()
+                };
+                let cost_text = format!("{}g", def.construction_price);
+                let cost_color = if cant_afford { HINT_RED } else { STAT_COLOR };
+                // Format the time in a scope so the `Calendar` borrow
+                // drops before `picker_row` takes `&mut World`.
+                let time_text = world
+                    .resource::<Calendar>()
+                    .format_duration(def.construction_time);
+                let row = picker_row(
+                    world,
+                    parent,
+                    self.get_command_id(),
+                    Some(("building_id".to_string(), id)),
+                    &name,
+                    name_color,
+                    Some(&building_effect_summary(&def)),
+                    Some((&cost_text, cost_color)),
+                    Some((&time_text, STAT_COLOR)),
+                );
                 entities.push(row);
             }
             return (entities, false);
@@ -207,14 +189,52 @@ impl BaseCommand for ConstructBuilding {
         (Vec::new(), true)
     }
     fn update(&self, entity: Entity, is_selected: bool, world: &mut World) {
-        // The row is the one we spawned; the orchestrator's
-        // `crate::commands::core::update` passes it in. Swap the background
-        // to the highlight colour when the cursor lands on this row.
-        let bg = if is_selected { ROW_PANEL_SELECTED } else { ROW_PANEL };
-        if let Some(mut background) = world.get_mut::<BackgroundColor>(entity) {
-            background.0 = bg;
-        }
+        set_row_selected(world, entity, is_selected);
     }
+}
+
+/// Render a net-gold-per-month value the picker stat column: `+3g`,
+/// `-2g`, or empty for zero. Sign is the convention from the buildings
+/// panel (`+Ng` / `-Ng` / blank), so the picker reads identically.
+pub(super) fn format_gold(g: i64) -> String {
+    if g > 0 {
+        format!("+{g}g")
+    } else if g < 0 {
+        format!("{g}g")
+    } else {
+        String::new()
+    }
+}
+
+/// Render a total-levy value the picker stat column: `20` or empty.
+pub(super) fn format_levy(l: u64) -> String {
+    if l > 0 { l.to_string() } else { String::new() }
+}
+
+/// One-line effect summary for a building def, used as the description
+/// on the building picker rows. Civil earns, military costs upkeep and
+/// drafts troops, castles add fortification tier. Matches the rules
+/// the buildings panel uses for its stat columns.
+pub(super) fn building_effect_summary(def: &crate::resources::buildings::BuildingDef) -> String {
+    if def.gold_profit > 0 {
+        return format!("+{}g/mo", def.gold_profit);
+    }
+    if def.gold_upkeep > 0 {
+        if def.levy > 0 {
+            return format!("-{}g upkeep, +{} levy", def.gold_upkeep, def.levy);
+        }
+        return format!("-{}g upkeep/mo", def.gold_upkeep);
+    }
+    if def.levy > 0 {
+        if def.fort_level > 0 {
+            return format!("+{} levy, fort {}", def.levy, def.fort_level);
+        }
+        return format!("+{} levy", def.levy);
+    }
+    if def.fort_level > 0 {
+        return format!("fort {}", def.fort_level);
+    }
+    "no effect".into()
 }
 
 /// The validated go-ahead: the entities and numbers [`construct`] mutates with.

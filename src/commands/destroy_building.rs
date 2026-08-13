@@ -9,32 +9,26 @@
 //!
 //! [`recompute_yields`]: crate::game::yields::recompute_yields
 
-use super::core::{note, BaseCommand};
+use super::core::{
+    land_yield, note, picker_row, ruled_lands, set_row_selected, BaseCommand, NAME_COLOR,
+    STAT_COLOR, STAT_DIM,
+};
 use crate::ecs::{
-    BuildingOf, BuildingOnLand, CharacterLeads, LandHasBuildings, LandHeldBy, Registry, StringId,
+    BuildingConstructionDate, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand,
+    BuildingStatus, CharacterLeads, LandHasBuildings, LandHeldBy, Registry, StringId,
 };
 use crate::resources::buildings::BuildingDefs;
 use crate::app::Game;
-use crate::commands::core::ruled_lands;
-use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue, CommandMenuUiContext};
+use crate::commands::construct_building::{building_effect_summary, format_gold, format_levy};
+use crate::ui::command_menu::CommandMenuUiContext;
+use crate::resources::calendar::Calendar;
+use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
 use bevy::prelude::*;
 
 /// Tear down a building on a land the actor rules.
 pub struct DestroyBuilding;
-
-// --- palette UI -------------------------------------------------------------
-// Same shape as `construct_building`: a single padded card whose title
-// text is the command's display name. The shared `update` swaps the
-// background between `ROW_PANEL` and `ROW_PANEL_SELECTED`.
-
-/// Per-row background in the palette. One shade lighter than the panel.
-const ROW_PANEL: Color = Color::srgb(0.16, 0.16, 0.20);
-/// Background when the row is the player's selection.
-const ROW_PANEL_SELECTED: Color = Color::srgb(0.24, 0.40, 0.72);
-/// Hairline border around the card.
-const ROW_BORDER: Color = Color::srgba(0.55, 0.55, 0.62, 0.35);
 
 impl BaseCommand for DestroyBuilding {
     fn get_command_id(&self) -> &'static str {
@@ -53,7 +47,18 @@ impl BaseCommand for DestroyBuilding {
             .map(|(_, v)| v.as_str());
 
         if command_pick.is_none() {
-            return self.spawn_command_row(world, parent);
+            let row = picker_row(
+                world,
+                parent,
+                self.get_command_id(),
+                None,
+                "Destroy Building",
+                NAME_COLOR,
+                None,
+                None,
+                None,
+            );
+            return (vec![row], false);
         }
         if command_pick != Some(self.get_command_id()) {
             return (Vec::new(), false);
@@ -82,29 +87,31 @@ impl BaseCommand for DestroyBuilding {
     }
 
     fn update(&self, entity: Entity, is_selected: bool, world: &mut World) {
-        let bg = if is_selected { ROW_PANEL_SELECTED } else { ROW_PANEL };
-        if let Some(mut background) = world.get_mut::<BackgroundColor>(entity) {
-            background.0 = bg;
-        }
+        set_row_selected(world, entity, is_selected);
     }
 }
 
 impl DestroyBuilding {
-    fn spawn_command_row(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
-        let row = self.spawn_row(world, parent, "Destroy Building", None);
-        (vec![row], false)
-    }
-
     fn spawn_land_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
         let actor = world.resource::<Game>().ctx.player_character_id.clone();
         let lands = ruled_lands(world, &actor);
         let mut entities = Vec::new();
-        for (land_id, name) in lands {
-            let row = self.spawn_row(
+        for (land_id, land_name) in lands {
+            let (g, l) = world
+                .resource::<Registry>()
+                .get(&land_id)
+                .map(|e| land_yield(world, e))
+                .unwrap_or((0, 0));
+            let row = picker_row(
                 world,
                 parent,
-                &name,
+                self.get_command_id(),
                 Some(("land_id".to_string(), land_id)),
+                &land_name,
+                NAME_COLOR,
+                None,
+                Some((&format_gold(g), STAT_COLOR)),
+                Some((&format_levy(l), STAT_COLOR)),
             );
             entities.push(row);
         }
@@ -117,14 +124,21 @@ impl DestroyBuilding {
         parent: Entity,
         land_id: &str,
     ) -> (Vec<Entity>, bool) {
-        let buildings = buildings_on_land(world, land_id);
+        // Snapshot every building on the land (entity + display data)
+        // up-front so the immutable borrows drop before we spawn rows.
+        let rows = buildings_on_land(world, land_id);
         let mut entities = Vec::new();
-        for (building_id, label) in buildings {
-            let row = self.spawn_row(
+        for row_data in rows {
+            let row = picker_row(
                 world,
                 parent,
-                &label,
-                Some(("building_id".to_string(), building_id)),
+                self.get_command_id(),
+                Some(("building_id".to_string(), row_data.instance_id)),
+                &row_data.name,
+                row_data.name_color,
+                row_data.description.as_deref(),
+                Some((row_data.state_text.as_str(), STAT_COLOR)),
+                Some((row_data.pool_text.as_str(), STAT_DIM)),
             );
             entities.push(row);
         }
@@ -148,49 +162,29 @@ impl DestroyBuilding {
         destroy(world, &actor, &land_id, &building_id);
         (Vec::new(), true)
     }
-
-    fn spawn_row(
-        &self,
-        world: &mut World,
-        parent: Entity,
-        title: &str,
-        key_value: Option<(String, String)>,
-    ) -> Entity {
-        let mut entity = world.spawn((
-            Node {
-                width: percent(100),
-                padding: UiRect::all(px(8)),
-                border: UiRect::all(px(1)),
-                border_radius: BorderRadius::all(px(4)),
-                flex_direction: FlexDirection::Column,
-                ..default()
-            },
-            BackgroundColor(ROW_PANEL),
-            BorderColor::all(ROW_BORDER),
-            ChildOf(parent),
-            CommandHasId(self.get_command_id().to_string()),
-        ));
-        if let Some((k, v)) = key_value {
-            entity.insert((CommandHasKey(k), CommandHasValue(v)));
-        }
-        let row = entity.id();
-        world.entity_mut(row).with_children(|c| {
-            c.spawn((
-                Text::new(title),
-                TextFont::from_font_size(16.0),
-                TextColor(Color::srgb(0.96, 0.96, 0.98)),
-            ));
-        });
-        row
-    }
 }
 
-/// `(building_instance_id, "Name  (destroy)")` for every building standing on
-/// `land_id`, in the land's [`LandHasBuildings`] order. The instance id is the
-/// value the command hands back to [`destroy`]. Walks the relationship target
-/// with `world::get` so it stays a `&World` read (`world::query` needs `&mut
-/// World`).
-fn buildings_on_land(world: &World, land_id: &str) -> Vec<(String, String)> {
+/// One building-on-land row's display data, precomputed in
+/// [`buildings_on_land`] so the picker can spawn rows without holding
+/// borrows on the world. `name_color` is `HINT_RED` for raised /
+/// non-active buildings so the player sees which are unsafe to tear
+/// down (the `validate` path actually allows it — the colour is a hint,
+/// not a disabled state).
+struct BuildingRowData {
+    instance_id: String,
+    name: String,
+    name_color: Color,
+    description: Option<String>,
+    state_text: String,
+    pool_text: String,
+}
+
+/// Read every building instance standing on `land_id` and assemble its
+/// picker row data. Status drives the right-column text: BUILDING
+/// shows days remaining, INACTIVE shows `inactive`, ACTIVE shows the
+/// pool's current/max (or `raised` when the pool is in an army).
+/// Raised / non-active rows get a red name tint.
+fn buildings_on_land(world: &World, land_id: &str) -> Vec<BuildingRowData> {
     let Some(land_e) = world.resource::<Registry>().get(land_id) else {
         return Vec::new();
     };
@@ -198,16 +192,86 @@ fn buildings_on_land(world: &World, land_id: &str) -> Vec<(String, String)> {
         return Vec::new();
     };
     let defs = world.resource::<BuildingDefs>();
+    let calendar = world.resource::<Calendar>();
+    let today = *world.resource::<Date>();
+    let today_ord = today.ordinal(&calendar);
+
     land_has_buildings
         .iter()
         .filter_map(|b_e| {
-            let string_id = world.get::<StringId>(b_e)?;
+            let string_id = world.get::<StringId>(b_e)?.0.clone();
             let building_of = world.get::<BuildingOf>(b_e)?;
-            let label = match defs.get(&building_of.0) {
-                Some(d) => format!("{}  (destroy)", d.name),
-                None => format!("{}  (destroy)", building_of.0),
+            let def = defs.get(&building_of.0);
+            let status = world
+                .get::<BuildingStatus>(b_e)
+                .copied()
+                .unwrap_or(BuildingStatus::Active);
+            let pool = world
+                .get::<BuildingLevy>(b_e)
+                .copied()
+                .unwrap_or(BuildingLevy(0))
+                .0;
+            let is_raised = world
+                .get::<BuildingIsRaised>(b_e)
+                .copied()
+                .unwrap_or(BuildingIsRaised(false))
+                .0;
+
+            let def_name = def.map(|d| d.name.clone()).unwrap_or_else(|| building_of.0.clone());
+            // Suffix on the name communicates the lifecycle state —
+            // plain name for the active, ready-to-destroy case.
+            let (name, hint) = match status {
+                BuildingStatus::Building => (format!("{def_name} (building)"), true),
+                BuildingStatus::Inactive => (format!("{def_name} (inactive)"), true),
+                BuildingStatus::Active if is_raised => (format!("{def_name} (in field)"), true),
+                BuildingStatus::Active => (def_name.clone(), false),
             };
-            Some((string_id.0.clone(), label))
+
+            // Right cell 1: lifecycle readout. BUILDING → days left;
+            // INACTIVE → "inactive"; ACTIVE → "active". Calendar's
+            // ordinal math gives days-from-finish-to-today.
+            let state_text = match status {
+                BuildingStatus::Building => world
+                    .get::<BuildingConstructionDate>(b_e)
+                    .map(|BuildingConstructionDate(finish)| {
+                        let remaining = (finish.ordinal(&calendar) - today_ord).max(0) as u32;
+                        calendar.format_duration(remaining)
+                    })
+                    .unwrap_or_else(|| "?".into()),
+                BuildingStatus::Inactive => "inactive".into(),
+                BuildingStatus::Active => "active".into(),
+            };
+
+            // Right cell 2: pool. Raised short-circuits to a label so
+            // the player sees "this levy is in an army" without
+            // arithmetic; otherwise show the `current/max` fraction
+            // (or just `max` when the pool is full).
+            let pool_text = if is_raised {
+                "raised".into()
+            } else if let Some(d) = def {
+                if pool >= d.levy {
+                    format!("{}/{}", pool, d.levy)
+                } else if d.levy > 0 {
+                    format!("{}/{}", pool, d.levy)
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            };
+
+            // Description line: same effect summary the construct
+            // picker uses, so the player can compare what they'd lose.
+            let description = def.map(building_effect_summary);
+
+            Some(BuildingRowData {
+                instance_id: string_id,
+                name,
+                name_color: if hint { super::core::HINT_RED } else { NAME_COLOR },
+                description,
+                state_text,
+                pool_text,
+            })
         })
         .collect()
 }

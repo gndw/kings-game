@@ -22,11 +22,19 @@ use crate::ecs::{
     BuildingIsRaised, BuildingLevy, BuildingOf, BuildingStatus, CharacterLeads, KingdomHold,
     LandHasBuildings, LandName, Registry, StringId,
 };
+use crate::ecs::army::{ArmyHasMarching, ArmyHasSiege, ArmyMarching, ArmyStatus};
+use crate::ecs::marching::{MarchingArrivedDate, MarchingOnRoad, MarchingToLand};
+use crate::ecs::road::RoadDistanceDays;
+use crate::ecs::siege::SiegeProgress;
 use crate::resources::buildings::BuildingDefs;
+use crate::resources::calendar::Calendar;
 use crate::resources::chronicle::Chronicles;
+use crate::resources::date::Date;
+use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue};
 use bevy::prelude::RelationshipTarget;
 use bevy::prelude::Resource;
 use bevy::prelude::With;
+use bevy::prelude::*;
 use rand::TryRng;
 
 /// The uniform interface every player command implements. Each command
@@ -392,4 +400,242 @@ fn is_active_building(world: &World, b_e: Entity) -> bool {
         .get::<BuildingStatus>(b_e)
         .map(|status| *status == BuildingStatus::Active)
         .unwrap_or(false)
+}
+
+// --- per-land / per-army read helpers -------------------------------------
+// The land and army pickers in every command need a handful of stats
+// (yield, available levy, army status, …) that come from the world in
+// `&World` form. Each helper is a thin `world.get` walk that mirrors
+// the corresponding Bevy-system logic so the picker functions stay
+// readable and don't repeat the same loops.
+
+/// `(net_gold_per_month, total_levy)` for every ACTIVE building on
+/// `land_e`. Mirrors [`crate::game::yields::sum_land_yield`] but reads
+/// via `world.get` so the picker functions (which take `&mut World`)
+/// can call it without rebuilding the Bevy `Query` plumbing. Used by
+/// the construct / destroy land pickers to show what each ruled land
+/// earns and drafts.
+pub(super) fn land_yield(world: &World, land_e: Entity) -> (i64, u64) {
+    let Some(land_has_buildings) = world.get::<LandHasBuildings>(land_e) else {
+        return (0, 0);
+    };
+    let defs = world.resource::<BuildingDefs>();
+    let (mut gold, mut levy) = (0i64, 0u64);
+    for b_e in land_has_buildings.iter() {
+        let Some(building_of) = world.get::<BuildingOf>(b_e) else {
+            continue;
+        };
+        let active = world
+            .get::<BuildingStatus>(b_e)
+            .map(|status| *status == BuildingStatus::Active)
+            .unwrap_or(false);
+        if !active {
+            continue;
+        }
+        if let Some(d) = defs.get(&building_of.0) {
+            gold += d.gold_profit as i64 - d.gold_upkeep as i64;
+            levy += d.levy as u64;
+        }
+    }
+    (gold, levy)
+}
+
+/// One-line status text for an army: `idle`, `→ <land> in <days>d`,
+/// or `sieging <land> (<progress>%)`. Mirrors the ARMIES panel's line
+/// format so the picker rows read identically. Reads everything via
+/// `world.get` so it stays a `&World` helper. `None` when the army's
+/// required components are missing — the caller skips the row.
+pub(super) fn army_status_text(
+    world: &World,
+    army_e: Entity,
+    calendar: &Calendar,
+    date: &Date,
+) -> Option<String> {
+    let status = world.get::<ArmyStatus>(army_e).copied().unwrap_or(ArmyStatus::Idle);
+    match status {
+        ArmyStatus::Idle => Some("idle".into()),
+        ArmyStatus::Marching => {
+            // Walk the queue: find the final destination (last hop's
+            // `MarchingToLand` land name) and the total days remaining
+            // (today's ordinal to the OnRoute arrival plus each
+            // subsequent Scheduled hop's `RoadDistanceDays`).
+            let queue = world.get::<ArmyHasMarching>(army_e)?;
+            let hops: Vec<Entity> = queue.iter().collect();
+            let current_marching = world
+                .get::<ArmyMarching>(army_e)
+                .copied()
+                .map(|m| m.0);
+            let today_ord = date.ordinal(calendar);
+
+            let on_route_days: i64 = current_marching
+                .and_then(|cur| world.get::<MarchingArrivedDate>(cur))
+                .and_then(|d| d.0)
+                .map(|arrived| (arrived.ordinal(calendar) - today_ord).max(0))
+                .unwrap_or(0);
+
+            let mut total_days: i64 = 0;
+            for &hop in &hops {
+                let Some(marching_on_road) = world.get::<MarchingOnRoad>(hop) else {
+                    continue;
+                };
+                if let Some(road_distance_days) = world.get::<RoadDistanceDays>(marching_on_road.0)
+                {
+                    total_days += road_distance_days.0 as i64;
+                }
+            }
+            if current_marching.is_some()
+                && let Some(cur) = current_marching
+                && let Some(marching_on_road) = world.get::<MarchingOnRoad>(cur)
+                && let Some(road_distance_days) = world.get::<RoadDistanceDays>(marching_on_road.0)
+            {
+                total_days -= road_distance_days.0 as i64;
+            }
+            total_days += on_route_days;
+
+            let final_dest = hops
+                .last()
+                .and_then(|&h| world.get::<MarchingToLand>(h))
+                .and_then(|to| world.get::<LandName>(to.0))
+                .map(|n| n.0.clone())
+                .unwrap_or_else(|| "?".into());
+            Some(format!("→ {final_dest} in {total_days}d"))
+        }
+        ArmyStatus::Sieging => {
+            let siege_e = world.get::<ArmyHasSiege>(army_e)?.siege();
+            let progress = world
+                .get::<SiegeProgress>(siege_e)
+                .map(|siege_progress| siege_progress.0)
+                .unwrap_or(0);
+            Some(format!("sieging ({progress}%)"))
+        }
+    }
+}
+
+// --- palette row styling --------------------------------------------------
+// Every command's picker row is the same shape: a padded card with the
+// same per-row colours, a name (plus an optional smaller description)
+// on the left, and up to two right-aligned stat cells. The constants
+// and the builder live here so commands don't redeclare them and the
+// styling stays in one place. The selection tint is also shared — every
+// command's `update` is a one-liner now.
+
+/// Per-row background in the palette. One shade lighter than the panel.
+pub(super) const ROW_PANEL: Color = Color::srgb(0.16, 0.16, 0.20);
+/// Background when the row is the player's selection.
+pub(super) const ROW_PANEL_SELECTED: Color = Color::srgb(0.24, 0.40, 0.72);
+/// Hairline border around the card.
+pub(super) const ROW_BORDER: Color = Color::srgba(0.55, 0.55, 0.62, 0.35);
+/// Width of each right-aligned stat column.
+pub(super) const STAT_W: f32 = 96.0;
+/// Default name colour (the regular pickable row).
+pub(super) const NAME_COLOR: Color = Color::srgb(0.96, 0.96, 0.98);
+/// Name colour when the row's choice is unavailable — cannot afford, no
+/// road route, gate not met. The row is still in the list (no disabled
+/// state); the suffix on the name explains why.
+pub(super) const HINT_RED: Color = Color::srgb(0.92, 0.40, 0.40);
+/// Description-line colour (smaller font under the name).
+pub(super) const DESC_COLOR: Color = Color::srgba(0.78, 0.78, 0.82, 0.95);
+/// Default stat colour.
+pub(super) const STAT_COLOR: Color = Color::srgba(0.92, 0.92, 0.95, 1.0);
+/// Stat colour when the value is empty / the slot doesn't apply.
+pub(super) const STAT_DIM: Color = Color::srgba(0.55, 0.55, 0.60, 0.85);
+
+/// Swap the row's background between the unselected/selected shades.
+/// Called from every command's `update`; centralised so the palette
+/// styling stays in one place.
+pub(super) fn set_row_selected(world: &mut World, entity: Entity, is_selected: bool) {
+    let bg = if is_selected {
+        ROW_PANEL_SELECTED
+    } else {
+        ROW_PANEL
+    };
+    if let Some(mut background) = world.get_mut::<BackgroundColor>(entity) {
+        background.0 = bg;
+    }
+}
+
+/// Spawn one picker row. `name` is the main line; `description` is an
+/// optional smaller line under it (effect summary for `ConstructBuilding`
+/// building rows, defender/ruler detail for `LaySiege` army rows).
+/// `stat1` / `stat2` are optional right-aligned cells — pass `None` to
+/// leave the slot empty. `key_value` carries the step's
+/// `(CommandHasKey, CommandHasValue)` for step rows; `None` for the
+/// command's own top-level row.
+pub(super) fn picker_row(
+    world: &mut World,
+    parent: Entity,
+    command_id: &str,
+    key_value: Option<(String, String)>,
+    name: &str,
+    name_color: Color,
+    description: Option<&str>,
+    stat1: Option<(&str, Color)>,
+    stat2: Option<(&str, Color)>,
+) -> Entity {
+    let mut entity = world.spawn((
+        Node {
+            width: percent(100),
+            padding: UiRect::all(px(8)),
+            border: UiRect::all(px(1)),
+            border_radius: BorderRadius::all(px(4)),
+            flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
+            ..default()
+        },
+        BackgroundColor(ROW_PANEL),
+        BorderColor::all(ROW_BORDER),
+        ChildOf(parent),
+        CommandHasId(command_id.to_string()),
+    ));
+    if let Some((k, v)) = key_value {
+        entity.insert((CommandHasKey(k), CommandHasValue(v)));
+    }
+    let row = entity.id();
+    world.entity_mut(row).with_children(|c| {
+        // Name column — fills remaining width.
+        c.spawn(Node {
+            flex_direction: FlexDirection::Column,
+            flex_grow: 1.0,
+            ..default()
+        })
+        .with_children(|name_col| {
+            name_col.spawn((
+                Text::new(name.to_string()),
+                TextFont::from_font_size(16.0),
+                TextColor(name_color),
+            ));
+            if let Some(desc) = description {
+                name_col.spawn((
+                    Text::new(desc.to_string()),
+                    TextFont::from_font_size(11.0),
+                    TextColor(DESC_COLOR),
+                ));
+            }
+        });
+        if let Some((text, color)) = stat1 {
+            c.spawn((
+                Text::new(text.to_string()),
+                TextFont::from_font_size(14.0),
+                TextColor(color),
+                TextLayout::justify(Justify::Right),
+                Node {
+                    width: px(STAT_W),
+                    ..default()
+                },
+            ));
+        }
+        if let Some((text, color)) = stat2 {
+            c.spawn((
+                Text::new(text.to_string()),
+                TextFont::from_font_size(14.0),
+                TextColor(color),
+                TextLayout::justify(Justify::Right),
+                Node {
+                    width: px(STAT_W),
+                    ..default()
+                },
+            ));
+        }
+    });
+    row
 }

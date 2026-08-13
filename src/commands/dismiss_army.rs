@@ -11,28 +11,21 @@
 //! the way up) — regardless of which land the army currently sits on. So a
 //! dismissed army that marched away still returns its levy home.
 
-use super::core::{distribute_levy_back, note, BaseCommand};
+use super::core::{
+    army_status_text, distribute_levy_back, note, picker_row, set_row_selected, BaseCommand,
+    NAME_COLOR, STAT_COLOR,
+};
 use crate::app::Game;
-use crate::ecs::army::{ArmyBelongsToKingdom, ArmyHasMarching, ArmyLevy, ArmyName};
+use crate::ecs::army::{ArmyBelongsToKingdom, ArmyHasMarching, ArmyLevy, ArmyName, ArmyOnLand};
 use crate::ecs::kingdom::KingdomHold;
-use crate::ecs::{CharacterLeads, KingdomHasArmies, Registry, StringId};
+use crate::ecs::{CharacterLeads, KingdomHasArmies, LandName, Registry, StringId};
 use crate::events::{BuildingUpdateKind, OnArmyDismiss, OnBuildingUpdated};
-use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue};
+use crate::resources::calendar::Calendar;
+use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
 use bevy::prelude::*;
-
-// --- palette UI -------------------------------------------------------------
-// Same shape as `construct_building`: a single padded card whose title
-// text is the command's display name. The shared `update` swaps the
-// background between `ROW_PANEL` and `ROW_PANEL_SELECTED`.
-
-/// Per-row background in the palette. One shade lighter than the panel.
-const ROW_PANEL: Color = Color::srgb(0.16, 0.16, 0.20);
-/// Background when the row is the player's selection.
-const ROW_PANEL_SELECTED: Color = Color::srgb(0.24, 0.40, 0.72);
-/// Hairline border around the card.
-const ROW_BORDER: Color = Color::srgba(0.55, 0.55, 0.62, 0.35);
+use bevy::prelude::RelationshipTarget;
 
 /// Dismiss one of the armies the actor rules.
 pub struct DismissArmy;
@@ -59,29 +52,17 @@ impl BaseCommand for DismissArmy {
         // No `"command"` key → first open, render the command row as
         // usual.
         if command_pick.is_none() {
-            let row = world
-                .spawn((
-                    Node {
-                        width: percent(100),
-                        padding: UiRect::all(px(8)),
-                        border: UiRect::all(px(1)),
-                        border_radius: BorderRadius::all(px(4)),
-                        flex_direction: FlexDirection::Column,
-                        ..default()
-                    },
-                    BackgroundColor(ROW_PANEL),
-                    BorderColor::all(ROW_BORDER),
-                    ChildOf(parent),
-                    CommandHasId(self.get_command_id().to_string()),
-                ))
-                .id();
-            world.entity_mut(row).with_children(|c| {
-                c.spawn((
-                    Text::new("Dismiss Army"),
-                    TextFont::from_font_size(16.0),
-                    TextColor(Color::srgb(0.96, 0.96, 0.98)),
-                ));
-            });
+            let row = picker_row(
+                world,
+                parent,
+                self.get_command_id(),
+                None,
+                "Dismiss Army",
+                NAME_COLOR,
+                None,
+                None,
+                None,
+            );
             return (vec![row], false);
         }
 
@@ -90,7 +71,11 @@ impl BaseCommand for DismissArmy {
             return (Vec::new(), false);
         }
 
-        // Step 1: render one row per army the player rules.
+        // Step 1: render one row per army the player rules. Each row
+        // shows the army's name, current land on the description line,
+        // levy in the first stat cell, and the operational status
+        // (idle / marching → dest in N days / sieging at X%) in the
+        // second.
         let army_pick = choices
             .iter()
             .find(|(k, _)| k == "army_id")
@@ -103,32 +88,18 @@ impl BaseCommand for DismissArmy {
                 .clone();
             let armies = armies_under(world, &actor);
             let mut entities = Vec::new();
-            for (army_id, label) in armies {
-                let row = world
-                    .spawn((
-                        Node {
-                            width: percent(100),
-                            padding: UiRect::all(px(8)),
-                            border: UiRect::all(px(1)),
-                            border_radius: BorderRadius::all(px(4)),
-                            flex_direction: FlexDirection::Column,
-                            ..default()
-                        },
-                        BackgroundColor(ROW_PANEL),
-                        BorderColor::all(ROW_BORDER),
-                        ChildOf(parent),
-                        CommandHasId(self.get_command_id().to_string()),
-                        CommandHasKey("army_id".to_string()),
-                        CommandHasValue(army_id),
-                    ))
-                    .id();
-                world.entity_mut(row).with_children(|c| {
-                    c.spawn((
-                        Text::new(label),
-                        TextFont::from_font_size(16.0),
-                        TextColor(Color::srgb(0.96, 0.96, 0.98)),
-                    ));
-                });
+            for (army_id, name, current_land, levy, status) in armies {
+                let row = picker_row(
+                    world,
+                    parent,
+                    self.get_command_id(),
+                    Some(("army_id".to_string(), army_id)),
+                    &name,
+                    NAME_COLOR,
+                    Some(&format!("at {current_land}")),
+                    Some((&levy.to_string(), STAT_COLOR)),
+                    status.as_deref().map(|s| (s, STAT_COLOR)),
+                );
                 entities.push(row);
             }
             return (entities, false);
@@ -148,48 +119,53 @@ impl BaseCommand for DismissArmy {
     }
 
     fn update(&self, entity: Entity, is_selected: bool, world: &mut World) {
-        let bg = if is_selected { ROW_PANEL_SELECTED } else { ROW_PANEL };
-        if let Some(mut background) = world.get_mut::<BackgroundColor>(entity) {
-            background.0 = bg;
-        }
+        set_row_selected(world, entity, is_selected);
     }
 }
 
-/// `(army_instance_id, "<land>:<levy>")` for every army in every kingdom
-/// the actor leads, in `CharacterLeads` order followed by `KingdomHasArmies`.
-/// Multi-kingdom: the player can rule several kingdoms at once, so the army
-/// list is the union across every kingdom they lead. Walks the relationship
-/// targets via `world::get` so it stays a `&World` read.
-fn armies_under(world: &World, actor: &str) -> Vec<(String, String)> {
+/// `(army_id, name, current_land, levy, status_text)` for every army
+/// the actor rules. Walks the `CharacterLeads` kingdoms and unions
+/// their `KingdomHasArmies` lists. `status_text` is `idle` /
+/// `→ <land> in <days>d` / `sieging (<progress>%)`, formatted via
+/// [`army_status_text`]. None-skipping happens here so a torn-world
+/// army doesn't crash the picker.
+fn armies_under(
+    world: &World,
+    actor: &str,
+) -> Vec<(String, String, String, u64, Option<String>)> {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return Vec::new();
     };
     let Some(character_leads) = world.get::<CharacterLeads>(actor_e) else {
         return Vec::new();
     };
+    let calendar = world.resource::<Calendar>();
+    let date = world.resource::<Date>();
     let mut out = Vec::new();
     for kingdom_e in character_leads.kingdoms() {
         let Some(kingdom_has_armies) = world.get::<KingdomHasArmies>(*kingdom_e) else {
             continue;
         };
         for army_e in kingdom_has_armies.iter() {
-            let string_id = match world.get::<StringId>(army_e) {
-                Some(s) => s.0.clone(),
-                None => continue,
+            let Some(string_id) = world.get::<StringId>(army_e) else {
+                continue;
             };
-            let army_on_land = match world.get::<crate::ecs::army::ArmyOnLand>(army_e) {
-                Some(a) => a,
-                None => continue,
+            let Some(name) = world.get::<ArmyName>(army_e) else {
+                continue;
             };
-            let land_name = world
-                .get::<crate::ecs::LandName>(army_on_land.0)
+            let Some(army_on_land) = world.get::<ArmyOnLand>(army_e) else {
+                continue;
+            };
+            let current_land = world
+                .get::<LandName>(army_on_land.0)
                 .map(|land_name| land_name.0.clone())
                 .unwrap_or_else(|| "?".into());
             let levy = world
                 .get::<ArmyLevy>(army_e)
                 .map(|army_levy| army_levy.0)
                 .unwrap_or(0);
-            out.push((string_id, format!("{land_name}: {levy}")));
+            let status = army_status_text(world, army_e, calendar, date);
+            out.push((string_id.0.clone(), name.0.clone(), current_land, levy, status));
         }
     }
     out

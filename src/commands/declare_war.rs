@@ -18,31 +18,23 @@
 //! name of its held land (the convention everywhere else in the codebase
 //! — a kingdom's seat is its single land).
 
-use super::core::{next_id, note, BaseCommand};
+use super::core::{next_id, note, picker_row, set_row_selected, BaseCommand, NAME_COLOR,
+    STAT_COLOR};
 use crate::ecs::{
-    CharacterLeads, Kingdom, KingdomHold, LandName, Registry, StringId, War, WarAttackerKingdom,
-    WarBeginDate, WarCasusBelliType, WarDefenderKingdom, WarDemand, WarDemandType, WarDemands,
-    WarName,
+    ArmyLevy, CharacterLeads, CharacterName, CharacterOfHouse, HouseName, Kingdom,
+    KingdomHasArmies, KingdomHold, KingdomLedBy, LandName, Registry, StringId, War,
+    WarAttackerKingdom, WarBeginDate, WarCasusBelliType, WarDefenderKingdom, WarDemand,
+    WarDemandType, WarDemands, WarName,
 };
 use crate::app::Game;
 use crate::resources::date::Date;
-use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue, CommandMenuUiContext};
+use crate::ui::command_menu::CommandMenuUiContext;
 use bevy::ecs::world::World;
 use bevy::prelude::*;
+use bevy::prelude::RelationshipTarget;
 
 /// Declare war on a kingdom under a casus belli.
-
-// --- palette UI -------------------------------------------------------------
-// Same shape as the other commands: a single padded card whose title text
-// is the command's display name. The shared `update` swaps the background
-// between `ROW_PANEL` and `ROW_PANEL_SELECTED`.
-
-/// Per-row background in the palette.
-const ROW_PANEL: Color = Color::srgb(0.16, 0.16, 0.20);
-/// Background when the row is the player's selection.
-const ROW_PANEL_SELECTED: Color = Color::srgb(0.24, 0.40, 0.72);
-/// Hairline border around the card.
-const ROW_BORDER: Color = Color::srgba(0.55, 0.55, 0.62, 0.35);
+pub struct DeclareWar;
 
 impl BaseCommand for DeclareWar {
     fn get_command_id(&self) -> &'static str {
@@ -61,7 +53,18 @@ impl BaseCommand for DeclareWar {
             .map(|(_, v)| v.as_str());
 
         if command_pick.is_none() {
-            return self.spawn_command_row(world, parent);
+            let row = picker_row(
+                world,
+                parent,
+                self.get_command_id(),
+                None,
+                "Declare War",
+                NAME_COLOR,
+                None,
+                None,
+                None,
+            );
+            return (vec![row], false);
         }
         if command_pick != Some(self.get_command_id()) {
             return (Vec::new(), false);
@@ -90,30 +93,26 @@ impl BaseCommand for DeclareWar {
     }
 
     fn update(&self, entity: Entity, is_selected: bool, world: &mut World) {
-        let bg = if is_selected { ROW_PANEL_SELECTED } else { ROW_PANEL };
-        if let Some(mut background) = world.get_mut::<BackgroundColor>(entity) {
-            background.0 = bg;
-        }
+        set_row_selected(world, entity, is_selected);
     }
 }
 
 impl DeclareWar {
-    fn spawn_command_row(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
-        let row = self.spawn_row(world, parent, "Declare War", None);
-        (vec![row], false)
-    }
-
     fn spawn_defender_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
         let actor = world.resource::<Game>().ctx.player_character_id.clone();
-        // Snapshot the picker result so the immutable borrows drop.
-        let others = other_kingdoms(world, &actor);
+        let others = defender_rows(world, &actor);
         let mut entities = Vec::new();
-        for (def_id, label) in others {
-            let row = self.spawn_row(
+        for row_data in others {
+            let row = picker_row(
                 world,
                 parent,
-                &label,
-                Some(("defender_id".to_string(), def_id)),
+                self.get_command_id(),
+                Some(("defender_id".to_string(), row_data.kingdom_id)),
+                &row_data.name,
+                NAME_COLOR,
+                row_data.description.as_deref(),
+                Some((row_data.ruler.as_str(), STAT_COLOR)),
+                Some((row_data.strength.as_str(), STAT_COLOR)),
             );
             entities.push(row);
         }
@@ -121,15 +120,19 @@ impl DeclareWar {
     }
 
     fn spawn_cb_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
-        // Only one CB exists today.
-        let row = self.spawn_row(
+        // Only one CB exists today — the description line carries the
+        // effect hint ("seize their land") so the player sees what the
+        // pick will resolve to.
+        let row = picker_row(
             world,
             parent,
-            "Conquest (seize their land)",
-            Some((
-                "cb_id".to_string(),
-                "conquest".to_string(),
-            )),
+            self.get_command_id(),
+            Some(("cb_id".to_string(), "conquest".to_string())),
+            "Conquest",
+            NAME_COLOR,
+            Some("seize their land"),
+            None,
+            None,
         );
         (vec![row], false)
     }
@@ -151,51 +154,25 @@ impl DeclareWar {
         declare(world, &actor, &defender_id, &cb_id);
         (Vec::new(), true)
     }
-
-    fn spawn_row(
-        &self,
-        world: &mut World,
-        parent: Entity,
-        title: &str,
-        key_value: Option<(String, String)>,
-    ) -> Entity {
-        let mut entity = world.spawn((
-            Node {
-                width: percent(100),
-                padding: UiRect::all(px(8)),
-                border: UiRect::all(px(1)),
-                border_radius: BorderRadius::all(px(4)),
-                flex_direction: FlexDirection::Column,
-                ..default()
-            },
-            BackgroundColor(ROW_PANEL),
-            BorderColor::all(ROW_BORDER),
-            ChildOf(parent),
-            CommandHasId(self.get_command_id().to_string()),
-        ));
-        if let Some((k, v)) = key_value {
-            entity.insert((CommandHasKey(k), CommandHasValue(v)));
-        }
-        let row = entity.id();
-        world.entity_mut(row).with_children(|c| {
-            c.spawn((
-                Text::new(title),
-                TextFont::from_font_size(16.0),
-                TextColor(Color::srgb(0.96, 0.96, 0.98)),
-            ));
-        });
-        row
-    }
 }
-pub struct DeclareWar;
 
-/// `(kingdom_id, "<land_name>")` for every kingdom in the world except
-/// the actor's. Multi-kingdom: any of the actor's kingdoms counts as
-/// "own", so the filter excludes every entry in `CharacterLeads`.
-/// Walks `World::iter_entities` (the `&World`-safe path — `query` needs
-/// `&mut World`); filters by the [`Kingdom`] marker so we only see
-/// kingdom entities.
-fn other_kingdoms(world: &World, actor: &str) -> Vec<(String, String)> {
+/// Precomputed row data for one defender kingdom in the picker.
+struct DefenderRowData {
+    kingdom_id: String,
+    name: String,
+    description: Option<String>,
+    ruler: String,
+    strength: String,
+}
+
+/// One row per kingdom the actor doesn't already lead. Walks
+/// `World::iter_entities` (the `&World`-safe path); filters by the
+/// [`Kingdom`] marker. For each kingdom the ruler and the total army
+/// strength (sum of `ArmyLevy` over `KingdomHasArmies`) are read up-
+/// front so the picker spawn loop carries no borrows on the world.
+/// Multi-kingdom: any of the actor's kingdoms counts as "own", so the
+/// filter excludes every entry in `CharacterLeads`.
+fn defender_rows(world: &World, actor: &str) -> Vec<DefenderRowData> {
     let own_kingdoms: std::collections::HashSet<bevy::ecs::entity::Entity> = world
         .resource::<Registry>()
         .get(actor)
@@ -217,12 +194,61 @@ fn other_kingdoms(world: &World, actor: &str) -> Vec<(String, String)> {
         };
         // The kingdom's display label is the name of its held land — a
         // kingdom has no name field of its own (its seat is its land).
-        let label = entity_ref
+        let land_label = entity_ref
             .get::<KingdomHold>()
             .and_then(|kingdom_hold| world.get::<LandName>(kingdom_hold.0))
             .map(|land_name| land_name.0.clone())
             .unwrap_or_else(|| string_id.0.clone());
-        result.push((string_id.0.clone(), label));
+
+        // Ruler: kingdom → leader → character name (+ house).
+        let ruler = entity_ref
+            .get::<KingdomLedBy>()
+            .and_then(|kingdom_led_by| world.get::<CharacterName>(kingdom_led_by.0))
+            .map(|character_name| character_name.0.clone())
+            .unwrap_or_default();
+        let ruler_with_house = if ruler.is_empty() {
+            String::new()
+        } else {
+            let house = entity_ref
+                .get::<KingdomLedBy>()
+                .and_then(|kingdom_led_by| world.get::<CharacterOfHouse>(kingdom_led_by.0))
+                .and_then(|character_of_house| world.get::<HouseName>(character_of_house.0))
+                .map(|house_name| house_name.0.clone());
+            match house {
+                Some(h) => format!("{ruler}, {h}"),
+                None => ruler,
+            }
+        };
+
+        // Army strength: total levy over the kingdom's armies.
+        let (army_count, total_levy) = entity_ref
+            .get::<KingdomHasArmies>()
+            .map(|kingdom_has_armies| {
+                let count = kingdom_has_armies.iter().count();
+                let levy: u64 = kingdom_has_armies
+                    .iter()
+                    .filter_map(|army_e| world.get::<ArmyLevy>(army_e).map(|army_levy| army_levy.0))
+                    .sum();
+                (count, levy)
+            })
+            .unwrap_or((0, 0));
+        let strength = if army_count > 0 {
+            format!("{army_count} here, {total_levy} levy")
+        } else {
+            String::new()
+        };
+
+        result.push(DefenderRowData {
+            kingdom_id: string_id.0.clone(),
+            name: land_label,
+            description: if ruler_with_house.is_empty() {
+                None
+            } else {
+                Some(ruler_with_house.clone())
+            },
+            ruler: ruler_with_house,
+            strength,
+        });
     }
     result
 }

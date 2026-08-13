@@ -12,31 +12,22 @@
 //! The actor must rule the army's kingdom (via `ArmyBelongsToKingdom`) — the
 //! same rule every other army command uses.
 
-use super::core::{note, BaseCommand};
+use super::core::{note, picker_row, set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR,
+    STAT_DIM};
 use crate::app::Game;
+use crate::ecs::kingdom::KingdomLedBy;
 use crate::ecs::{
-    ArmyBelongsToKingdom, ArmyName, ArmyOnLand, ArmyStatus, CharacterLeads, KingdomHasArmies,
-    LandHeldBy, LandName, Registry, Siege, SiegeAttackerArmy, SiegeDefenderLand,
-    SiegeNextEventDate, SiegeProgress, StringId,
+    ArmyBelongsToKingdom, ArmyLevy, ArmyName, ArmyOnLand, ArmyStatus, CharacterLeads,
+    CharacterName, CharacterOfHouse, HouseName, KingdomHasArmies, LandHeldBy, LandName, Registry,
+    Siege, SiegeAttackerArmy, SiegeDefenderLand, SiegeNextEventDate, SiegeProgress, StringId,
 };
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
-use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue, CommandMenuUiContext};
+use crate::ui::command_menu::CommandMenuUiContext;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
 use bevy::prelude::*;
-
-// --- palette UI -------------------------------------------------------------
-// Same shape as the other commands: a single padded card whose title text
-// is the command's display name. The shared `update` swaps the background
-// between `ROW_PANEL` and `ROW_PANEL_SELECTED`.
-
-/// Per-row background in the palette.
-const ROW_PANEL: Color = Color::srgb(0.16, 0.16, 0.20);
-/// Background when the row is the player's selection.
-const ROW_PANEL_SELECTED: Color = Color::srgb(0.24, 0.40, 0.72);
-/// Hairline border around the card.
-const ROW_BORDER: Color = Color::srgba(0.55, 0.55, 0.62, 0.35);
+use bevy::prelude::RelationshipTarget;
 
 /// Lay siege to a land with one of the player's armies.
 pub struct LaySiege;
@@ -58,7 +49,18 @@ impl BaseCommand for LaySiege {
             .map(|(_, v)| v.as_str());
 
         if command_pick.is_none() {
-            return self.spawn_command_row(world, parent);
+            let row = picker_row(
+                world,
+                parent,
+                self.get_command_id(),
+                None,
+                "Lay Siege",
+                NAME_COLOR,
+                None,
+                None,
+                None,
+            );
+            return (vec![row], false);
         }
         if command_pick != Some(self.get_command_id()) {
             return (Vec::new(), false);
@@ -76,75 +78,31 @@ impl BaseCommand for LaySiege {
     }
 
     fn update(&self, entity: Entity, is_selected: bool, world: &mut World) {
-        let bg = if is_selected { ROW_PANEL_SELECTED } else { ROW_PANEL };
-        if let Some(mut background) = world.get_mut::<BackgroundColor>(entity) {
-            background.0 = bg;
-        }
+        set_row_selected(world, entity, is_selected);
     }
 }
 
 impl LaySiege {
-    fn spawn_command_row(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
-        let row = world
-            .spawn((
-                Node {
-                    width: percent(100),
-                    padding: UiRect::all(px(8)),
-                    border: UiRect::all(px(1)),
-                    border_radius: BorderRadius::all(px(4)),
-                    flex_direction: FlexDirection::Column,
-                    ..default()
-                },
-                BackgroundColor(ROW_PANEL),
-                BorderColor::all(ROW_BORDER),
-                ChildOf(parent),
-                CommandHasId(self.get_command_id().to_string()),
-            ))
-            .id();
-        world.entity_mut(row).with_children(|c| {
-            c.spawn((
-                Text::new("Lay Siege"),
-                TextFont::from_font_size(16.0),
-                TextColor(Color::srgb(0.96, 0.96, 0.98)),
-            ));
-        });
-        (vec![row], false)
-    }
-
     fn spawn_army_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
         let actor = world
             .resource::<Game>()
             .ctx
             .player_character_id
             .clone();
-        let armies = foreign_armies_under(world, &actor);
+        let armies = foreign_army_rows(world, &actor);
         let mut entities = Vec::new();
-        for (army_id, label) in armies {
-            let row = world
-                .spawn((
-                    Node {
-                        width: percent(100),
-                        padding: UiRect::all(px(8)),
-                        border: UiRect::all(px(1)),
-                        border_radius: BorderRadius::all(px(4)),
-                        flex_direction: FlexDirection::Column,
-                        ..default()
-                    },
-                    BackgroundColor(ROW_PANEL),
-                    BorderColor::all(ROW_BORDER),
-                    ChildOf(parent),
-                    CommandHasId(self.get_command_id().to_string()),
-                    CommandHasKey("army_id".to_string()),
-                    CommandHasValue(army_id),
-                ))
-                .id();
-            world.entity_mut(row).with_children(|c| {
-                c.spawn((
-                    Text::new(label),
-                    TextFont::from_font_size(16.0),
-                    TextColor(Color::srgb(0.96, 0.96, 0.98)),
-                ));
-            });
+        for row_data in armies {
+            let row = picker_row(
+                world,
+                parent,
+                self.get_command_id(),
+                Some(("army_id".to_string(), row_data.army_id)),
+                &row_data.name,
+                NAME_COLOR,
+                row_data.description.as_deref(),
+                Some((row_data.levy_text.as_str(), STAT_COLOR)),
+                Some((row_data.target_text.as_str(), STAT_DIM)),
+            );
             entities.push(row);
         }
         (entities, false)
@@ -168,9 +126,22 @@ impl LaySiege {
     }
 }
 
-/// `(army_instance_id, "<ArmyName> at <LandName>")` for every army under
-/// the actor's kingdoms that's currently standing on a *foreign* land.
-fn foreign_armies_under(world: &World, actor: &str) -> Vec<(String, String)> {
+/// One siege-eligible army's row data. `target_text` describes who
+/// rules the foreign land the army stands on — useful intel before
+/// committing to a 30-day siege.
+struct SiegeArmyRow {
+    army_id: String,
+    name: String,
+    description: Option<String>,
+    levy_text: String,
+    target_text: String,
+}
+
+/// `(army_id, name, levy, "<land>, <ruler>")` for every army under the
+/// actor's kingdoms standing on a foreign land. The picker already
+/// filters to foreign lands; `target_text` reads the defender's ruler
+/// so the player sees who they'd be laying siege to.
+fn foreign_army_rows(world: &World, actor: &str) -> Vec<SiegeArmyRow> {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return Vec::new();
     };
@@ -199,11 +170,41 @@ fn foreign_armies_under(world: &World, actor: &str) -> Vec<(String, String)> {
             if !is_foreign {
                 continue;
             }
+            let levy = world
+                .get::<ArmyLevy>(army_e)
+                .map(|army_levy| army_levy.0)
+                .unwrap_or(0);
+            // Target land name + ruling character (for intel).
             let land_label = world
                 .get::<LandName>(aol)
                 .map(|ln| ln.0.clone())
                 .unwrap_or_else(|| "?".into());
-            out.push((army_id, format!("{army_name} at {land_label}")));
+            let target_text = world
+                .get::<LandHeldBy>(aol)
+                .and_then(|lhb| world.get::<KingdomLedBy>(lhb.kingdom()))
+                .map(|kingdom_led_by| {
+                    let leader = world
+                        .get::<CharacterName>(kingdom_led_by.0)
+                        .map(|character_name| character_name.0.clone())
+                        .unwrap_or_else(|| "?".into());
+                    let house = world
+                        .get::<CharacterOfHouse>(kingdom_led_by.0)
+                        .and_then(|coh| world.get::<HouseName>(coh.0))
+                        .map(|house_name| house_name.0.clone());
+                    match house {
+                        Some(h) => format!("{land_label}, {leader} {h}"),
+                        None => format!("{land_label}, {leader}"),
+                    }
+                })
+                .unwrap_or_else(|| land_label.clone());
+            let description = format!("at {land_label}");
+            out.push(SiegeArmyRow {
+                army_id,
+                name: army_name,
+                description: Some(description),
+                levy_text: levy.to_string(),
+                target_text,
+            });
         }
     }
     out

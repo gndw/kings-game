@@ -35,14 +35,13 @@
 //! kingdom) so the per-army work is O(1) apart from the relationship
 //! walks.
 
-use crate::commands::core::note;
 use crate::ecs::army::{ArmyHasMarching, ArmyMarching, ArmyOnLand, ArmyStatus};
 use crate::ecs::marching::{
     MarchingArrivedDate, MarchingBeginDate, MarchingFromLand, MarchingOnRoad, MarchingStatus,
     MarchingToLand,
 };
 use crate::ecs::road::RoadDistanceDays;
-use crate::ecs::LandName;
+use crate::events::OnArmyArrived;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;
@@ -126,14 +125,7 @@ pub fn tick(world: &mut World) {
                 else {
                     continue;
                 };
-                let from_name = world
-                    .get::<LandName>(current_land.unwrap_or(target_e))
-                    .map(|land_name| land_name.0.clone())
-                    .unwrap_or_else(|| "?".into());
-                let to_name = world
-                    .get::<LandName>(target_e)
-                    .map(|land_name| land_name.0.clone())
-                    .unwrap_or_else(|| "?".into());
+                let from_e = current_land.unwrap_or(target_e);
 
                 // `ArmyOnLand` is a Bevy relationship, whose `Component`
                 // impl is `Immutable` by the `Relationship` bound. To move
@@ -146,7 +138,7 @@ pub fn tick(world: &mut World) {
                     world.entity_mut(army_e).insert(ArmyOnLand(target_e));
                 }
 
-                match find_scheduled_matching_from(world, army_e, target_e) {
+                let continuing = match find_scheduled_matching_from(world, army_e, target_e) {
                     Some(next_marching) => {
                         // Despawn the finished marching, then activate the
                         // next one. Despawning first so the army's
@@ -154,20 +146,14 @@ pub fn tick(world: &mut World) {
                         // sees authoritative queue state.
                         world.despawn(marching_e);
                         if activate(world, army_e, next_marching, today, &calendar) {
-                            note(
-                                world,
-                                format!("army arrived at {to_name} (continuing march)"),
-                            );
+                            true
                         } else {
                             // The next road has no duration to march for.
                             // The finished marching is already gone, so the
                             // army must stand down here or it would be left
                             // Marching against a despawned entity.
                             stand_down(world, army_e);
-                            note(
-                                world,
-                                format!("army arrived at {to_name} from {from_name} (idle)"),
-                            );
+                            false
                         }
                     }
                     None => {
@@ -175,12 +161,18 @@ pub fn tick(world: &mut World) {
                         // `ArmyMarching`, and despawn the finished marching.
                         stand_down(world, army_e);
                         world.despawn(marching_e);
-                        note(
-                            world,
-                            format!("army arrived at {to_name} from {from_name} (idle)"),
-                        );
+                        false
                     }
-                }
+                };
+
+                // Chronicle observer writes the "arrived at" line, with
+                // `continuing` deciding whether to mention the next hop.
+                world.trigger(OnArmyArrived {
+                    army: army_e,
+                    from: from_e,
+                    to: target_e,
+                    continuing,
+                });
             }
             // Sieging armies are owned by `game::siege::tick` — the marching
             // tick leaves them alone so the siege can resolve on its own

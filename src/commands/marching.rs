@@ -30,7 +30,7 @@
 //! See [`crate::game::marching::tick`].
 
 use super::core::{
-    army_status_text, error, next_id, note, picker_row, set_row_selected, BaseCommand, NAME_COLOR,
+    army_status_text, error, next_id, picker_row, set_row_selected, BaseCommand, NAME_COLOR,
     STAT_COLOR, STAT_DIM,
 };
 use crate::ecs::army::{
@@ -45,6 +45,7 @@ use crate::ecs::marching::{
 };
 use crate::ecs::road::{Road, RoadBetweenLands};
 use crate::ecs::{CharacterLeads, CharacterOfHouse, Land, LandHeldBy, LandName, Registry, StringId};
+use crate::events::OnMarchingOrdered;
 use crate::ui::command_menu::CommandMenuUiContext;
 use crate::app::Game;
 use crate::resources::calendar::Calendar;
@@ -505,10 +506,6 @@ fn march(world: &mut World, actor: &str, army_id: &str, target_id: &str) {
         ));
     }
 
-    let army_name = world
-        .get::<ArmyName>(army_e)
-        .map(|army_name| army_name.0.clone())
-        .unwrap_or_else(|| "Army".to_string());
     let from_name = world
         .get::<LandName>(from_e)
         .map(|land_name| land_name.0.clone())
@@ -574,9 +571,13 @@ fn march(world: &mut World, actor: &str, army_id: &str, target_id: &str) {
     // collection waiting for the army to be on the matching source land.
 
     let roads = hops.len() as u32;
-    let plural = if roads == 1 { "road" } else { "roads" };
-    note(
-        world,
-        format!("queued {army_name} march: {from_name} → {to_name} ({roads} {plural}, {days} days)"),
-    );
+
+    // Chronicle observer pulls the army / land names off the entities.
+    world.trigger(OnMarchingOrdered {
+        army: army_e,
+        from: from_e,
+        to: target_e,
+        roads,
+        days,
+    });
 }

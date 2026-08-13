@@ -31,12 +31,11 @@
 //! borrowed queries in the loop body. The siege count is bounded by the
 //! player's army count, so the walk is cheap.
 
-use crate::commands::core::note;
 use crate::ecs::army::{ArmyControlsLand, ArmyStatus};
 use crate::ecs::building::{Building, BuildingOnLand, BuildingStatus};
-use crate::ecs::land::{LandHasBuildings, LandName};
+use crate::ecs::land::LandHasBuildings;
 use crate::ecs::siege::{Siege, SiegeAttackerArmy, SiegeDefenderLand, SiegeNextEventDate, SiegeProgress};
-use crate::ecs::ArmyName;
+use crate::events::OnSiegeWon;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;
@@ -160,18 +159,12 @@ pub fn tick(world: &mut World) {
 
         // Chronicle the conquest before the siege despawn — the siege
         // entity's id is what `note` would otherwise lose context on.
-        let army_label = world
-            .get::<ArmyName>(army_e)
-            .map(|army_name| army_name.0.clone())
-            .unwrap_or_else(|| "Army".to_string());
-        let land_label = world
-            .get::<LandName>(land_e)
-            .map(|land_name| land_name.0.clone())
-            .unwrap_or_else(|| "?".into());
-        note(
-            world,
-            format!("{army_label} took {land_label} (siege won)"),
-        );
+        // The chronicle observer pulls the army / land names off the
+        // entities themselves.
+        world.trigger(OnSiegeWon {
+            army: army_e,
+            land: land_e,
+        });
 
         world.despawn(siege_e);
 

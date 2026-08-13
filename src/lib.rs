@@ -1,4 +1,5 @@
 pub mod app;
+pub mod chronicles;
 pub mod commands;
 pub mod content;
 pub mod ctx;

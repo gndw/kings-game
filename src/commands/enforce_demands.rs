@@ -21,7 +21,7 @@
 //! kingdom leader to player" semantics; the multi-kingdom model is
 //! future work.
 
-use super::core::{error, note, picker_row, set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR,
+use super::core::{error, picker_row, set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR,
     STAT_DIM};
 use crate::ecs::{
     ArmyBelongsToKingdom, CharacterLeads, KingdomHasWarsAttacking, KingdomHold,
@@ -29,6 +29,7 @@ use crate::ecs::{
     WarDemands, WarName,
 };
 use crate::ecs::kingdom::KingdomLedBy;
+use crate::events::{OnDemandEnforced, OnWarEnded};
 use crate::app::Game;
 use crate::ui::command_menu::CommandMenuUiContext;
 use crate::resources::calendar::Calendar;
@@ -375,9 +376,15 @@ fn enforce(world: &mut World, actor: &str, war_id: &str, demand_idx: &str) {
     if let Some(crate::ecs::WarDemandType::Take) =
         enforce_take(world, actor_e, demand.target)
     {
+        let defender = world.get::<WarDefenderKingdom>(war_e).map(|w| w.0);
         world.despawn(war_e);
         world.resource_mut::<Registry>().by_id.remove(war_id);
-        note(world, format!("war `{war_id}` resolved and ended"));
+        // Chronicle observer writes the "The war over X ended" line.
+        // `OnDemandEnforced` already fired inside `enforce_take` for the
+        // Take resolution; the war-end line is the coda.
+        if let Some(defender_kingdom) = defender {
+            world.trigger(OnWarEnded { defender: defender_kingdom });
+        }
     }
 }
 
@@ -432,12 +439,6 @@ fn enforce_take(
         return None;
     }
 
-    // Capture labels before mutating (cheap, immutable reads).
-    let target_name = world
-        .get::<LandName>(target_land)
-        .map(|land_name| land_name.0.clone())
-        .unwrap_or_else(|| "?".into());
-
     // Insert the new `KingdomLedBy`. Bevy's relationship hook updates
     // `CharacterLeads` on the new leader (player) — under the
     // multi-kingdom model the player can lead the new kingdom AND keep
@@ -446,11 +447,11 @@ fn enforce_take(
     // any, has the entry pruned).
     world.entity_mut(target_kingdom_e).insert(KingdomLedBy(actor_e));
 
-    note(
-        world,
-        format!(
-            "took the Kingdom of {target_name} (Take enforced)"
-        ),
-    );
+    // Chronicle observer writes the "claimed the Kingdom of X" line,
+    // reading the target kingdom's land name off the entity.
+    world.trigger(OnDemandEnforced {
+        demand_type: crate::ecs::WarDemandType::Take,
+        target: target_kingdom_e,
+    });
     Some(crate::ecs::WarDemandType::Take)
 }

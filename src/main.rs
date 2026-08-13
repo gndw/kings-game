@@ -1,6 +1,7 @@
 use anyhow::{Result, bail};
 use bevy::prelude::*;
 use kings_game::app::{Game, speed};
+use kings_game::chronicles;
 use kings_game::commands;
 use kings_game::ctx::Ctx;
 use kings_game::ecs;
@@ -112,9 +113,7 @@ fn main() -> Result<()> {
     let hz = f64::from(speed(&calendar.speeds, game.speed_idx));
     app.insert_resource(game)
         .insert_resource(start)
-        .insert_resource(Chronicles(vec![format!(
-            "{start} -- the chronicle begins."
-        )]))
+        .insert_resource(Chronicles::default())
         .insert_resource(calendar)
         .insert_resource(border)
         .insert_resource(InputLayer::default())
@@ -158,6 +157,23 @@ fn main() -> Result<()> {
         // command palette, and flips the input layer to `ErrorPopup`.
         // One observer — the popup owns input until the player dismisses.
         .add_observer(ui::error::on_error_occured)
+        // Chronicle observers — one per game event. Each observer writes
+        // a single narratively-flavored line to the `Chronicles` resource
+        // when its event fires. The chronicle module is the only place
+        // game-logic code reaches into the `Chronicles` resource; the
+        // commands and ticks only `trigger(...)`.
+        .add_observer(chronicles::on_construction_started)
+        .add_observer(chronicles::on_constructed)
+        .add_observer(chronicles::on_destroyed)
+        .add_observer(chronicles::on_army_raised)
+        .add_observer(chronicles::on_army_dismiss)
+        .add_observer(chronicles::on_marching_ordered)
+        .add_observer(chronicles::on_army_arrived)
+        .add_observer(chronicles::on_siege_laid)
+        .add_observer(chronicles::on_siege_won)
+        .add_observer(chronicles::on_war_declared)
+        .add_observer(chronicles::on_demand_enforced)
+        .add_observer(chronicles::on_war_ended)
         .add_systems(
             Update,
             (

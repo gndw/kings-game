@@ -10,13 +10,14 @@
 //! [`recompute_yields`]: crate::game::yields::recompute_yields
 
 use super::core::{
-    error, land_yield, note, picker_row, ruled_lands, set_row_selected, BaseCommand, NAME_COLOR,
+    error, land_yield, picker_row, ruled_lands, set_row_selected, BaseCommand, NAME_COLOR,
     STAT_COLOR, STAT_DIM,
 };
 use crate::ecs::{
     BuildingConstructionDate, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand,
     BuildingStatus, CharacterLeads, LandHasBuildings, LandHeldBy, Registry, StringId,
 };
+use crate::events::{BuildingUpdateKind, OnBuildingUpdated};
 use crate::resources::buildings::BuildingDefs;
 use crate::app::Game;
 use crate::commands::construct_building::{building_effect_summary, format_gold, format_levy};
@@ -315,21 +316,20 @@ fn destroy(world: &mut World, actor: &str, land_id: &str, building_id: &str) {
         return error(world, format!("cannot destroy on {land_id}: building not on that land"));
     }
 
-    // Def name for the log, looked up before the despawn drops the component.
-    let def_name = world
-        .get::<BuildingOf>(b_e)
-        .and_then(|building_of| {
-            world
-                .resource::<BuildingDefs>()
-                .get(&building_of.0)
-                .map(|d| d.name.clone())
-        })
-        .unwrap_or_else(|| building_id.to_string());
-
     // Despawn + deregister. `BuildingOnLand`'s hook pulls the building out of
-    // the land's `LandHasBuildings` synchronously.
+    // the land's `LandHasBuildings` synchronously. The def name lookup
+    // used to happen here for the chronicle line; the chronicle observer
+    // now reads it off the entity, but `BuildingOf` and `BuildingDefs`
+    // are still needed for the picker logic above.
     world.entity_mut(b_e).despawn();
     world.resource_mut::<Registry>().by_id.remove(building_id);
 
-    note(world, format!("destroyed {} on {}", def_name, land_id));
+    // Fire `OnBuildingUpdated` so the chronicle observer writes the
+    // "tore down the X" line and `game::yields::on_building_updated` re-sums
+    // the realm's yield.
+    world.trigger(OnBuildingUpdated {
+        building: b_e,
+        land: land_e,
+        kind: BuildingUpdateKind::Destroyed,
+    });
 }

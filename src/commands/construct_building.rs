@@ -11,17 +11,18 @@
 //! [`recompute_yields`]: crate::game::yields::recompute_yields
 
 use super::core::{
-    error, land_yield, next_id, note, picker_row, ruled_lands, set_row_selected, BaseCommand,
+    error, land_yield, next_id, picker_row, ruled_lands, set_row_selected, BaseCommand,
     HINT_RED, NAME_COLOR, STAT_COLOR,
 };
 use crate::app::Game;
 use crate::resources::buildings::BuildingDefs;
 use crate::ecs::{
     Building, BuildingConstructionDate, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand,
-    BuildingStatus, CharacterGold, CharacterLeads, LandHeldBy, LandName, Registry, StringId,
+    BuildingStatus, CharacterGold, CharacterLeads, LandHeldBy, Registry, StringId,
 };
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
+use crate::events::{BuildingUpdateKind, OnBuildingUpdated};
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
 use bevy::prelude::*;
@@ -242,16 +243,12 @@ struct Go {
     actor_e: Entity,
     land_e: Entity,
     price: u32,
-    def_name: String,
     def_id: String,
     construction_time: u32,
     /// Def's `levy` — used at spawn time to seed `BuildingLevy` with the
     /// full pool. Captured here so `construct` doesn't need to re-look-up
     /// the def.
     def_levy: u32,
-    /// Land name captured during the read-only `validate` so the chronicle
-    /// line can name the land rather than its bare id.
-    land_name: String,
 }
 
 /// Check the rules against a snapshot (`&World`): the def exists, the actor
@@ -292,20 +289,13 @@ fn validate(world: &World, actor: &str, land_id: &str, def_id: &str) -> Result<G
         return Err(format!("need {} gold", def.construction_price));
     }
 
-    let land_name = world
-        .get::<LandName>(land_e)
-        .map(|land_name| land_name.0.clone())
-        .unwrap_or_else(|| land_id.to_string());
-
     Ok(Go {
         actor_e,
         land_e,
         price: def.construction_price,
-        def_name: def.name.clone(),
         def_id: def_id.to_string(),
         construction_time: def.construction_time,
         def_levy: def.levy,
-        land_name,
     })
 }
 
@@ -325,11 +315,10 @@ fn construct(world: &mut World, actor: &str, land_id: &str, def_id: &str) {
     // Finish date = today + the def's construction time, walked forward
     // under the calendar's month/year lengths so it lands on a valid day
     // even when the construction time crosses year boundaries.
-    let (start_date, finish_date) = {
+    let finish_date = {
         let calendar = world.resource::<Calendar>();
         let start = *world.resource::<Date>();
-        let finish = start.after_days(go.construction_time, calendar);
-        (start, finish)
+        start.after_days(go.construction_time, calendar)
     };
 
     // Spawn the instance — the relationship hook lands the new building in
@@ -352,16 +341,14 @@ fn construct(world: &mut World, actor: &str, land_id: &str, def_id: &str) {
         ))
         .id();
     world.resource_mut::<Registry>().insert(id, eid);
-    // Don't fire `OnBuildingUpdated` here — the new building isn't active
-    // yet, so its yield is zero anyway; the `construction` system fires
-    // it on the day the building transitions to `ACTIVE`.
-    let _ = start_date;
-
-    note(
-        world,
-        format!(
-            "began construction of {} on {} (ready {})",
-            go.def_name, go.land_name, finish_date
-        ),
-    );
+    // Fire `OnBuildingUpdated` with the `ConstructionStarted` variant so the
+    // chronicle observer writes the "began raising a X" line. The
+    // `Constructed` variant still fires later from the daily tick when the
+    // building flips to `ACTIVE` and yields actually change — the two
+    // events cover the two different chronicle-worthy moments.
+    world.trigger(OnBuildingUpdated {
+        building: eid,
+        land: go.land_e,
+        kind: BuildingUpdateKind::ConstructionStarted,
+    });
 }

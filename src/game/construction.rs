@@ -11,9 +11,7 @@
 //! list is bounded by the number of under-construction buildings, which is
 //! tiny.
 
-use crate::commands::core::note;
-use crate::ecs::{BuildingConstructionDate, BuildingOf, BuildingOnLand, BuildingStatus, LandName};
-use crate::resources::buildings::BuildingDefs;
+use crate::ecs::{BuildingConstructionDate, BuildingOf, BuildingOnLand, BuildingStatus};
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
 use crate::events::{BuildingUpdateKind, OnBuildingUpdated};
@@ -55,23 +53,15 @@ pub fn construction(world: &mut World) {
         }
     }
 
-    // Pass 2: mutate. Flip the status, drop the construction date, look
-    // up the def + land names, and push the chronicle line.
-    for (b_e, land_e, def_id) in ready {
+    // Pass 2: mutate. Flip the status, drop the construction date, and
+    // fire `OnBuildingUpdated` — the chronicle observer writes the
+    // "is now in operation" line off the entity, and
+    // `game::yields::on_building_updated` re-sums the realm's yield.
+    for (b_e, land_e, _def_id) in ready {
         if let Some(mut status) = world.get_mut::<BuildingStatus>(b_e) {
             *status = BuildingStatus::Active;
         }
         world.entity_mut(b_e).remove::<BuildingConstructionDate>();
-        let def_name = world
-            .resource::<BuildingDefs>()
-            .get(&def_id)
-            .map(|d| d.name.clone())
-            .unwrap_or(def_id.clone());
-        let land_name = world
-            .get::<LandName>(land_e)
-            .map(|land_name| land_name.0.clone())
-            .unwrap_or_default();
-        note(world, format!("{def_name} on {land_name} is now active."));
         world.trigger(OnBuildingUpdated {
             building: b_e,
             land: land_e,

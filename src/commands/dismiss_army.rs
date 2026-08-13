@@ -12,7 +12,7 @@
 //! dismissed army that marched away still returns its levy home.
 
 use super::core::{
-    army_status_text, distribute_levy_back, error, note, picker_row, set_row_selected,
+    army_status_text, distribute_levy_back, error, picker_row, set_row_selected,
     BaseCommand, NAME_COLOR, STAT_COLOR,
 };
 use crate::app::Game;
@@ -205,34 +205,20 @@ fn dismiss(world: &mut World, actor: &str, army_id: &str) {
     };
 
     // Two lands to distinguish:
-    // - `army_land_e`: the land the army is currently sitting on (for the
-    //   chronicle line). The army may have marched away from home.
+    // - `army_land_e` (the army's current land) is read by the chronicle
+    //   observer when it fires for the dismiss — no need to capture it
+    //   here.
     // - `kingdom_land_e`: the kingdom's home land — the one whose
     //   `BuildingLevy` pools the army drained on raise, and the one they
     //   fill back into on dismiss. The levy always returns home, not to
     //   whatever land the army happens to be on at dismiss time.
-    let army_land_e = world
-        .get::<crate::ecs::army::ArmyOnLand>(army_e)
-        .map(|army_on_land| army_on_land.0);
-    let army_land_name = army_land_e
-        .and_then(|e| world.get::<crate::ecs::LandName>(e))
-        .map(|land_name| land_name.0.clone())
-        .unwrap_or_else(|| "?".into());
     let kingdom_land_e = world
         .get::<KingdomHold>(kingdom_e)
         .map(|kingdom_hold| kingdom_hold.0);
     let Some(kingdom_land_e) = kingdom_land_e else {
         return error(world, format!("cannot dismiss `{army_id}`: kingdom has no land"));
     };
-    let kingdom_land_name = world
-        .get::<crate::ecs::LandName>(kingdom_land_e)
-        .map(|land_name| land_name.0.clone())
-        .unwrap_or_else(|| "?".into());
 
-    let army_name = world
-        .get::<ArmyName>(army_e)
-        .map(|army_name| army_name.0.clone())
-        .unwrap_or_else(|| "Army".to_string());
     let army_levy = world
         .get::<ArmyLevy>(army_e)
         .map(|army_levy| army_levy.0)
@@ -255,13 +241,11 @@ fn dismiss(world: &mut World, actor: &str, army_id: &str) {
     world.entity_mut(army_e).despawn();
     world.resource_mut::<Registry>().by_id.remove(army_id);
 
-    note(
-        world,
-        format!(
-            "dismissed {army_name} on {army_land_name} ({army_levy} levy returned to {kingdom_land_name})"
-        ),
-    );
-
+    // Fire `OnArmyDismiss` so the chronicle observer writes the "stood
+    // down the X" line and the army icon is torn down. The per-building
+    // `Dismissed` events below are no-ops for the chronicle (the
+    // army-level line covers it) but the yields observer still consumes
+    // them.
     world.trigger(OnArmyDismiss { army: army_e });
     for b_e in dismissed {
         world.trigger(OnBuildingUpdated {

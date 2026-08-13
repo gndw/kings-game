@@ -588,3 +588,50 @@ result. Commands don't know about the search.
   the `CommandMenu` resource, gets cloned out before the exclusive borrow
   on `Messages<KeyboardInput>`, then written back — one usize copy per
   frame, no missed events.
+
+## Chronicle generation lives in its own observer module
+
+The chronicle text is split out from game-logic code into one module,
+`src/chronicles.rs`, that owns one observer per chronicle-worthy
+event. Commands and ticks only `world.trigger(...)`; the observers
+read display names off the world and write one past-tense line per
+event.
+
+- **Why:** keeps game-logic code (commands / ticks) free of string
+  formatting and free of `Chronicles` access. Chronicle text lives in
+  exactly one place, so a future "rewrite the voice" pass is a
+  one-file change. The flavor (past tense, third person, lands named,
+  ids hidden) is enforced by the module boundary — nothing else can
+  push a line.
+- **Event surface.** The module observes everything that can produce a
+  chronicle line: `OnBuildingUpdated` (with a `kind` dispatch for
+  `ConstructionStarted` / `Constructed` / `Destroyed`; `Raised` /
+  `Dismissed` are absorbed because the army-level line covers them),
+  `OnArmyRaised` / `OnArmyDismiss`, `OnMarchingOrdered` /
+  `OnArmyArrived` (with a `continuing: bool` payload so the arrival
+  line can mention the next hop), `OnSiegeLaid` / `OnSiegeWon`,
+  `OnWarDeclared` (with the casus belli, so future CB shapes can pick
+  their verb), `OnDemandEnforced` (with the demand type), and
+  `OnWarEnded`. New events are additive: a new CB shape extends
+  `WarCasusBelliType` and the `on_war_declared` match arm.
+- **`OnBuildingUpdated::ConstructionStarted` vs `OnBuildingUpdated::Constructed`.**
+  Two distinct events for two distinct moments. The construct command
+  fires `ConstructionStarted` (a new building is queued); the daily
+  tick fires `Constructed` the day the building finishes and flips to
+  `Active`. The chronicle reader sees "began raising a X" then
+  "is now in operation" — the construction lifecycle, told as two
+  sentences. Reusing the existing `OnBuildingUpdated` event (vs a new
+  event type) keeps building lifecycle in one place; the kind enum is
+  the variant axis.
+- **Subject for player-driven events.** The observer module resolves the
+  player character once per observer batch via a `PlayerCtx`
+  `SystemParam` and formats the actor as "You" for player-driven
+  events. Kingdom-driven events (war, demand) name the kingdom by its
+  held land.
+- **Mechanic words are banned.** "active", "conquest", "Take
+  enforced", "in field" — these are code words. The chronicle reads
+  "now in operation", "demanding its lands", "taking the crown",
+  "home". Per-def `building_benefit` table inside the module carries
+  the flavor phrases for the finished-construction line; new defs fall
+  back to a generic phrase.
+

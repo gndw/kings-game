@@ -12,7 +12,7 @@
 //! The actor must rule the army's kingdom (via `ArmyBelongsToKingdom`) — the
 //! same rule every other army command uses.
 
-use super::core::{error, note, picker_row, set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR,
+use super::core::{error, picker_row, set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR,
     STAT_DIM};
 use crate::app::Game;
 use crate::ecs::kingdom::KingdomLedBy;
@@ -21,6 +21,7 @@ use crate::ecs::{
     CharacterName, CharacterOfHouse, HouseName, KingdomHasArmies, LandHeldBy, LandName, Registry,
     Siege, SiegeAttackerArmy, SiegeDefenderLand, SiegeNextEventDate, SiegeProgress, StringId,
 };
+use crate::events::OnSiegeLaid;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
 use crate::ui::command_menu::CommandMenuUiContext;
@@ -278,13 +279,11 @@ fn begin_siege(world: &mut World, actor: &str, army_id: &str) {
         ))
         .id();
 
-    let land_label = world
-        .get::<LandName>(army_land_e)
-        .map(|ln| ln.0.clone())
-        .unwrap_or_else(|| "?".into());
-    note(
-        world,
-        format!("laid siege with `{army_id}` on {land_label} (first event {next_event})"),
-    );
+    // Chronicle observer pulls the land + army names off the entities —
+    // no need to capture them here for the line itself.
+    world.trigger(OnSiegeLaid {
+        army: army_e,
+        land: army_land_e,
+    });
 }
 

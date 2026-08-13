@@ -18,7 +18,7 @@
 //! name of its held land (the convention everywhere else in the codebase
 //! — a kingdom's seat is its single land).
 
-use super::core::{error, next_id, note, picker_row, set_row_selected, BaseCommand, NAME_COLOR,
+use super::core::{error, next_id, picker_row, set_row_selected, BaseCommand, NAME_COLOR,
     STAT_COLOR};
 use crate::ecs::{
     ArmyLevy, CharacterLeads, CharacterName, CharacterOfHouse, HouseName, Kingdom,
@@ -27,6 +27,7 @@ use crate::ecs::{
     WarDemandType, WarDemands, WarName,
 };
 use crate::app::Game;
+use crate::events::OnWarDeclared;
 use crate::resources::date::Date;
 use crate::ui::command_menu::CommandMenuUiContext;
 use bevy::ecs::world::World;
@@ -308,11 +309,6 @@ fn declare(world: &mut World, actor: &str, defender_id: &str, cb_id: &str) {
         return error(world, format!("unknown casus belli `{cb_id}`"));
     };
 
-    // Capture display names before the spawn (cheap, immutable reads; gives
-    // the chronicle line real names instead of bare ids).
-    let attacker_name = kingdom_label(world, attacker_kingdom_e);
-    let defender_name = kingdom_label(world, defender_kingdom_e);
-
     // Seed the demands from the CB type + defender. Conquest → one Take
     // demand on the defender kingdom.
     let demands = demands_for(cb_type, defender_kingdom_e);
@@ -342,10 +338,13 @@ fn declare(world: &mut World, actor: &str, defender_id: &str, cb_id: &str) {
         .id();
     world.resource_mut::<Registry>().insert(war_entity_id, war_e);
 
-    note(
-        world,
-        format!("{attacker_name} declared war on {defender_name} (conquest)"),
-    );
+    // Chronicle observer pulls the attacker / defender land names off the
+    // entities directly.
+    world.trigger(OnWarDeclared {
+        attacker: attacker_kingdom_e,
+        defender: defender_kingdom_e,
+        casus_belli: cb_type,
+    });
 }
 
 /// Display label for a kingdom: the name of its held land, falling back to

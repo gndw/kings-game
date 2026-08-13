@@ -14,13 +14,13 @@
 //! the pools back up over time.
 
 use super::core::{
-    available_levy, drain_buildings, error, next_id, note, picker_row, ruled_lands,
+    available_levy, drain_buildings, error, next_id, picker_row, ruled_lands,
     set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR, STAT_DIM,
 };
 use crate::app::Game;
 use crate::ecs::army::{Army, ArmyBelongsToKingdom, ArmyLevy, ArmyName, ArmyOnLand, ArmyStatus};
 use crate::ecs::{
-    CharacterLeads, CharacterOfHouse, HouseName, LandHasArmies, LandHeldBy, LandName, Registry,
+    CharacterLeads, CharacterOfHouse, HouseName, LandHasArmies, LandHeldBy, Registry,
     StringId,
 };
 use crate::events::{BuildingUpdateKind, OnArmyRaised, OnBuildingUpdated};
@@ -166,11 +166,6 @@ fn raise(world: &mut World, actor: &str, land_id: &str) {
         }
     };
 
-    let land_name = world
-        .get::<LandName>(land_e)
-        .map(|land_name| land_name.0.clone())
-        .unwrap_or_else(|| land_id.to_string());
-
     // Pool gate: refuse when there's no `BuildingLevy` to draw from.
     let (initial_levy, has_levy) = available_levy(world, land_e);
     if !has_levy || initial_levy == 0 {
@@ -204,11 +199,11 @@ fn raise(world: &mut World, actor: &str, land_id: &str) {
 
     let drained = drain_buildings(world, land_e);
 
-    note(
-        world,
-        format!("raised {army_name} on {land_name} ({initial_levy} levy)"),
-    );
-
+    // Fire `OnArmyRaised` so the chronicle observer writes the
+    // "mustered the X" line and `map::components::army_icon` spawns the
+    // sword icon at the army's land. The per-building `Raised` events
+    // below are no-ops for the chronicle (the army-level line covers
+    // it) but the yields observer still consumes them.
     world.trigger(OnArmyRaised { army: eid });
     for b_e in drained {
         world.trigger(OnBuildingUpdated {

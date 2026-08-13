@@ -225,7 +225,8 @@ shape; this is the *what*.
   behind an `Arc<Mutex<>>`, `player_character_id`, and `selected_land_id` (set
   on `Startup` to the player's own capital via `CharacterLeads`→`KingdomHold::land()`).
   The chronicle log
-  is not here — it is the separate `Chronicles` resource. Gold/levy are
+  is not here — it is the separate `Chronicles` resource, written exclusively
+  by the [`chronicles`](src/chronicles.rs) module's observers. Gold/levy are
   **not** here — every character has their own components and the player is
   only distinguished by the id.
 - **`Game`** (`app.rs`) is the `Resource` wrapping `Ctx`, plus `paused` and
@@ -328,10 +329,13 @@ the style of `ctx::step`.
   `populate` uses
   (`StringId`/`Building`/`BuildingOf`/`BuildingOnLand` + `BuildingStatus::Building`
   + `BuildingConstructionDate(start + def.construction_time)`), registers the
-  id in `Registry`, deducts gold, and appends a chronicle line on success
-  *and* every rejection. The new building contributes no yield yet; the
-  per-day `construction` system (`game/construction.rs`) flips it to
-  `Active` once the date passes the finish date and fires `OnBuildingUpdated`
+  id in `Registry`, deducts gold, and fires `OnBuildingUpdated {
+  kind: ConstructionStarted }` on success. The new building contributes
+  no yield yet; the per-day `construction` system (`game/construction.rs`)
+  flips it to `Active` once the date passes the finish date and fires
+  `OnBuildingUpdated { kind: Constructed }` so the chronicle observer
+  writes a second line ("now in operation") and the realm's yields
+  refresh through the same observer.
   so the realm's yields refresh through the same observer.
 - **`DestroyBuilding`** (the inverse) validates the actor rules the land and
   the building is `BuildingOnLand` it, then despawns the instance +
@@ -373,7 +377,8 @@ the style of `ctx::step`.
   carries `MarchingStatus::Scheduled`, empty `MarchingBeginDate` /
   `MarchingArrivedDate`, that road in `MarchingOnRoad`, and the road's two
   ends as `MarchingFromLand` / `MarchingToLand`. A target with no road
-  route is rejected with a chronicle note. The four relationships
+  route is rejected with an error popup (the validation side uses
+  [`commands::core::error`]). The four relationships
   auto-maintain `ArmyHasMarching` (on the army, the queue),
   `LandHasMarchingsFrom` / `LandHasMarchingsTo` (on the lands) and
   `RoadHasMarchings` (on the road); the
@@ -406,8 +411,8 @@ the style of `ctx::step`.
   one. On a successful enforcement the war is despawned + deregistered
   (Bevy's relationship hooks prune the war from both kingdoms'
   `KingdomHasWarsAttacking` / `KingdomHasWarsDefending` collections
-  as part of the despawn), and a chronicle line records the
-  resolution.
+  as part of the despawn), and `OnDemandEnforced` + `OnWarEnded` fire so
+  the chronicle observer records the resolution.
 - **`LaySiege`** lays siege to a land with one of the player's armies.
   One step (pick an army); the army's current land is the target, and
   `step_items` filters the list to armies on *foreign* lands (your own
@@ -437,6 +442,66 @@ Esc); the final step's pick hands the accumulated choices to the picked command'
 
 `ui::error::input` (Update) handles `esc` to close the
 [`ui::error`] popup and flip [`InputLayer`] back to `Root`. Gated to
+
+## Chronicle generation
+
+Lives in `src/chronicles.rs`. The chronicle is the *story* of the realm —
+past tense, third person, names lands and armies but never entity ids or
+game-mechanic words ("active", "conquest", "Take enforced"). It is the
+*only* module that writes to the `Chronicles` resource; commands and ticks
+only `world.trigger(...)`.
+
+Each chronicle-worthy moment maps to one event; the module registers one
+observer per event (or one observer that dispatches on payload `kind` for
+events with multiple chronicle variants). The observers read display
+names off the world via Bevy `Query` / `Res` system params and push a
+single formatted line to `Chronicles.0`. `PlayerCtx` is a
+`#[derive(SystemParam)]` newtype that resolves the player character
+once per observer batch — it's how the chronicle names the player
+without re-walking the registry inside each line.
+
+Events the module observes (all in `src/events.rs`):
+
+- `OnBuildingUpdated { kind: ConstructionStarted }` — "You began raising a
+  Castle at Riverrun."
+- `OnBuildingUpdated { kind: Constructed }` — "The Castle at Riverrun is
+  now in operation, its work beginning flowing into the realm's coffers."
+- `OnBuildingUpdated { kind: Destroyed }` — "You tore down the Castle at
+  Riverrun, its stones scattered to the winds."
+- `OnBuildingUpdated { kind: Raised | Dismissed }` — silently absorbed;
+  the army-level line covers it.
+- `OnArmyRaised` — "You mustered the Lannister Army at Riverrun — 120
+  spears answering the call."
+- `OnArmyDismiss` — "You stood down the Lannister Army, its levy
+  returning home to Casterly Rock."
+- `OnMarchingOrdered` — "You ordered the Lannister Army to march from
+  Riverrun toward Riverrun. (5 days by road.)"
+- `OnArmyArrived { continuing: true }` — "The Lannister Army reached X
+  and pressed onward toward Y."
+- `OnArmyArrived { continuing: false }` — "The Lannister Army arrived at
+  X, having marched from Y."
+- `OnSiegeLaid` — "You laid siege to Riverrun, your Lannister Army
+  sealing every road."
+- `OnSiegeWon` — "After days of siege, your Lannister Army broke
+  Riverrun's walls and took the land."
+- `OnWarDeclared { casus_belli: Conquest }` — "Kingdom of A declared war
+  on Kingdom of B, demanding its lands."
+- `OnDemandEnforced { demand_type: Take }` — "You claimed the Kingdom of
+  Y, taking the crown for your own."
+- `OnWarEnded` — "The war over Y ended."
+
+The player-facing text for a finished-construction line varies per
+building kind — a granary says "stores filling the realm's coffers",
+a barracks says "soldiers swelling the levy" — via the per-def
+`building_benefit` table inside the module. New defs fall back to a
+generic phrase; per-def `benefit` is the obvious next field if more
+flavor is wanted.
+
+Why split: keeping chronicle generation in one observer module means
+game-logic code (`commands/*`, `game/*`) only fires events — never
+formats strings, never reaches into `Chronicles`. The chronicle text
+lives in one place; future mods can edit a single file to rewrite the
+voice.
 `InputLayer::ErrorPopup` so it stays dormant while the palette or root
 owns input — the popup is a modal on top of the palette and the root.
 
@@ -592,7 +657,8 @@ asset-loaded sprites.
 | `src/main.rs` | arg parse, load mods, build `App`, register systems/schedules, `run` |
 | `src/app.rs` | `Game` resource, `Ctx` wrapper, `speed`, `input` |
 | `src/commands.rs` | module root + re-exports (`Command`, `CommandRegistry`, `Choice`, `MenuItem`) |
-| `src/commands/core.rs` | the `Command` trait, `CommandRegistry`, `MenuItem`/`Choice`, shared helpers (`next_id`, `note`, `ruled_lands`) |
+| `src/commands/core.rs` | the `Command` trait, `CommandRegistry`, `MenuItem`/`Choice`, shared helpers (`next_id`, `ruled_lands`) |
+| `src/chronicles.rs` | chronicle generation — one observer per game event (`OnBuildingUpdated`, `OnArmyRaised`/`OnArmyDismiss`, `OnMarchingOrdered`, `OnArmyArrived`, `OnSiegeLaid`/`OnSiegeWon`, `OnWarDeclared`/`OnDemandEnforced`/`OnWarEnded`), each writing a narratively-flavored line to the `Chronicles` resource. The only writer of chronicle text; commands and ticks only `trigger(...)`. |
 | `src/commands/construct_building.rs` | the `ConstructBuilding` command (validate + spawn as BUILDING + pay) |
 | `src/commands/destroy_building.rs` | the `DestroyBuilding` command (validate + despawn + deregister) |
 | `src/commands/raise_army.rs` | the `RaiseArmy` command (validate + spawn the army bundle + drain `BuildingLevy` pools) |

@@ -425,8 +425,15 @@ the style of `ctx::step`.
   one. On a successful enforcement the war is despawned + deregistered
   (Bevy's relationship hooks prune the war from both kingdoms'
   `KingdomHasWarsAttacking` / `KingdomHasWarsDefending` collections
-  as part of the despawn), and `OnDemandEnforced` + `OnWarEnded` fire so
-  the chronicle observer records the resolution.
+  as part of the despawn), and `OnDemandEnforced` + `OnWarEnded` fire
+  so the chronicle observer records the resolution. The `Take` event
+  also drives two cleanup observers:
+  [`building_releasing`](src/game/building_releasing.rs) re-activates
+  the conquered land's buildings (the siege tick flipped them
+  `Inactive` when the siege was won), and
+  [`court_releasing`](src/game/court_releasing.rs) despawns every
+  courtier serving the conquered kingdom (the new regime starts with
+  an empty court).
 - **`LaySiege`** lays siege to a land with one of the player's armies.
   One step (pick an army); the army's current land is the target, and
   `step_items` filters the list to armies on *foreign* lands (your own
@@ -434,11 +441,14 @@ the style of `ctx::step`.
   `SiegeProgress(0)` and `SiegeNextEventDate(today + 10)`, then flips
   the army's `ArmyStatus` to `Sieging`. From there the per-day
   [`siege::tick`](src/game/siege.rs) advances progress on each scheduled
-  event; at 100% the siege is won (buildings flip to `Inactive`,
-  `ArmyControlsLand` lands on the army, the army returns to `Idle`).
-  Foreign-land check re-runs in `execute` as defense-in-depth — the
-  step_items filter is the player-facing UX, the execute check catches
-  any caller that bypasses the palette.
+  event; at 100% the siege is won (buildings flip to `Inactive` and
+  their `BuildingLevy` pools drain to `0`, `ArmyControlsLand` lands on
+  the army, the army returns to `Idle`). The buildings stay `Inactive`
+  until the player enforces the `Take` demand — see
+  [`building_releasing`](src/game/building_releasing.rs) for the flip-
+  back to `Active`. Foreign-land check re-runs in `execute` as defense-
+  in-depth — the step_items filter is the player-facing UX, the execute
+  check catches any caller that bypasses the palette.
 - **Runtime building id** is a v4 UUID drawn from the seeded `SimRng` (not OS
   entropy), keeping the one-entropy-source invariant; format-only, no `uuid`
   crate.
@@ -706,7 +716,9 @@ asset-loaded sprites.
 | `src/resources/*` | `Border`, `Calendar`(+validate, carries `start`), `Date` (the walking clock), `BuildingDefs`/`BuildingDef` (kind roster), `Chronicles` (log) |
 | `src/ecs/ecs.rs` | `StringId`, `Registry`, `populate` |
 | `src/ecs/{house,character,land,building,kingdom,courtier,army,war,siege}.rs` | components + relationships per kind |
-| `src/game/siege.rs` | the per-day siege tick (`OnDay` — advance `SiegeProgress` by 30 every 10 days; at 100% insert `ArmyControlsLand` on the army, flip every building on the land to `Inactive`, return the army to `Idle`, despawn the siege) |
+| `src/game/siege.rs` | the per-day siege tick (`OnDay` — advance `SiegeProgress` by 30 every 10 days; at 100% insert `ArmyControlsLand` on the army, flip every building on the land to `Inactive` + drain `BuildingLevy` to `0`, return the army to `Idle`, despawn the siege) |
+| `src/game/building_releasing.rs` | observer for `OnDemandEnforced` on `Take` — flips every standing building on the target kingdom's held land back to `Active`, provided the controlling army (if any) belongs to a kingdom led by the player (otherwise the land is contested and the buildings stay `Inactive`) |
+| `src/game/court_releasing.rs` | observer for `OnDemandEnforced` on `Take` — despawns every courtier entity serving the target kingdom (the new regime starts with an empty court; Bevy's relationship hooks prune the courtiers out of `KingdomHasCourtiers` and `CharacterHasCourtiers`) |
 | `src/ecs.rs` | module root, re-exports, the component map |
 | `src/schedules.rs` | `OnDay` + `OnMonth` labels |
 | `src/game/advance_date.rs` | the tick (exclusive `&mut World`) |

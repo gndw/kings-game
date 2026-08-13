@@ -173,6 +173,13 @@ fn main() -> Result<()> {
         .add_observer(chronicles::on_siege_won)
         .add_observer(chronicles::on_war_declared)
         .add_observer(chronicles::on_demand_enforced)
+        // `OnDemandEnforced` on `Take` re-activates the conquered land's
+        // buildings (the siege tick flipped them `Inactive` and drained
+        // their levy). Skipped if an enemy army still controls the land.
+        .add_observer(game::building_releasing::on_demand_enforced)
+        // `OnDemandEnforced` on `Take` releases the conquered kingdom's
+        // court (despawns every courtier serving the target kingdom).
+        .add_observer(game::court_releasing::on_demand_enforced)
         .add_observer(chronicles::on_war_ended)
         .add_systems(
             Update,

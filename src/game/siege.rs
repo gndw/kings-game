@@ -16,9 +16,12 @@
 //!      [`LandControlledByArmy`](crate::ecs::LandControlledByArmy) on the
 //!      land.
 //!    - Set every standing building on the land to
-//!      [`BuildingStatus::Inactive`](crate::ecs::BuildingStatus::Inactive) —
+//!      [`BuildingStatus::Inactive`](crate::ecs::BuildingStatus::Inactive)
+//!      and drain its [`BuildingLevy`](crate::ecs::BuildingLevy) to `0` —
 //!      the conquest chokes the realm's economy until the defender
-//!      reclaims.
+//!      reclaims (or, in the conquest-transfer case, until the player
+//!      enforces `Take` and [`crate::game::building_releasing`] flips
+//!      them back to `Active`).
 //!    - Flip the army's `ArmyStatus` back to `Idle`.
 //!    - Despawn the siege entity.
 //! 5. If the attacker army has been despawned (the player dismissed it
@@ -32,7 +35,7 @@
 //! player's army count, so the walk is cheap.
 
 use crate::ecs::army::{ArmyControlsLand, ArmyStatus};
-use crate::ecs::building::{Building, BuildingOnLand, BuildingStatus};
+use crate::ecs::building::{Building, BuildingLevy, BuildingOnLand, BuildingStatus};
 use crate::ecs::land::LandHasBuildings;
 use crate::ecs::siege::{Siege, SiegeAttackerArmy, SiegeDefenderLand, SiegeNextEventDate, SiegeProgress};
 use crate::events::OnSiegeWon;
@@ -130,10 +133,14 @@ pub fn tick(world: &mut World) {
         // `LandHasSiegesUnderAttack`.
         world.entity_mut(army_e).insert(ArmyControlsLand(land_e));
 
-        // Set every standing building on the land to `Inactive`. A
-        // future "conquest transfer" would also touch the kingdom
-        // link (`LandHeldBy`), but that's the war-resolution piece
-        // still TBD — for now the economy is the visible consequence.
+        // Set every standing building on the land to `Inactive` and
+        // drain its levy pool to `0`. The buildings stay `Inactive` (and
+        // contribute nothing to yield) until the player enforces the
+        // `Take` demand on this war — see
+        // [`crate::game::building_releasing`] for the flip-back path.
+        // A future "conquest transfer" would also touch the kingdom link
+        // (`LandHeldBy`), but that's the war-resolution piece still TBD
+        // — for now the inactive status is the visible consequence.
         // Snapshot the buildings, drop the borrow, then mutate.
         let building_entities: Vec<Entity> = world
             .get::<LandHasBuildings>(land_e)
@@ -145,6 +152,9 @@ pub fn tick(world: &mut World) {
             }
             if let Some(mut building_status) = world.get_mut::<BuildingStatus>(b_e) {
                 *building_status = BuildingStatus::Inactive;
+            }
+            if let Some(mut building_levy) = world.get_mut::<BuildingLevy>(b_e) {
+                building_levy.0 = 0;
             }
         }
 

@@ -321,11 +321,15 @@ defender's previous leader (if any) has the entry pruned from their
   DeclareWar attacker's pick). All mechanical.
 - **No conquest cleanup on the defender's side (yet):** the
   defender's `CharacterLeads` loses the kingdom entry (Bevy prunes
-  it), so the defender no longer leads it — good. But the
-  defender's *other* appointments (court appointments, the
-  `LandHeldBy` link, their treasury) stay intact. The defender is
-  effectively exiled from court, not destroyed; transferring the
-  court's courtiers to the player is future work.
+  it), so the defender no longer leads it — good. The defender's
+  *court* appointments are released (the courtier entities despawn
+  when the kingdom is taken over via `Take` — see
+  [`building_releasing`](src/game/building_releasing.rs) and
+  [`court_releasing`](src/game/court_releasing.rs)). The defender's
+  `LandHeldBy` link, treasury, and other state stay intact; the
+  defender is effectively exiled from court, not destroyed.
+  Transferring the court's courtiers to the player is still future
+  work (the current behaviour is "release", not "absorb").
 
 
 ## Relationship components live in the file of their main component

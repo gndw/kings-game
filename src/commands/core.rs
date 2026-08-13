@@ -566,6 +566,11 @@ pub(super) fn set_row_selected(world: &mut World, entity: Entity, is_selected: b
 /// leave the slot empty. `key_value` carries the step's
 /// `(CommandHasKey, CommandHasValue)` for step rows; `None` for the
 /// command's own top-level row.
+///
+/// The row is also stamped with [`CommandHasQueryable`] (the search
+/// key — same as the displayed `name`) and [`RowNameText`] (the name
+/// text child, so the palette can recolour the name alone when the row
+/// is grayed by a search filter).
 pub(super) fn picker_row(
     world: &mut World,
     parent: Entity,
@@ -591,26 +596,31 @@ pub(super) fn picker_row(
         BorderColor::all(ROW_BORDER),
         ChildOf(parent),
         CommandHasId(command_id.to_string()),
+        crate::ui::command_menu::CommandHasQueryable(name.to_string()),
     ));
     if let Some((k, v)) = key_value {
         entity.insert((CommandHasKey(k), CommandHasValue(v)));
     }
     let row = entity.id();
+    let mut name_text_entity: Option<Entity> = None;
     world.entity_mut(row).with_children(|c| {
         // Name column — fills remaining width.
-        c.spawn(Node {
+        let mut name_col = c.spawn(Node {
             flex_direction: FlexDirection::Column,
             flex_grow: 1.0,
             ..default()
-        })
-        .with_children(|name_col| {
-            name_col.spawn((
-                Text::new(name.to_string()),
-                TextFont::from_font_size(16.0),
-                TextColor(name_color),
-            ));
+        });
+        name_col.with_children(|name_col_cmd| {
+            let name_text = name_col_cmd
+                .spawn((
+                    Text::new(name.to_string()),
+                    TextFont::from_font_size(16.0),
+                    TextColor(name_color),
+                ))
+                .id();
+            name_text_entity = Some(name_text);
             if let Some(desc) = description {
-                name_col.spawn((
+                name_col_cmd.spawn((
                     Text::new(desc.to_string()),
                     TextFont::from_font_size(11.0),
                     TextColor(DESC_COLOR),
@@ -642,5 +652,10 @@ pub(super) fn picker_row(
             ));
         }
     });
+    if let Some(name_text) = name_text_entity {
+        world
+            .entity_mut(row)
+            .insert(crate::ui::command_menu::RowNameText(name_text));
+    }
     row
 }

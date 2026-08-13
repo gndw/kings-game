@@ -12,8 +12,8 @@
 //! dismissed army that marched away still returns its levy home.
 
 use super::core::{
-    army_status_text, distribute_levy_back, note, picker_row, set_row_selected, BaseCommand,
-    NAME_COLOR, STAT_COLOR,
+    army_status_text, distribute_levy_back, error, note, picker_row, set_row_selected,
+    BaseCommand, NAME_COLOR, STAT_COLOR,
 };
 use crate::app::Game;
 use crate::ecs::army::{ArmyBelongsToKingdom, ArmyHasMarching, ArmyLevy, ArmyName, ArmyOnLand};
@@ -179,10 +179,10 @@ fn armies_under(
 /// marchings don't outlive their `MarchingArmy` target.
 fn dismiss(world: &mut World, actor: &str, army_id: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
-        return note(world, format!("cannot dismiss `{army_id}`: unknown actor"));
+        return error(world, format!("cannot dismiss `{army_id}`: unknown actor"));
     };
     let Some(army_e) = world.resource::<Registry>().get(army_id) else {
-        return note(world, format!("cannot dismiss `{army_id}`: no such army"));
+        return error(world, format!("cannot dismiss `{army_id}`: no such army"));
     };
     // Rule check: the army's `ArmyBelongsToKingdom` is one of the actor's
     // kingdoms (multi-kingdom: any of them counts).
@@ -195,7 +195,7 @@ fn dismiss(world: &mut World, actor: &str, army_id: &str) {
     let kingdom_e = match (actor_kingdoms, army_kingdom) {
         (Some(aks), Some(ak)) if aks.contains(&ak) => ak,
         _ => {
-            return note(
+            return error(
                 world,
                 format!(
                     "cannot dismiss `{army_id}`: that army does not belong to your kingdom"
@@ -222,7 +222,7 @@ fn dismiss(world: &mut World, actor: &str, army_id: &str) {
         .get::<KingdomHold>(kingdom_e)
         .map(|kingdom_hold| kingdom_hold.0);
     let Some(kingdom_land_e) = kingdom_land_e else {
-        return note(world, format!("cannot dismiss `{army_id}`: kingdom has no land"));
+        return error(world, format!("cannot dismiss `{army_id}`: kingdom has no land"));
     };
     let kingdom_land_name = world
         .get::<crate::ecs::LandName>(kingdom_land_e)

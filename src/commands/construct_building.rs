@@ -11,8 +11,8 @@
 //! [`recompute_yields`]: crate::game::yields::recompute_yields
 
 use super::core::{
-    land_yield, next_id, note, picker_row, ruled_lands, set_row_selected, BaseCommand, HINT_RED,
-    NAME_COLOR, STAT_COLOR,
+    error, land_yield, next_id, note, picker_row, ruled_lands, set_row_selected, BaseCommand,
+    HINT_RED, NAME_COLOR, STAT_COLOR,
 };
 use crate::app::Game;
 use crate::resources::buildings::BuildingDefs;
@@ -314,7 +314,7 @@ fn validate(world: &World, actor: &str, land_id: &str, def_id: &str) -> Result<G
 fn construct(world: &mut World, actor: &str, land_id: &str, def_id: &str) {
     let go = match validate(world, actor, land_id, def_id) {
         Ok(g) => g,
-        Err(msg) => return note(world, format!("cannot build on {land_id}: {msg}")),
+        Err(msg) => return error(world, format!("cannot build on {land_id}: {msg}")),
     };
 
     // Pay.

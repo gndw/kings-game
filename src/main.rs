@@ -127,6 +127,11 @@ fn main() -> Result<()> {
                 ui::startup::startup,
                 ui::camera::startup,
                 ui::command_menu::startup,
+                // Spawn the error-popup shell, hidden. Runs alongside
+                // the command palette startup so the observer in
+                // `ui::error::on_error_occured` can find the body to
+                // write into on the first error.
+                ui::error::startup,
                 // Populates `CommandContext` with every command the
                 // palette can surface; must run before the panel opens.
                 commands::startup,
@@ -149,6 +154,10 @@ fn main() -> Result<()> {
         // structural change settles Bevy's relationship hooks.
         .add_observer(army_icon::on_army_raised)
         .add_observer(army_icon::on_army_dismiss)
+        // `OnErrorOccured` shows the error popup, force-closes any open
+        // command palette, and flips the input layer to `ErrorPopup`.
+        // One observer — the popup owns input until the player dismisses.
+        .add_observer(ui::error::on_error_occured)
         .add_systems(
             Update,
             (
@@ -161,6 +170,10 @@ fn main() -> Result<()> {
                 // layer via its own run-if so it stays dormant on root.
                 ui::command_menu::input
                     .run_if(ui::command_menu::command_menu_layer_active),
+                // Error popup: Esc → close + flip back to root, gated to
+                // the error-popup layer so it stays dormant elsewhere.
+                ui::error::input
+                    .run_if(ui::error::error_popup_layer_active),
                 ui::courts::update,
                 // Ponytail: keep debug systems last so they don't displace
                 // gameplay systems in the schedule.

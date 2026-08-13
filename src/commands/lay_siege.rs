@@ -12,7 +12,7 @@
 //! The actor must rule the army's kingdom (via `ArmyBelongsToKingdom`) — the
 //! same rule every other army command uses.
 
-use super::core::{note, picker_row, set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR,
+use super::core::{error, note, picker_row, set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR,
     STAT_DIM};
 use crate::app::Game;
 use crate::ecs::kingdom::KingdomLedBy;
@@ -216,10 +216,10 @@ fn foreign_army_rows(world: &World, actor: &str) -> Vec<SiegeArmyRow> {
 /// event 10 days out.
 fn begin_siege(world: &mut World, actor: &str, army_id: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
-        return note(world, format!("cannot siege with `{army_id}`: unknown actor"));
+        return error(world, format!("cannot siege with `{army_id}`: unknown actor"));
     };
     let Some(army_e) = world.resource::<Registry>().get(army_id) else {
-        return note(world, format!("cannot siege with `{army_id}`: no such army"));
+        return error(world, format!("cannot siege with `{army_id}`: no such army"));
     };
 
     // Snapshot the data we need (actor kingdoms, the army's land, the land's
@@ -248,13 +248,13 @@ fn begin_siege(world: &mut World, actor: &str, army_id: &str) {
         .map(|abtk| actor_kingdoms.contains(&abtk.0))
         .unwrap_or(false)
     {
-        return note(
+        return error(
             world,
             format!("cannot siege with `{army_id}`: that army does not belong to your kingdom"),
         );
     }
     if !is_foreign {
-        return note(
+        return error(
             world,
             format!("cannot siege with `{army_id}`: a siege on your own land is a no-op"),
         );

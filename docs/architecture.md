@@ -435,6 +435,11 @@ palette while it is open. `ui::command_menu::input` (exclusive) opens the
 spotlight-style command palette on `c` and navigates it (arrows + enter +
 Esc); the final step's pick hands the accumulated choices to the picked command's `execute`.
 
+`ui::error::input` (Update) handles `esc` to close the
+[`ui::error`] popup and flip [`InputLayer`] back to `Root`. Gated to
+`InputLayer::ErrorPopup` so it stays dormant while the palette or root
+owns input — the popup is a modal on top of the palette and the root.
+
 ## UI
 
 Lives in `ui/`. All Bevy UI (flex `Node` tree) + `Gizmos` line drawing; no
@@ -518,6 +523,18 @@ asset-loaded sprites.
   - `resource` — the player's name, house, gold, yield/mo, levy.
   - `status` — `[PAUSED]`/`[RUNNING]`, the `Date`, current speed, a `C commands`
     hint.
+  - `error` — the error popup modal. Spawned hidden at startup
+    (`Display::None`); the [`OnErrorOccured`](src/events.rs) observer
+    shows it, writes the validation message into the body, force-closes
+    any open command palette, and flips [`InputLayer`] to
+    `ErrorPopup`. Dismissed with `esc` (handled by `input`, gated to
+    the error-popup layer) which flips the layer back to `Root`.
+    Sits at `GlobalZIndex(200)` — above the command palette's `100` —
+    so an error that fires while the palette is open lands on top of
+    it rather than behind. The observer calls
+    [`close_command`](crate::ui::command_menu::close_command) so the
+    palette's UI is torn down when an error interrupts it, leaving the
+    player on a clean Root state once the popup is dismissed.
 - **Command palette** (`ui/command_menu.rs`): a spotlight-style modal — a
   centered window over a dimmed backdrop, lifted above the panels with
   `GlobalZIndex`. A `CommandMenu` resource holds `open`/active-command/step/
@@ -610,10 +627,11 @@ asset-loaded sprites.
 | `src/schedules.rs` | `OnDay` + `OnMonth` labels |
 | `src/game/advance_date.rs` | the tick (exclusive `&mut World`) |
 | `src/game/yields.rs` | `recompute_yields` (graph walk) |
-| `src/events.rs` | `OnBuildingUpdated` ECS event |
+| `src/events.rs` | `OnBuildingUpdated` + `OnArmyRaised` + `OnArmyDismiss` + `OnErrorOccured` ECS events (observers / triggers — see `ui::error` for the popup consumer of `OnErrorOccured`) |
 | `src/game/payout.rs` | `payout` (monthly gold to leaders) |
 | `src/rng.rs` | `SimRng` — seeded, draw-counted for exact replay |
 | `src/ui/*` | flex layout, map/camera gizmos, the four text panels |
+| `src/ui/error.rs` | the error popup (observer on `OnErrorOccured` shows + force-closes the palette; `input` listens for `esc` to dismiss); one helper, [`crate::commands::core::error`], that commands reach for in place of `note` when a player input is rejected |
 | `src/ui/camera.rs::update_camera` | reads `Game::zoomed` + selection, tweens the camera each PostUpdate |
 | `src/ui/command_menu.rs` | the command palette modal (open/navigate/dispatch + render) |
 

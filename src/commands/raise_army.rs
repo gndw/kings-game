@@ -14,8 +14,8 @@
 //! the pools back up over time.
 
 use super::core::{
-    available_levy, drain_buildings, next_id, note, picker_row, ruled_lands, set_row_selected,
-    BaseCommand, NAME_COLOR, STAT_COLOR, STAT_DIM,
+    available_levy, drain_buildings, error, next_id, note, picker_row, ruled_lands,
+    set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR, STAT_DIM,
 };
 use crate::app::Game;
 use crate::ecs::army::{Army, ArmyBelongsToKingdom, ArmyLevy, ArmyName, ArmyOnLand, ArmyStatus};
@@ -140,10 +140,10 @@ impl BaseCommand for RaiseArmy {
 /// bundle, registers the id, and appends a chronicle line.
 fn raise(world: &mut World, actor: &str, land_id: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
-        return note(world, format!("cannot raise on {land_id}: unknown actor"));
+        return error(world, format!("cannot raise on {land_id}: unknown actor"));
     };
     let Some(land_e) = world.resource::<Registry>().get(land_id) else {
-        return note(world, format!("cannot raise on {land_id}: no such land"));
+        return error(world, format!("cannot raise on {land_id}: no such land"));
     };
 
     // Rule check: any of the actor's kingdoms holds the land. Multi-kingdom:
@@ -159,7 +159,7 @@ fn raise(world: &mut World, actor: &str, land_id: &str) {
     let kingdom_e = match (actor_kingdoms, land_kingdom) {
         (Some(ks), Some(lk)) if ks.contains(&lk) => lk,
         _ => {
-            return note(
+            return error(
                 world,
                 format!("cannot raise on {land_id}: you don't rule that land"),
             );
@@ -174,7 +174,7 @@ fn raise(world: &mut World, actor: &str, land_id: &str) {
     // Pool gate: refuse when there's no `BuildingLevy` to draw from.
     let (initial_levy, has_levy) = available_levy(world, land_e);
     if !has_levy || initial_levy == 0 {
-        return note(world, format!(
+        return error(world, format!(
             "cannot raise on {land_id}: no available levy (wait for the monthly replenishment or dismiss the army in the field)"
         ));
     }

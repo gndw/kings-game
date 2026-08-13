@@ -30,6 +30,7 @@ use crate::resources::buildings::BuildingDefs;
 use crate::resources::calendar::Calendar;
 use crate::resources::chronicle::Chronicles;
 use crate::resources::date::Date;
+use crate::events::OnErrorOccured;
 use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue};
 use bevy::prelude::RelationshipTarget;
 use bevy::prelude::Resource;
@@ -267,6 +268,17 @@ pub(super) fn next_id(world: &mut World) -> String {
 /// Append `line` to the chronicle.
 pub(crate) fn note(world: &mut World, line: String) {
     world.resource_mut::<Chronicles>().0.push(line);
+}
+
+/// Fire [`OnErrorOccured`] with `message`. The validation side of
+/// commands reaches for this instead of [`note`] so the player sees
+/// the failure in a modal popup (`ui::error`) rather than buried in
+/// the chronicle scroll. Game-event lines (construction begun, army
+/// arrived, war declared) stay on [`note`] — the chronicle is the
+/// record of what happened, the popup is the record of what the
+/// player tried and was refused.
+pub(crate) fn error(world: &mut World, message: String) {
+    world.trigger(OnErrorOccured { message });
 }
 
 // --- building-levy helpers ---------------------------------------------------

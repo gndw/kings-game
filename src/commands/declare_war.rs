@@ -18,7 +18,7 @@
 //! name of its held land (the convention everywhere else in the codebase
 //! — a kingdom's seat is its single land).
 
-use super::core::{next_id, note, picker_row, set_row_selected, BaseCommand, NAME_COLOR,
+use super::core::{error, next_id, note, picker_row, set_row_selected, BaseCommand, NAME_COLOR,
     STAT_COLOR};
 use crate::ecs::{
     ArmyLevy, CharacterLeads, CharacterName, CharacterOfHouse, HouseName, Kingdom,
@@ -283,7 +283,7 @@ fn demands_for(cb_type: WarCasusBelliType, defender_kingdom_e: bevy::ecs::entity
 /// Appends a chronicle line on success and on every rejection.
 fn declare(world: &mut World, actor: &str, defender_id: &str, cb_id: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
-        return note(world, "cannot declare war: unknown actor".into());
+        return error(world, "cannot declare war: unknown actor".into());
     };
     // Multi-kingdom: pick the first kingdom the actor leads as the
     // `WarAttackerKingdom`. A future "pick which kingdom declares war"
@@ -293,19 +293,19 @@ fn declare(world: &mut World, actor: &str, defender_id: &str, cb_id: &str) {
         .get::<CharacterLeads>(actor_e)
         .and_then(|character_leads| character_leads.kingdoms().first().copied())
     else {
-        return note(world, "cannot declare war: you rule no kingdom".into());
+        return error(world, "cannot declare war: you rule no kingdom".into());
     };
     let Some(defender_kingdom_e) = world.resource::<Registry>().get(defender_id) else {
-        return note(
+        return error(
             world,
             format!("cannot declare war: no such kingdom `{defender_id}`"),
         );
     };
     if defender_kingdom_e == attacker_kingdom_e {
-        return note(world, "cannot declare war on yourself".into());
+        return error(world, "cannot declare war on yourself".into());
     }
     let Some(cb_type) = resolve_cb(cb_id) else {
-        return note(world, format!("unknown casus belli `{cb_id}`"));
+        return error(world, format!("unknown casus belli `{cb_id}`"));
     };
 
     // Capture display names before the spawn (cheap, immutable reads; gives

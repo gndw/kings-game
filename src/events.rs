@@ -36,3 +36,16 @@ pub struct OnArmyRaised {
 pub struct OnArmyDismiss {
     pub army: Entity,
 }
+
+/// Fired by a command's validation when a player input is rejected
+/// (unknown actor / not enough gold / no road route / …). The
+/// `ui::error` module is the only observer: it pops a modal showing
+/// `message` and switches the input layer to
+/// [`InputLayer::ErrorPopup`](crate::resources::input_layer::InputLayer::ErrorPopup)
+/// until the player dismisses it. Carries a single `message: String`
+/// rather than a structured kind so commands can hand the player a
+/// human-readable line verbatim without a code↔text table.
+#[derive(Event)]
+pub struct OnErrorOccured {
+    pub message: String,
+}

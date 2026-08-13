@@ -10,7 +10,7 @@
 //! [`recompute_yields`]: crate::game::yields::recompute_yields
 
 use super::core::{
-    land_yield, note, picker_row, ruled_lands, set_row_selected, BaseCommand, NAME_COLOR,
+    error, land_yield, note, picker_row, ruled_lands, set_row_selected, BaseCommand, NAME_COLOR,
     STAT_COLOR, STAT_DIM,
 };
 use crate::ecs::{
@@ -281,10 +281,10 @@ fn buildings_on_land(world: &World, land_id: &str) -> Vec<BuildingRowData> {
 /// + logs.
 fn destroy(world: &mut World, actor: &str, land_id: &str, building_id: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
-        return note(world, format!("cannot destroy on {land_id}: unknown actor"));
+        return error(world, format!("cannot destroy on {land_id}: unknown actor"));
     };
     let Some(land_e) = world.resource::<Registry>().get(land_id) else {
-        return note(world, format!("cannot destroy on {land_id}: no such land"));
+        return error(world, format!("cannot destroy on {land_id}: no such land"));
     };
 
     // Rule check: any of the actor's kingdoms holds the land.
@@ -297,7 +297,7 @@ fn destroy(world: &mut World, actor: &str, land_id: &str, building_id: &str) {
     match (actor_kingdoms, land_kingdom) {
         (Some(ks), Some(lk)) if ks.contains(&lk) => {}
         _ => {
-            return note(
+            return error(
                 world,
                 format!("cannot destroy on {land_id}: you don't rule that land"),
             );
@@ -305,14 +305,14 @@ fn destroy(world: &mut World, actor: &str, land_id: &str, building_id: &str) {
     }
 
     let Some(b_e) = world.resource::<Registry>().get(building_id) else {
-        return note(world, format!("cannot destroy on {land_id}: no such building"));
+        return error(world, format!("cannot destroy on {land_id}: no such building"));
     };
     if world
         .get::<BuildingOnLand>(b_e)
         .map(|building_on_land| building_on_land.0)
         != Some(land_e)
     {
-        return note(world, format!("cannot destroy on {land_id}: building not on that land"));
+        return error(world, format!("cannot destroy on {land_id}: building not on that land"));
     }
 
     // Def name for the log, looked up before the despawn drops the component.

@@ -13,4 +13,5 @@ pub enum InputLayer {
     #[default]
     Root = 1,
     CommandMenu = 2,
+    ErrorPopup = 3,
 }

@@ -30,7 +30,7 @@
 //! See [`crate::game::marching::tick`].
 
 use super::core::{
-    army_status_text, next_id, note, picker_row, set_row_selected, BaseCommand, NAME_COLOR,
+    army_status_text, error, next_id, note, picker_row, set_row_selected, BaseCommand, NAME_COLOR,
     STAT_COLOR, STAT_DIM,
 };
 use crate::ecs::army::{
@@ -462,13 +462,13 @@ fn trace(world: &World, from_e: Entity, to_e: Entity) -> Option<Vec<Hop>> {
 /// land.
 fn march(world: &mut World, actor: &str, army_id: &str, target_id: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
-        return note(world, format!("cannot march `{army_id}`: unknown actor"));
+        return error(world, format!("cannot march `{army_id}`: unknown actor"));
     };
     let Some(army_e) = world.resource::<Registry>().get(army_id) else {
-        return note(world, format!("cannot march `{army_id}`: no such army"));
+        return error(world, format!("cannot march `{army_id}`: no such army"));
     };
     let Some(target_e) = world.resource::<Registry>().get(target_id) else {
-        return note(world, format!("cannot march to `{target_id}`: no such land"));
+        return error(world, format!("cannot march to `{target_id}`: no such land"));
     };
 
     // Rule check: the army's `ArmyBelongsToKingdom` is one of the actor's
@@ -482,7 +482,7 @@ fn march(world: &mut World, actor: &str, army_id: &str, target_id: &str) {
     let _ = match (actor_kingdoms, army_kingdom) {
         (Some(aks), Some(ak)) if aks.contains(&ak) => ak,
         _ => {
-            return note(
+            return error(
                 world,
                 format!(
                     "cannot march `{army_id}`: that army does not belong to your kingdom"
@@ -497,10 +497,10 @@ fn march(world: &mut World, actor: &str, army_id: &str, target_id: &str) {
         .get::<ArmyOnLand>(army_e)
         .map(|army_on_land| army_on_land.0);
     let Some(from_e) = from_e else {
-        return note(world, format!("cannot march `{army_id}`: army has no land"));
+        return error(world, format!("cannot march `{army_id}`: army has no land"));
     };
     if from_e == target_e {
-        return note(world, format!(
+        return error(world, format!(
             "cannot march `{army_id}`: the army is already on {target_id}"
         ));
     }
@@ -521,7 +521,7 @@ fn march(world: &mut World, actor: &str, army_id: &str, target_id: &str) {
     // Trace the road network from the army's land to the target. No chain
     // of roads, no march — armies only move along roads.
     let Some(hops) = trace(world, from_e, target_e) else {
-        return note(world, format!(
+        return error(world, format!(
             "cannot march `{army_id}`: no road leads from {from_name} to {to_name}"
         ));
     };
@@ -537,7 +537,7 @@ fn march(world: &mut World, actor: &str, army_id: &str, target_id: &str) {
         .map(|hop| road_days(world, hop.road))
         .sum::<Option<u32>>()
     else {
-        return note(world, format!(
+        return error(world, format!(
             "cannot march `{army_id}`: a road on the way to {to_name} has no distance"
         ));
     };

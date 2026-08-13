@@ -21,7 +21,7 @@
 //! kingdom leader to player" semantics; the multi-kingdom model is
 //! future work.
 
-use super::core::{note, picker_row, set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR,
+use super::core::{error, note, picker_row, set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR,
     STAT_DIM};
 use crate::ecs::{
     ArmyBelongsToKingdom, CharacterLeads, KingdomHasWarsAttacking, KingdomHold,
@@ -338,7 +338,7 @@ fn demand_rows(world: &World, actor: &str, war_id: &str) -> Vec<DemandRowData> {
 /// then the kingdom's `KingdomLedBy` is set to the player.
 fn enforce(world: &mut World, actor: &str, war_id: &str, demand_idx: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
-        return note(world, "cannot enforce: unknown actor".into());
+        return error(world, "cannot enforce: unknown actor".into());
     };
     // Multi-kingdom: an army under any of the player's kingdoms counts
     // as "yours". The check in `enforce_take` walks the actor's kingdoms
@@ -350,19 +350,19 @@ fn enforce(world: &mut World, actor: &str, war_id: &str, demand_idx: &str) {
         .get::<CharacterLeads>(actor_e)
         .map(|character_leads| character_leads.kingdoms().iter().copied().collect::<Vec<_>>())
     else {
-        return note(world, "cannot enforce: you rule no kingdom".into());
+        return error(world, "cannot enforce: you rule no kingdom".into());
     };
     let Some(war_e) = world.resource::<Registry>().get(war_id) else {
-        return note(world, format!("cannot enforce: no such war `{war_id}`"));
+        return error(world, format!("cannot enforce: no such war `{war_id}`"));
     };
     let Some(w_demands) = world.get::<WarDemands>(war_e) else {
-        return note(world, format!("cannot enforce: war `{war_id}` has no demands"));
+        return error(world, format!("cannot enforce: war `{war_id}` has no demands"));
     };
     let Ok(idx) = demand_idx.parse::<usize>() else {
-        return note(world, format!("cannot enforce: bad demand index `{demand_idx}`"));
+        return error(world, format!("cannot enforce: bad demand index `{demand_idx}`"));
     };
     let Some(demand) = w_demands.0.get(idx).copied() else {
-        return note(world, format!("cannot enforce: demand `{idx}` out of range"));
+        return error(world, format!("cannot enforce: demand `{idx}` out of range"));
     };
 
     // `Take` is the only demand shape today. Match on it; future shapes
@@ -401,7 +401,7 @@ fn enforce_take(
         .get::<KingdomHold>(target_kingdom_e)
         .map(|kingdom_hold| kingdom_hold.0);
     let Some(target_land) = target_land else {
-        note(
+        error(
             world,
             "cannot enforce Take: target kingdom has no land".into(),
         );
@@ -411,7 +411,7 @@ fn enforce_take(
         .get::<LandControlledByArmy>(target_land)
         .map(|land_controlled_by_army| land_controlled_by_army.army())
     else {
-        note(
+        error(
             world,
             "cannot enforce Take: target land is not controlled by your army".into(),
         );
@@ -425,7 +425,7 @@ fn enforce_take(
         .map(|character_leads| character_leads.kingdoms().iter().copied().collect::<Vec<_>>())
         .unwrap_or_default();
     if !actor_kingdoms.contains(&army_kingdom.unwrap_or(bevy::ecs::entity::Entity::PLACEHOLDER)) {
-        note(
+        error(
             world,
             "cannot enforce Take: target land is not controlled by your army".into(),
         );

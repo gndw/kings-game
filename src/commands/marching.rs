@@ -130,7 +130,6 @@ impl MarchingOrder {
                 parent,
                 "Marching Army",
                 None,
-                None,
             );
         (vec![row], false)
     }
@@ -145,7 +144,6 @@ impl MarchingOrder {
                 parent,
                 &label,
                 Some(("army_id".to_string(), army_id)),
-                None,
             );
             entities.push(row);
         }
@@ -161,7 +159,6 @@ impl MarchingOrder {
                 parent,
                 &name,
                 Some(("target_id".to_string(), land_id)),
-                None,
             );
             entities.push(row);
         }
@@ -197,7 +194,6 @@ impl MarchingOrder {
         parent: Entity,
         title: &str,
         key_value: Option<(String, String)>,
-        _unused: Option<Entity>,
     ) -> Entity {
         let mut entity = world.spawn((
             Node {

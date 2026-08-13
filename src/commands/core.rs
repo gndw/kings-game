@@ -4,8 +4,7 @@
 //!
 //! Also owns the [`BaseCommand`] trait every command file implements and
 //! the [`spawn_command`] orchestrator the v2 palette calls to populate
-//! the panel. For now only [`ConstructBuilding`](crate::commands::construct_building::ConstructBuilding)
-//! adopts the trait; the others come in turn.
+//! the panel.
 
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
@@ -21,7 +20,7 @@ use crate::commands::declare_war::DeclareWar;
 use crate::commands::destroy_building::DestroyBuilding;
 use crate::ecs::{
     BuildingIsRaised, BuildingLevy, BuildingOf, BuildingStatus, CharacterLeads, KingdomHold,
-    LandHasBuildings, LandHeldBy, LandName, Registry, StringId,
+    LandHasBuildings, LandName, Registry, StringId,
 };
 use crate::resources::buildings::BuildingDefs;
 use crate::resources::chronicle::Chronicles;
@@ -29,21 +28,6 @@ use bevy::prelude::RelationshipTarget;
 use bevy::prelude::Resource;
 use bevy::prelude::With;
 use rand::TryRng;
-
-/// One selectable row in a command's step list. `label` is what the player
-/// sees; `value` is the id the command reads back in a later step or in the
-/// command's effect.
-pub struct MenuItem {
-    pub label: String,
-    pub value: String,
-}
-
-/// A choice the player made at an earlier step: the [`MenuItem`] they picked.
-#[derive(Clone)]
-pub struct Choice {
-    pub label: String,
-    pub value: String,
-}
 
 /// The uniform interface every player command implements. Each command
 /// file supplies its own UI, so the palette orchestrator ([`spawn_command`])
@@ -150,12 +134,6 @@ pub fn startup(world: &mut World) {
     world.insert_resource(CommandContext { commands });
 }
 
-/// One row in the runtime command roster: a stable id paired with a
-/// reference to the [`BaseCommand`] instance it labels. The
-/// orchestrator ([`spawn_command`]) iterates this list at spawn time.
-/// Adding a new command is one line in [`startup`] — the spawn path
-/// picks it up automatically.
-
 /// Orchestrator: find the panel's list and let every entry in
 /// [`CommandContext`] spawn its own UI into it. Returns
 /// `(entities, is_executed)`. `entities` is the flat list of every
@@ -252,30 +230,6 @@ pub(super) fn ruled_lands(world: &World, actor: &str) -> Vec<(String, String)> {
         out.push((string_id.0.clone(), land_name.0.clone()));
     }
     out
-}
-
-/// True if `actor` rules `land_id` — the predicate form of [`ruled_lands`]
-/// for gating context actions like the actions panel's build/destroy
-/// hotkeys. Multi-kingdom: any of the actor's kingdoms ruling the land
-/// counts.
-pub fn rules_land(world: &World, actor: &str, land_id: &str) -> bool {
-    let Some(actor_e) = world.resource::<Registry>().get(actor) else {
-        return false;
-    };
-    let Some(land_e) = world.resource::<Registry>().get(land_id) else {
-        return false;
-    };
-    let Some(character_leads) = world.get::<CharacterLeads>(actor_e) else {
-        return false;
-    };
-    let Some(land_held_by) = world.get::<LandHeldBy>(land_e) else {
-        return false;
-    };
-    let land_kingdom = land_held_by.kingdom();
-    character_leads
-        .kingdoms()
-        .iter()
-        .any(|&k| k == land_kingdom)
 }
 
 /// A fresh v4 UUID for a runtime-built entity, drawn from the seeded `SimRng`.

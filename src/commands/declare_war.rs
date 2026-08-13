@@ -229,7 +229,7 @@ fn other_kingdoms(world: &World, actor: &str) -> Vec<(String, String)> {
 
 /// Resolve the picked CB id to its [`WarCasusBelliType`]. Only `Conquest`
 /// exists today; unknown ids are rejected. New CB enum variants are added
-/// here (the menu row in `step_items` is the only other place).
+/// here (the menu row in [`DeclareWar::spawn_command`] is the only other place).
 fn resolve_cb(cb_id: &str) -> Option<WarCasusBelliType> {
     match cb_id {
         "conquest" => Some(WarCasusBelliType::Conquest),
@@ -341,7 +341,7 @@ fn kingdom_label(world: &World, kingdom_e: bevy::ecs::entity::Entity) -> String 
 /// Format a war's display name from the CB type + the defender kingdom's
 /// held land. `Conquest` renders as `"Conquest over Kingdom of <land>"`.
 /// New CB shapes are additive: one arm per variant here, one row in the
-/// menu in `step_items`, one arm in `resolve_cb`.
+/// menu in [`DeclareWar::spawn_command`], one arm in `resolve_cb`.
 fn format_name(
     world: &World,
     cb_type: WarCasusBelliType,

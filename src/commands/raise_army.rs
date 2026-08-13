@@ -5,25 +5,34 @@
 //! the army on enter. Reach it through the command palette (**C** then pick
 //! *Raise Army*).
 //!
-//! Initial levy comes from the per-building `BuildingLevy` pool (not from
-//! the defs directly): the sum of every ACTIVE building's available levy
-//! on the land. The raise then *drains* those pools to `0` and flags the
-//! buildings with `BuildingIsRaised = true` so the second raise on the
-//! same land is rejected. The monthly
-//! [`replenish_levy`](crate::game::replenish_levy::replenish) loop fills
-//! the pools back up over time.
+//! The army starts in
+//! [`ArmyStatus::Raising`](crate::ecs::army::ArmyStatus::Raising) with
+//! `ArmyLevy = 0` and `ArmyMaxLevy = sum of available `BuildingLevy`
+//! pools on the land. The per-day
+//! [`crate::game::raising_army::on_day`] tick accretes up to 20 levy per
+//! raised building per day into `ArmyLevy` until it reaches
+//! `ArmyMaxLevy`, at which point the army flips to `Idle`.
+//!
+//! Buildings on the land are flagged `BuildingIsRaised = true` so the
+//! monthly [`replenish_levy`](crate::game::replenish_levy::replenish)
+//! loop skips them while the army is in the field. The building's
+//! `BuildingLevy` pool itself is *not* drained at raise time — the
+//! formation tick drains it incrementally as the army accretes.
 
 use super::core::{
-    available_levy, drain_buildings, error, next_id, picker_row, ruled_lands,
-    set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR, STAT_DIM,
+    available_levy, error, next_id, picker_row, ruled_lands, set_row_selected, BaseCommand,
+    NAME_COLOR, STAT_COLOR, STAT_DIM,
 };
 use crate::app::Game;
-use crate::ecs::army::{Army, ArmyBelongsToKingdom, ArmyLevy, ArmyName, ArmyOnLand, ArmyStatus};
-use crate::ecs::{
-    CharacterLeads, CharacterOfHouse, HouseName, LandHasArmies, LandHeldBy, Registry,
-    StringId,
+use crate::ecs::army::{
+    Army, ArmyBelongsToKingdom, ArmyLevy, ArmyMaxLevy, ArmyName, ArmyOnLand, ArmyStatus,
 };
-use crate::events::{BuildingUpdateKind, OnArmyRaised, OnBuildingUpdated};
+use crate::ecs::building::{BuildingIsRaised, BuildingStatus};
+use crate::ecs::{
+    CharacterLeads, CharacterOfHouse, HouseName, LandHasArmies, LandHeldBy, LandHasBuildings,
+    Registry, StringId,
+};
+use crate::events::OnArmyRaised;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
 use bevy::prelude::*;
@@ -136,8 +145,14 @@ impl BaseCommand for RaiseArmy {
 }
 
 /// Spawn the army. Validates the actor rules the land, sums the available
-/// `BuildingLevy` pools (refusing if none), drains them, creates the army
-/// bundle, registers the id, and appends a chronicle line.
+/// `BuildingLevy` pools (refusing if none), creates the army in
+/// [`ArmyStatus::Raising`](crate::ecs::army::ArmyStatus::Raising) with
+/// `ArmyLevy = 0` and `ArmyMaxLevy = sum`, flags the contributing
+/// buildings with `BuildingIsRaised = true` (so the monthly replenishment
+/// skips them), and fires `OnArmyRaised` for the chronicle + icon. The
+/// per-day [`crate::game::raising_army::on_day`] tick does the actual
+/// levying — up to 20 per raised building per day into `ArmyLevy` until
+/// it reaches `ArmyMaxLevy`, at which point the army flips to `Idle`.
 fn raise(world: &mut World, actor: &str, land_id: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return error(world, format!("cannot raise on {land_id}: unknown actor"));
@@ -166,9 +181,11 @@ fn raise(world: &mut World, actor: &str, land_id: &str) {
         }
     };
 
-    // Pool gate: refuse when there's no `BuildingLevy` to draw from.
-    let (initial_levy, has_levy) = available_levy(world, land_e);
-    if !has_levy || initial_levy == 0 {
+    // Pool gate: refuse when there's no `BuildingLevy` to draw from. The
+    // sum becomes `ArmyMaxLevy` — the target the formation tick accretes
+    // toward over the following days.
+    let (max_levy, has_levy) = available_levy(world, land_e);
+    if !has_levy || max_levy == 0 {
         return error(world, format!(
             "cannot raise on {land_id}: no available levy (wait for the monthly replenishment or dismiss the army in the field)"
         ));
@@ -182,34 +199,52 @@ fn raise(world: &mut World, actor: &str, land_id: &str) {
             .map(|hn| format!("{} Army", hn.0))
             .unwrap_or_else(|| "Army".to_string());
 
-    // Spawn the army bundle.
+    // Spawn the army bundle. `ArmyLevy = 0` and `ArmyStatus::Raising` are
+    // the formation-ready initial state; `ArmyMaxLevy` is the formation
+    // target the daily tick accretes toward. The `BuildingLevy` pools
+    // stay as-is here — the formation tick drains them incrementally, so
+    // a large army takes more days to muster than a small one.
     let id = next_id(world);
     let eid = world
         .spawn((
             StringId(id.clone()),
             Army,
             ArmyName(army_name.clone()),
-            ArmyLevy(initial_levy),
+            ArmyLevy(0),
+            ArmyMaxLevy(max_levy),
             ArmyOnLand(land_e),
             ArmyBelongsToKingdom(kingdom_e),
-            ArmyStatus::Idle,
+            ArmyStatus::Raising,
         ))
         .id();
     world.resource_mut::<Registry>().insert(id, eid);
 
-    let drained = drain_buildings(world, land_e);
-
-    // Fire `OnArmyRaised` so the chronicle observer writes the
-    // "mustered the X" line and `map::components::army_icon` spawns the
-    // sword icon at the army's land. The per-building `Raised` events
-    // below are no-ops for the chronicle (the army-level line covers
-    // it) but the yields observer still consumes them.
-    world.trigger(OnArmyRaised { army: eid });
-    for b_e in drained {
-        world.trigger(OnBuildingUpdated {
-            building: b_e,
-            land: land_e,
-            kind: BuildingUpdateKind::Raised,
-        });
+    // Flag every ACTIVE building on the land as raised so the monthly
+    // `replenish_levy` loop skips them — the formation tick drains the
+    // pools incrementally, and a refill during formation would compete
+    // with the drain and stall the muster. The pool value itself is
+    // untouched here; only the flag flips.
+    let entities: Vec<Entity> = world
+        .get::<LandHasBuildings>(land_e)
+        .map(|land_has_buildings| land_has_buildings.iter().collect())
+        .unwrap_or_default();
+    for b_e in entities {
+        let active = world
+            .get::<BuildingStatus>(b_e)
+            .map(|status| *status == BuildingStatus::Active)
+            .unwrap_or(false);
+        if !active {
+            continue;
+        }
+        if let Some(mut building_is_raised) = world.get_mut::<BuildingIsRaised>(b_e) {
+            building_is_raised.0 = true;
+        }
     }
+
+    // Fire `OnArmyRaised` so the chronicle observer writes the muster
+    // line and `map::components::army_icon` spawns the sword icon at
+    // the army's land. No per-building `Raised` event: the buildings'
+    // pools aren't drained here (the formation tick drains them over
+    // time), so the old "per-building raised" signal would be premature.
+    world.trigger(OnArmyRaised { army: eid });
 }

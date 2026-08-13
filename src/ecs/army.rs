@@ -28,6 +28,11 @@ pub struct Army;
 /// The operational status of an army.
 ///
 /// - `Idle` — sitting on its land, ready for orders.
+/// - `Raising` — being mustered. Set by
+///   [`crate::commands::raise_army::RaiseArmy`] on creation; the daily
+///   [`crate::game::raising_army::on_day`] tick accretes up to 20 levy
+///   per raised building per day into [`ArmyLevy`] until it reaches
+///   [`ArmyMaxLevy`], then flips to `Idle`.
 /// - `Marching` — currently in motion, working through a queue of
 ///   marchings. Set to `Idle` on raise; the daily
 ///   [`march`](crate::game::marching::tick) tick flips it to `Marching`
@@ -40,15 +45,26 @@ pub struct Army;
 pub enum ArmyStatus {
     #[default]
     Idle,
+    Raising,
     Marching,
     Sieging,
 }
 
-/// The number of levy troops in this army. Defaults to 0; future code paths
-/// (the `levy_rate` on military buildings, the player's [`CharacterLevy`]
-/// pool) will fill this in.
+/// The number of levy troops in this army. Starts at `0` on raise and
+/// grows each day via the per-day [`crate::game::raising_army::on_day`]
+/// tick until it reaches [`ArmyMaxLevy`], at which point the army's
+/// [`ArmyStatus`] flips to `Idle`.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct ArmyLevy(pub u64);
+
+/// The levy the army will have once it finishes mustering — the sum of
+/// every ACTIVE building's [`BuildingLevy`](super::building::BuildingLevy)
+/// on the raise land, snapshotted at raise time. The per-day
+/// [`crate::game::raising_army::on_day`] tick accretes into [`ArmyLevy`]
+/// until it equals this value, then flips the army to `Idle`. While
+/// `ArmyLevy < ArmyMaxLevy` the army is still in `ArmyStatus::Raising`.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct ArmyMaxLevy(pub u64);
 
 /// The land this army is raised on. Bevy relationship: inserting it auto-
 /// maintains `LandHasArmies` on the land.

@@ -22,7 +22,7 @@ use crate::ecs::{
     BuildingIsRaised, BuildingLevy, BuildingOf, BuildingStatus, CharacterLeads, KingdomHold,
     LandHasBuildings, LandName, Registry, StringId,
 };
-use crate::ecs::army::{ArmyHasMarching, ArmyHasSiege, ArmyMarching, ArmyStatus};
+use crate::ecs::army::{ArmyHasMarching, ArmyHasSiege, ArmyLevy, ArmyMarching, ArmyMaxLevy, ArmyStatus};
 use crate::ecs::marching::{MarchingArrivedDate, MarchingOnRoad, MarchingToLand};
 use crate::ecs::road::RoadDistanceDays;
 use crate::ecs::siege::SiegeProgress;
@@ -305,34 +305,6 @@ pub(super) fn available_levy(world: &World, land_e: Entity) -> (u64, bool) {
     (total, any)
 }
 
-/// Drain every ACTIVE building's `BuildingLevy` on `land_e` to `0` and flag
-/// it as raised. Called by `RaiseArmy` after the army bundle is spawned;
-/// `BuildingLevy == 0` plus `BuildingIsRaised == true` is the "this
-/// building's levy is currently in an army" state. Returns the affected
-/// buildings so the caller can fire per-building `OnBuildingUpdated` events.
-pub(super) fn drain_buildings(world: &mut World, land_e: Entity) -> Vec<Entity> {
-    // Snapshot entities, drop the borrow before any `get_mut` — see
-    // `distribute_levy_back` for the rationale.
-    let entities: Vec<Entity> = match world.get::<LandHasBuildings>(land_e) {
-        Some(land_has_buildings) => land_has_buildings.iter().collect(),
-        None => return Vec::new(),
-    };
-    let mut drained = Vec::new();
-    for b_e in entities {
-        if !is_active_building(world, b_e) {
-            continue;
-        }
-        if let Some(mut building_levy) = world.get_mut::<BuildingLevy>(b_e) {
-            building_levy.0 = 0;
-        }
-        if let Some(mut building_is_raised) = world.get_mut::<BuildingIsRaised>(b_e) {
-            building_is_raised.0 = true;
-        }
-        drained.push(b_e);
-    }
-    drained
-}
-
 /// Distribute `army_levy` back into each ACTIVE building's `BuildingLevy`
 /// on `land_e`, capped at the def's `levy`. Sets `BuildingIsRaised` back
 /// to `false` for every ACTIVE building on the land (a no-op for ones that
@@ -459,6 +431,20 @@ pub(super) fn army_status_text(
     let status = world.get::<ArmyStatus>(army_e).copied().unwrap_or(ArmyStatus::Idle);
     match status {
         ArmyStatus::Idle => Some("idle".into()),
+        // A `Raising` army is mustering — its `ArmyLevy < ArmyMaxLevy`
+        // until the formation tick flips it to `Idle`. Show the current
+        // fill against the target so the player can see how close it is.
+        ArmyStatus::Raising => {
+            let levy = world
+                .get::<ArmyLevy>(army_e)
+                .map(|army_levy| army_levy.0)
+                .unwrap_or(0);
+            let max = world
+                .get::<ArmyMaxLevy>(army_e)
+                .map(|army_max_levy| army_max_levy.0)
+                .unwrap_or(0);
+            Some(format!("raising {levy}/{max}"))
+        }
         ArmyStatus::Marching => {
             // Walk the queue: find the final destination (last hop's
             // `MarchingToLand` land name) and the total days remaining

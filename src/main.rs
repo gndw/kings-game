@@ -232,6 +232,7 @@ fn main() -> Result<()> {
             (
                 game::construction::construction,
                 game::marching::tick,
+                game::raising_army::on_day,
                 game::siege::tick,
             ),
         )

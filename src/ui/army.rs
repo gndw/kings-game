@@ -26,7 +26,8 @@ use crate::ecs::marching::{MarchingArrivedDate, MarchingOnRoad, MarchingStatus, 
 use crate::ecs::road::RoadDistanceDays;
 use crate::ecs::siege::SiegeProgress;
 use crate::ecs::{
-    ArmyLevy, ArmyName, ArmyOnLand, CharacterLeads, KingdomHasArmies, LandName, Registry,
+    ArmyLevy, ArmyMaxLevy, ArmyName, ArmyOnLand, CharacterLeads, KingdomHasArmies, LandName,
+    Registry,
 };
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
@@ -86,6 +87,7 @@ pub fn update(
         &ArmyLevy,
         &ArmyOnLand,
         &ArmyStatus,
+        &ArmyMaxLevy,
         Option<&ArmyMarching>,
     )>,
     army_queues: Query<&ArmyHasMarching>,
@@ -152,9 +154,11 @@ pub fn update(
     }
 }
 
-/// Build one army's panel line from its live entity data. Three shapes:
+/// Build one army's panel line from its live entity data. Four shapes:
 ///
 /// - **Idle** — `"<name> (<levy>) at <land>"`.
+/// - **Raising** — `"<name> (<levy>) at <land> raising <levy>/<max>"`,
+///   where `<max>` is the army's `ArmyMaxLevy` (the formation target).
 /// - **Marching** — `"<name> (<levy>) at <land> marching to <final_dest> at <days> days"`.
 /// - **Sieging** — `"<name> (<levy>) at <land> sieging at <progress>%"`,
 ///   reading the siege's [`SiegeProgress`] through the army's `ArmyHasSiege`
@@ -170,6 +174,7 @@ fn format_army_line(
         &ArmyLevy,
         &ArmyOnLand,
         &ArmyStatus,
+        &ArmyMaxLevy,
         Option<&ArmyMarching>,
     )>,
     army_queues: &Query<&ArmyHasMarching>,
@@ -186,7 +191,7 @@ fn format_army_line(
     calendar: &Calendar,
     date: &Date,
 ) -> Option<String> {
-    let (name, levy, on_land, status, current_marching) = armies.get(army_e).ok()?;
+    let (name, levy, on_land, status, max_levy, current_marching) = armies.get(army_e).ok()?;
     let current_land = lands
         .get(on_land.0)
         .ok()
@@ -196,6 +201,13 @@ fn format_army_line(
 
     match status {
         ArmyStatus::Idle => Some(base),
+        // `Raising`: show `current / max` so the player can watch the
+        // formation fill over the next few days. The formation tick
+        // (in `game::raising_army`) accretes up to 20 per raised
+        // building per day, then flips the status to `Idle`.
+        ArmyStatus::Raising => {
+            Some(format!("{base} raising {}/{}", levy.0, max_levy.0))
+        }
         ArmyStatus::Marching => {
             let queue = army_queues.get(army_e).ok()?;
             let hops: Vec<_> = queue.iter().collect();

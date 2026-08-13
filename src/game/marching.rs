@@ -106,6 +106,16 @@ pub fn tick(world: &mut World) {
                 // Scheduled — nothing to unwind, and the next tick retries.
                 activate(world, army_e, next_marching, today, &calendar);
             }
+            // `Raising` armies are owned by `game::raising_army::on_day`
+            // until the formation tick fills them and flips them to
+            // `Idle`. They can't accept new marchings while forming —
+            // the player can queue a march via the command palette,
+            // but the queued hop sits in `ArmyHasMarching` until the
+            // army is on its source land *and* the army is `Idle`. The
+            // marching tick here only matches on `Idle` so a `Raising`
+            // army whose land already has a `Scheduled` marching won't
+            // pick it up early.
+            ArmyStatus::Raising => {}
             ArmyStatus::Marching => {
                 let Some(marching_e) = current_marching else { continue };
                 let arrived = world

@@ -53,7 +53,7 @@
 //! as a single `Res<Game>` read.
 
 use crate::app::Game;
-use crate::ecs::army::{ArmyBelongsToKingdom, ArmyHasMarching, ArmyLevy, ArmyName, ArmyOnLand};
+use crate::ecs::army::{ArmyBelongsToKingdom, ArmyHasMarching, ArmyLevy, ArmyMaxLevy, ArmyName, ArmyOnLand, ArmyStatus};
 use crate::ecs::building::BuildingOf;
 use crate::ecs::character::{CharacterName, CharacterOfHouse};
 use crate::ecs::house::HouseName;
@@ -153,6 +153,8 @@ pub fn on_army_raised(
     army_name: Query<&ArmyName>,
     army_on_land: Query<&ArmyOnLand>,
     army_levy: Query<&ArmyLevy>,
+    army_max_levy: Query<&ArmyMaxLevy>,
+    army_status: Query<&ArmyStatus>,
     land_names: Query<&LandName>,
     player: PlayerCtx,
 ) {
@@ -166,10 +168,29 @@ pub fn on_army_raised(
         .map(|a| land_name_of(&land_names, a.0))
         .unwrap_or_else(|_| "an unknown land".to_string());
     let levy = army_levy.get(army).map(|l| l.0).unwrap_or(0);
-    chronicles.0.push(format!(
-        "{} mustered the {name} at {land} — {levy} spears answering the call.",
-        player.short()
-    ));
+    let max = army_max_levy.get(army).map(|m| m.0).unwrap_or(levy);
+    let is_raising = army_status
+        .get(army)
+        .map(|s| *s == ArmyStatus::Raising)
+        .unwrap_or(false);
+    // A `Raising` army starts with `ArmyLevy = 0`; its `ArmyMaxLevy` is
+    // the formation target. Phrase the line as "raising up to N" rather
+    // than "0 spears answering the call", which would read as a
+    // no-troops army. The full levy lands in a later line once the
+    // formation tick flips status to `Idle` — but that transition isn't
+    // its own chronicle event, so the muster line is the player's only
+    // read of the size at raise time.
+    if is_raising && levy == 0 {
+        chronicles.0.push(format!(
+            "{} began raising the {name} at {land} — up to {max} spears gathering for the muster.",
+            player.short()
+        ));
+    } else {
+        chronicles.0.push(format!(
+            "{} mustered the {name} at {land} — {levy} spears answering the call.",
+            player.short()
+        ));
+    }
 }
 
 pub fn on_army_dismiss(

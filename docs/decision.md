@@ -635,3 +635,81 @@ event.
   the flavor phrases for the finished-construction line; new defs fall
   back to a generic phrase.
 
+## Army formation is a per-day accrual (`ArmyStatus::Raising` + `ArmyMaxLevy`)
+
+Raising an army is no longer instantaneous. The army starts in
+`ArmyStatus::Raising` with `ArmyLevy = 0` and `ArmyMaxLevy = sum of
+available BuildingLevy pools on the raise land at raise time`; the
+per-day `game::raising_army::on_day` tick accretes up to 20 levy per
+ACTIVE `BuildingIsRaised` building on the army's land per day into
+`ArmyLevy`, then flips the army to `Idle` once `ArmyLevy >= ArmyMaxLevy`.
+Buildings' pools are not drained at raise time — the formation tick
+drains them incrementally.
+
+- **Why a separate `Raising` state.** The user-visible behavior is
+  "the army is forming" — the player needs a state to tell them the
+  army exists but isn't ready yet, and the marching / siege / dismiss
+  commands need to know not to treat it as a normal army. Folding it
+  into `Idle` would have meant every reader branching on `ArmyLevy <
+  ArmyMaxLevy`, which is exactly what a state is for; folding it into
+  `Marching` would have stolen `ArmyMarching`'s slot. A variant on the
+  existing enum is the cheapest shape — the four `match` arms in the
+  army panel, the marching tick, the dismiss picker and the army
+  icon all already had one.
+- **Why `ArmyMaxLevy` is its own component, not derived.** `ArmyLevy <
+  ArmyMaxLevy` could be computed from a single `ArmyLevy(u64, u64)`,
+  but the player-facing read is "0/120 → 20/120 → 60/120 → 120/120",
+  which the per-day tick updates one field of. Splitting them keeps
+  each `get_mut` to the single field that actually changed, which
+  matters more for the marching tick's borrowed-query dance than for
+  the formation tick's tiny per-army walk, but the split is also the
+  honest shape: `ArmyMaxLevy` is set once and never moves;
+  `ArmyLevy` ticks up each day.
+- **Why a per-day 20 cap per building.** It's the smallest cap that
+  makes formation timing observable to the player — a single
+  `levy: 30` barracks needs two days to fill, a `levy: 200` across
+  ten buildings needs one. Constant caps (e.g. "the army fills in
+  exactly N days regardless of building count") would lose the
+  "more buildings = faster muster" signal. Per-building caps scale
+  the formation time with the realm's economy, which is the right
+  coupling.
+- **Why not drain the pools at raise time.** The pool value is the
+  realm's static levy budget; spending it at the moment of raise
+  would have made the per-day formation invisible (no pool to drain
+  on day 2). Draining as the army forms keeps the building rows in
+  the `buildings` panel showing `30/30 → 10/30 → 0/30` over the
+  formation days — the same partial-pool yellow readout that already
+  reads the pool state — so the player can watch the army fill in
+  two places at once. The flag (`BuildingIsRaised = true`) prevents
+  the monthly `replenish_levy` from competing with the formation
+  drain.
+- **No per-building `Raised` events.** The original `RaiseArmy` fired
+  one `OnBuildingUpdated { kind: Raised }` per drained building. With
+  the formation tick draining incrementally, there's no single moment
+  to fire at — the buildings' pools go to 0 *over time*, not at raise
+  time. The chronicle ignored `Raised`/`Dismissed` events anyway
+  (the army-level line covers them), and `game::yields` ignores them
+  too (it reads `BuildingStatus`, not `BuildingLevy`), so dropping
+  the events is a no-op for every consumer.
+- **Building selection is "ACTIVE + `BuildingIsRaised = true`", not
+  "every ACTIVE building on the land".** A building constructed
+  mid-formation isn't flagged by the original raise, so it doesn't
+  contribute to the muster; the dismiss path's
+  `distribute_levy_back` then pours the army's levy back into every
+  ACTIVE building on the land, which means the new building accepts
+  some of the returning pool. The asymmetry is fine: raising is a
+  one-shot moment the formation can record (flag the buildings);
+  dismissing is a final accounting (pour into the whole land).
+- **Marching is gated to `Idle`.** The marching tick matches on
+  `ArmyStatus::Idle` to find scheduled marchings to flip `OnRoute`;
+  a `Raising` army whose land already has a scheduled marching sits
+  in the queue untouched until the formation finishes. The queued
+  hop won't activate early.
+- **Chronicle text reads "raising" while `ArmyLevy == 0`.** The
+  `on_army_raised` observer branches on the army's status: a
+  raising army says "You began raising the Lannister Army at X — up
+  to N spears gathering for the muster.", a filled army says the
+  original "N spears answering the call." line. The phrasing change
+  is contained in one observer; the rest of the chronicle module is
+  untouched.
+

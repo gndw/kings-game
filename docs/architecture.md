@@ -113,7 +113,10 @@ shape; this is the *what*.
   is one road: `MarchingOnRoad` names it and `MarchingFromLand` /
   `MarchingToLand` are that road's two ends, so a move across several lands is
   a chain of marchings the command traces through the road network. Army carries
-  `ArmyStatus` (`Idle` / `Marching`) and the active `ArmyMarching`; the
+  `ArmyStatus` (`Idle` / `Raising` / `Marching` / `Sieging`), the active
+  `ArmyMarching`, the live `ArmyLevy` and the formation-target `ArmyMaxLevy`
+  (set at raise time, accreted toward by the per-day
+  [`raising_army`](src/game/raising_army.rs) tick); the
   scheduled-and-active marchings queue is the auto-maintained `ArmyHasMarching`
   `Vec<Entity>` on the army. See the `Army and Marching are separate entity
   kinds` decision for the *why*. Road is definition-only — the polyline and
@@ -201,9 +204,13 @@ shape; this is the *what*.
     `Active` counts toward yield), and on `Building` instances a
     `BuildingConstructionDate` set to start date + def's `construction_time`
     (removed once the per-day tick flips the status), `BuildingLevy`
-    (the available levy pool, `0 ≤ x ≤ def.levy` — drained by `RaiseArmy`,
-    filled back by `DismissArmy` + the monthly `replenish_levy`), and
-    `BuildingIsRaised` (`true` while this building's pool sits in an army).
+    (the available levy pool, `0 ≤ x ≤ def.levy` — drained incrementally
+    by the formation tick on `RaiseArmy`'s behalf while an army is being
+    raised, filled back by `DismissArmy` + the monthly `replenish_levy`),
+    and `BuildingIsRaised` (`true` while this building's pool is
+    committed to an army — set on raise, cleared on dismiss; the monthly
+    replenishment skips flagged buildings so the formation tick and the
+    refill don't fight).
     The kingdom's seat is implicit: its single held land.
 
 - **`populate(world, content)`** (`ecs/ecs.rs`) builds the world **once** from
@@ -247,8 +254,9 @@ shape; this is the *what*.
 Lives in `game/` and `schedules.rs`.
 
 - **Schedules** (`schedules.rs`): Bevy's `Startup`/`Update`/`FixedUpdate`, plus
-  two custom labels — `OnDay` (per-day building completions *and* the
-  marching tick) and `OnMonth` (monthly payout) — both run from `advance`
+  two custom labels — `OnDay` (per-day building completions, the marching
+  tick, the army-formation tick, and the siege tick) and `OnMonth` (monthly
+  payout + building-levy replenishment) — both run from `advance`
   after the date mutates.
 - **The tick — `advance`** (`game/advance_date.rs`) runs in `FixedUpdate`,
   gated by `Game::running()`. It's an **exclusive `fn(&mut World)`** because
@@ -344,15 +352,21 @@ the style of `ctx::step`.
   yield next tick.
 - **`RaiseArmy`** validates the actor rules the land, then spawns an army
   bundle
-  (`StringId`/`Army`/`ArmyName`/`ArmyLevy`/`ArmyOnLand`/`ArmyBelongsToKingdom`)
+  (`StringId`/`Army`/`ArmyName`/`ArmyLevy(0)`/`ArmyMaxLevy(sum)`/`ArmyOnLand`/`ArmyBelongsToKingdom`/`ArmyStatus::Raising`)
   and registers the runtime id. `ArmyName` defaults to `<house> Army`
   (derived from the leader's `CharacterOfHouse → HouseName`; `"Army"` if
-  the leader has no house). `ArmyLevy` starts at the sum of every ACTIVE
-  building's *available* `BuildingLevy` on the land; the raise then
-  *drains* those pools to `0` and flags the buildings with
-  `BuildingIsRaised = true`. The second raise on the same land is rejected
-  until the pools replenish (via `game::replenish_levy`) or the army is
-  dismissed. One step (pick a ruled land).
+  the leader has no house). `ArmyMaxLevy` is the sum of every ACTIVE
+  building's *available* `BuildingLevy` on the land at raise time — the
+  formation target the per-day
+  [`raising_army::on_day`](src/game/raising_army.rs) tick accretes
+  `ArmyLevy` toward (up to 20 per raised building per day), then flips
+  the army to `Idle`. The buildings' pools themselves are not drained
+  at raise time; the buildings are flagged with `BuildingIsRaised = true`
+  so the monthly [`replenish_levy`](src/game/replenish_levy.rs) skips
+  them while the formation drains them incrementally. The second raise
+  on the same land is rejected until the first army is dismissed (which
+  resets the flag and distributes the levy back). One step (pick a ruled
+  land).
 - **`DismissArmy`** validates the army belongs to the actor's kingdom
   (via `ArmyBelongsToKingdom`), then *distributes* the army's `ArmyLevy`
   back into the kingdom's home land's buildings' `BuildingLevy` pools
@@ -471,7 +485,10 @@ Events the module observes (all in `src/events.rs`):
 - `OnBuildingUpdated { kind: Raised | Dismissed }` — silently absorbed;
   the army-level line covers it.
 - `OnArmyRaised` — "You mustered the Lannister Army at Riverrun — 120
-  spears answering the call."
+  spears answering the call." When the army is still in `ArmyStatus::Raising`
+  the observer phrases it as "You began raising the Lannister Army at
+  Riverrun — up to 120 spears gathering for the muster." instead, since
+  `ArmyLevy` starts at 0 and fills over the next few days.
 - `OnArmyDismiss` — "You stood down the Lannister Army, its levy
   returning home to Casterly Rock."
 - `OnMarchingOrdered` — "You ordered the Lannister Army to march from
@@ -661,7 +678,7 @@ asset-loaded sprites.
 | `src/chronicles.rs` | chronicle generation — one observer per game event (`OnBuildingUpdated`, `OnArmyRaised`/`OnArmyDismiss`, `OnMarchingOrdered`, `OnArmyArrived`, `OnSiegeLaid`/`OnSiegeWon`, `OnWarDeclared`/`OnDemandEnforced`/`OnWarEnded`), each writing a narratively-flavored line to the `Chronicles` resource. The only writer of chronicle text; commands and ticks only `trigger(...)`. |
 | `src/commands/construct_building.rs` | the `ConstructBuilding` command (validate + spawn as BUILDING + pay) |
 | `src/commands/destroy_building.rs` | the `DestroyBuilding` command (validate + despawn + deregister) |
-| `src/commands/raise_army.rs` | the `RaiseArmy` command (validate + spawn the army bundle + drain `BuildingLevy` pools) |
+| `src/commands/raise_army.rs` | the `RaiseArmy` command (validate + spawn the army bundle in `ArmyStatus::Raising` + flag the contributing buildings as `BuildingIsRaised` without draining their pools — the formation tick drains them incrementally) |
 | `src/commands/dismiss_army.rs` | the `DismissArmy` command (validate + distribute `ArmyLevy` back into `BuildingLevy` + despawn + deregister + reap queued marchings) |
 | `src/commands/marching.rs` | the `MarchingOrder` command (validate + trace the road route + spawn one `Marching` entity per road, each `MarchingStatus::Scheduled` with empty dates) |
 | `src/commands/declare_war.rs` | the `DeclareWar` command (validate + spawn a `War` entity with `WarCasusBelliType` + auto-seeded `WarDemands`; no resolution tick) |
@@ -673,7 +690,8 @@ asset-loaded sprites.
 | `src/ecs/road.rs` | the `Road` entity kind — `Road` marker + `RoadPoints(Vec<(f64,f64)>)` + `RoadBetweenLands(Vec<Entity>)` + `RoadDistanceDays(u32)` (definition-only; no Bevy relationship) + `RoadHasMarchings` (the reverse of `MarchingOnRoad`) |
 | `src/map/components/road_graphic.rs` | per-road dashed-line visual — startup spawns one `RoadGraphic` marker per road (back-reffed by `UIWithRoad`) and a per-frame `update` draws the polyline through the `RoadGizmoConfigGroup` gizmo group, whose config carries the `GizmoLineStyle::Dashed` style; the line colour reports the road's `RoadHasMarchings` (green = an army is on it, gray = a march is queued on it, default otherwise) |
 | `src/game/marching.rs` | the per-day marching tick (`OnDay` — activate scheduled marchings on the matching source land, move arrived armies one road onward, chain into the next marching or return to Idle) + `road_days` (the one place a road's `RoadDistanceDays` is resolved) |
-| `src/game/replenish_levy.rs` | the monthly `BuildingLevy` top-up (`OnMonth` — every ACTIVE building's pool += `def.levy_rate`, capped at `def.levy`) |
+| `src/game/raising_army.rs` | the per-day army-formation tick (`OnDay` — every `ArmyStatus::Raising` army accretes up to 20 levy per ACTIVE `BuildingIsRaised` building on its land per day into `ArmyLevy`, then flips to `Idle` once `ArmyLevy == ArmyMaxLevy`) |
+| `src/game/replenish_levy.rs` | the monthly `BuildingLevy` top-up (`OnMonth` — every ACTIVE, non-raised building's pool += `def.levy_rate`, capped at `def.levy`) |
 | `src/map/components/holding_icon.rs` | the castle-icon visual (three crenellated white-line towers with a centre keep, side walls, and a central gate) + the per-land name/yield `Text2d` label (anchored to the same land-holding point as the castle). Reusable gizmo primitive in `pub fn draw(gizmos, at, color)`. `startup` (Startup) spawns one `HoldingIcon` per `Kingdom` with a `UIWithKingdom` back-ref plus five `LandLabel` `Text2d` entities (main label + four shadow siblings forming a 1px black outline) per `Land`. `update` (PostUpdate) reads `KingdomHold` → `LandHolding` to position each castle (yellow when that land is selected, brown otherwise), and refreshes each label — `name\ngold/m levy/m` on lands the player's kingdom holds, the name only on foreign lands |
 | `src/map/components/land_graphic.rs` | per-land polygon outline + scanline fill. `startup` (Startup) spawns one `LandGraphic` per `Land` with a `UIWithLand` back-ref. `update` (PostUpdate) reads `LandBorders` + `StringId` to draw the outline (yellow when selected, brown otherwise) + scanline fill (green-tinted when player-owned). The name/yield label moved to `holding_icon` |
 | `src/ui/wars.rs` | the WARS panel (right column, top) — lists the player's wars via `KingdomHasWarsAttacking`; `Display::None` on the outer container hides it when the player has no wars. Marker `UIWithWars` on the body text; container visibility toggled by walking the body's `ChildOf`. |

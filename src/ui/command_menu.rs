@@ -62,6 +62,18 @@ const BACKDROP: Color = Color::srgba(0.0, 0.0, 0.0, 0.45);
 const WINDOW: Color = Color::srgb(0.10, 0.10, 0.12);
 const BORDER: Color = Color::srgba(0.6, 0.6, 0.65, 0.5);
 
+// --- scroll math ----------------------------------------------------------
+
+/// Mirrors `padding: UiRect::all(px(10))` on `CommandMenuUIList`. If you
+/// change one, change the other — `ensure_selected_visible` uses these
+/// to figure out where the content area starts.
+const LIST_PADDING: f32 = 10.0;
+/// Mirrors `row_gap: px(6)` on `CommandMenuUIList`.
+const LIST_ROW_GAP: f32 = 6.0;
+/// Logical px of breathing room kept between the selected row and the
+/// viewport edge when scrolling it into view.
+const SCROLL_MARGIN: f32 = 8.0;
+
 // --- startup --------------------------------------------------------------
 
 /// Spawn the v2 palette's panel shell once, hidden.
@@ -86,16 +98,23 @@ pub fn startup(mut commands: Commands) {
                 CommandMenuUIList,
                 Node {
                     width: percent(45),
+                    // Cap the panel at 70% of screen height; rows that
+                    // spill past it get clipped and scrolled instead of
+                    // running off-screen. `Overflow::scroll_y()` enables
+                    // Bevy's built-in scroll container, driven by the
+                    // `ScrollPosition` component on the same entity.
                     max_height: percent(70),
                     flex_direction: FlexDirection::Column,
-                    padding: UiRect::all(px(10)),
-                    row_gap: px(6),
+                    padding: UiRect::all(px(LIST_PADDING)),
+                    row_gap: px(LIST_ROW_GAP),
                     border: UiRect::all(px(1)),
                     border_radius: BorderRadius::all(px(8)),
+                    overflow: Overflow::scroll_y(),
                     ..default()
                 },
                 BackgroundColor(WINDOW),
                 BorderColor::all(BORDER),
+                ScrollPosition::default(),
             ));
         });
 }
@@ -345,5 +364,103 @@ fn navigation(world: &mut World) {
     for (i, entity) in item_entities.iter().enumerate() {
         let is_selected = (i as i32) == new_index;
         crate::commands::core::update(*entity, is_selected, world);
+    }
+
+    // Then scroll the newly selected row into view, if it scrolled out
+    // when navigating. No-op when the row already fits or layout hasn't
+    // run yet (first frame after spawn).
+    ensure_selected_visible(world);
+}
+
+// --- scroll-into-view -----------------------------------------------------
+
+/// Scroll [`CommandMenuUIList`] so the row at
+/// [`CommandMenuUiContext::selected_index`] is visible, updating the
+/// list's [`ScrollPosition`] when needed. Bail-out conditions:
+/// - the roster is empty or no row is selected;
+/// - the list's [`ComputedNode`] isn't computed yet (first frame after a
+///   spawn — the next input tick retries);
+/// - any row's [`ComputedNode`] is missing (layout hasn't run for it yet).
+///
+/// Row heights come from `ComputedNode::size().y`, multiplied by
+/// `inverse_scale_factor` to land in logical pixels (matching how Bevy
+/// itself measures scroll position). Padding + row_gap are added by hand
+/// so the scroll-into-view math matches what the user sees on screen;
+/// border thickness is ignored (1 logical px, smaller than
+/// [`SCROLL_MARGIN`]).
+fn ensure_selected_visible(world: &mut World) {
+    let (item_entities, selected_index) = {
+        let ctx = world.resource::<CommandMenuUiContext>();
+        (ctx.item_entities.clone(), ctx.selected_index)
+    };
+    if selected_index < 0 || item_entities.is_empty() {
+        return;
+    }
+    let sel = selected_index as usize;
+
+    let Some(list_e) = world
+        .query_filtered::<Entity, With<CommandMenuUIList>>()
+        .iter(world)
+        .next()
+    else {
+        return;
+    };
+    let Some(list_cn) = world.get::<ComputedNode>(list_e) else {
+        return;
+    };
+    let scale = list_cn.inverse_scale_factor;
+    if scale <= 0.0 {
+        return;
+    }
+
+    // Walk rows up to (and including) the selected one, accumulating
+    // logical-px heights plus the inter-row gap. Bail if any row in the
+    // prefix hasn't been laid out yet — better to skip this frame than
+    // scroll against stale sizes.
+    let mut sel_top = LIST_PADDING;
+    let mut sel_h = 0.0_f32;
+    for (i, e) in item_entities.iter().enumerate() {
+        let Some(cn) = world.get::<ComputedNode>(*e) else {
+            return;
+        };
+        let h = cn.size.y * scale;
+        if i == sel {
+            sel_h = h;
+            break;
+        }
+        sel_top += h + LIST_ROW_GAP;
+    }
+    if sel_h <= 0.0 {
+        return;
+    }
+    let sel_bottom = sel_top + sel_h;
+
+    // Viewport = outer height (in logical px) minus top+bottom padding.
+    let viewport_h = (list_cn.size.y * scale - 2.0 * LIST_PADDING).max(0.0);
+    if viewport_h <= 0.0 {
+        return;
+    }
+
+    let cur_y = world
+        .get::<ScrollPosition>(list_e)
+        .map(|s| s.0.y)
+        .unwrap_or(0.0);
+    let new_y = if sel_top < cur_y + SCROLL_MARGIN {
+        (sel_top - SCROLL_MARGIN).max(0.0)
+    } else if sel_bottom > cur_y + viewport_h - SCROLL_MARGIN {
+        (sel_bottom + SCROLL_MARGIN - viewport_h).max(0.0)
+    } else {
+        cur_y
+    };
+
+    if new_y != cur_y {
+        // Clamp to the scrollable range. max_offset is how far content
+        // can scroll past 0 before its tail hits the viewport bottom —
+        // matching how Bevy's own scroll handler clamps deltas.
+        let max_offset = (list_cn.content_size.y * scale - viewport_h).max(0.0);
+        let clamped = new_y.clamp(0.0, max_offset);
+        if let Some(mut sp) = world.get_mut::<ScrollPosition>(list_e) {
+            sp.0.y = clamped;
+        }
     }
 }

@@ -12,7 +12,7 @@
 //! The actor must rule the army's kingdom (via `ArmyBelongsToKingdom`) — the
 //! same rule every other army command uses.
 
-use super::core::{next_id, note, BaseCommand};
+use super::core::{note, BaseCommand};
 use crate::app::Game;
 use crate::ecs::{
     ArmyBelongsToKingdom, ArmyName, ArmyOnLand, ArmyStatus, CharacterLeads, KingdomHasArmies,
@@ -229,7 +229,7 @@ fn begin_siege(world: &mut World, actor: &str, army_id: &str) {
             .get::<CharacterLeads>(actor_e)
             .map(|cl| cl.kingdoms().iter().copied().collect())
             .unwrap_or_default();
-        let army_kingdom = world
+        let _army_kingdom = world
             .get::<ArmyBelongsToKingdom>(army_e)
             .map(|abtk| abtk.0);
         let Some(army_on_land) = world.get::<ArmyOnLand>(army_e) else {

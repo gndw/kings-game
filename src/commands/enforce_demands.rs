@@ -24,7 +24,7 @@
 use super::core::{note, BaseCommand};
 use crate::ecs::{
     ArmyBelongsToKingdom, CharacterLeads, KingdomHasWarsAttacking, KingdomHold,
-    LandControlledByArmy, LandName, Registry, StringId, WarDemandType, WarDemands, WarName,
+    LandControlledByArmy, LandName, Registry, WarDemandType, WarDemands, WarName,
 };
 use crate::ecs::kingdom::KingdomLedBy;
 use crate::app::Game;

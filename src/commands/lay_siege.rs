@@ -1,24 +1,19 @@
 //! The siege command: lay siege to a land with one of the player's armies.
 //!
 //! One selection step: pick an army. The army must be standing on a land
-//! that is *not* held by the player's kingdom — the command's `step_items`
-//! filters the list to those armies (a siege on your own land is a no-op),
-//! so `execute` can trust the data. The picked army's current land is the
-//! target; the army's `ArmyStatus` flips to `Sieging` and a fresh
-//! [`Siege`](crate::ecs::Siege) entity is spawned with progress 0 and a
-//! first event 10 days out. From there the per-day
+//! that is *not* held by the player's kingdom. The picked army's current
+//! land is the target; the army's `ArmyStatus` flips to `Sieging` and a
+//! fresh [`Siege`](crate::ecs::Siege) entity is spawned with progress 0
+//! and a first event 10 days out. From there the per-day
 //! [`tick`](crate::game::siege::tick) advances progress on each scheduled
 //! event until 100% — then the siege resolves (buildings flip to
 //! `Inactive`, the army gets [`ArmyControlsLand`](crate::ecs::ArmyControlsLand)).
 //!
 //! The actor must rule the army's kingdom (via `ArmyBelongsToKingdom`) — the
 //! same rule every other army command uses.
-//!
-//! `armies_under` returns the army list in `KingdomHasArmies` order, then
-//! `step_items` keeps only the foreign-land entries and reshapes the label
-//! to `"<ArmyName> at <LandName>"`.
 
-use super::core::{Choice, Command, MenuItem, next_id, note};
+use super::core::{next_id, note, BaseCommand};
+use crate::app::Game;
 use crate::ecs::{
     ArmyBelongsToKingdom, ArmyName, ArmyOnLand, ArmyStatus, CharacterLeads, KingdomHasArmies,
     LandHeldBy, LandName, Registry, Siege, SiegeAttackerArmy, SiegeDefenderLand,
@@ -26,102 +21,198 @@ use crate::ecs::{
 };
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
+use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue, CommandMenuUiContext};
+use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
-use bevy::prelude::RelationshipTarget;
+use bevy::prelude::*;
 
-/// Lay siege to a land with one of the player's armies. Struct named
-/// `LaySiege` to avoid colliding with the [`Siege`](crate::ecs::Siege)
-/// marker — the command palette hands a typed `Arc<dyn Command>` around,
-/// and the trait's `name()` ("Siege") is what the player sees.
+// --- palette UI -------------------------------------------------------------
+// Same shape as the other commands: a single padded card whose title text
+// is the command's display name. The shared `update` swaps the background
+// between `ROW_PANEL` and `ROW_PANEL_SELECTED`.
+
+/// Per-row background in the palette.
+const ROW_PANEL: Color = Color::srgb(0.16, 0.16, 0.20);
+/// Background when the row is the player's selection.
+const ROW_PANEL_SELECTED: Color = Color::srgb(0.24, 0.40, 0.72);
+/// Hairline border around the card.
+const ROW_BORDER: Color = Color::srgba(0.55, 0.55, 0.62, 0.35);
+
+/// Lay siege to a land with one of the player's armies.
 pub struct LaySiege;
 
-impl Command for LaySiege {
-    fn name(&self) -> &str {
-        "Lay Siege"
+impl BaseCommand for LaySiege {
+    fn get_command_id(&self) -> &'static str {
+        "command:lay_siege"
     }
 
-    fn step_count(&self) -> usize {
-        1
-    }
-
-    fn step_title(&self, step: usize) -> &str {
-        match step {
-            0 => "Select an army",
-            _ => "Select an army",
-        }
-    }
-
-    fn step_items(
+    fn spawn_command(
         &self,
-        _step: usize,
-        _choices: &[Choice],
-        actor: &str,
-        world: &World,
-    ) -> Vec<MenuItem> {
-        // Mirrors `marching::armies_under` for the army list (walking
-        // every kingdom the actor leads under the multi-kingdom model),
-        // then filters to armies currently standing on a foreign land.
-        // Filtering in `step_items` (not `execute`) keeps the palette
-        // focused — there's no point showing "siege your own capital" as
-        // an option.
-        let Some(actor_e) = world.resource::<Registry>().get(actor) else {
-            return Vec::new();
-        };
-        let Some(character_leads) = world.get::<CharacterLeads>(actor_e) else {
-            return Vec::new();
-        };
-        let actor_kingdoms: std::collections::HashSet<bevy::ecs::entity::Entity> =
-            character_leads.kingdoms().iter().copied().collect();
-        let mut out = Vec::new();
-        for kingdom_e in character_leads.kingdoms() {
-            let Some(kingdom_has_armies) = world.get::<KingdomHasArmies>(*kingdom_e) else {
-                continue;
-            };
-            for army_e in kingdom_has_armies.iter() {
-                let (Some(army_id), Some(army_on_land), Some(army_name)) = (
-                    world.get::<StringId>(army_e).map(|s| s.0.clone()),
-                    world.get::<ArmyOnLand>(army_e).map(|a| a.0),
-                    world.get::<ArmyName>(army_e).map(|n| n.0.clone()),
-                ) else {
-                    continue;
-                };
-                // Foreign: the land's holding kingdom isn't one of the
-                // actor's. If `LandHeldBy` is missing (defensive) skip
-                // the army rather than surface it as a siege option on
-                // a broken entity.
-                let is_foreign = world
-                    .get::<LandHeldBy>(army_on_land)
-                    .map(|land_held_by| !actor_kingdoms.contains(&land_held_by.kingdom()))
-                    .unwrap_or(false);
-                if !is_foreign {
-                    continue;
-                }
-                let land_label = world
-                    .get::<LandName>(army_on_land)
-                    .map(|land_name| land_name.0.clone())
-                    .unwrap_or_else(|| "?".into());
-                out.push(MenuItem {
-                    label: format!("{army_name} at {land_label}"),
-                    value: army_id,
-                });
-            }
+        world: &mut World,
+        parent: Entity,
+        choices: &[(String, String)],
+    ) -> (Vec<Entity>, bool) {
+        let command_pick = choices
+            .iter()
+            .find(|(k, _)| k == "command")
+            .map(|(_, v)| v.as_str());
+
+        if command_pick.is_none() {
+            return self.spawn_command_row(world, parent);
         }
-        out
+        if command_pick != Some(self.get_command_id()) {
+            return (Vec::new(), false);
+        }
+
+        // Step 1: pick the army.
+        let army_pick = choices
+            .iter()
+            .find(|(k, _)| k == "army_id")
+            .map(|(_, v)| v.clone());
+        match army_pick {
+            None => self.spawn_army_picker(world, parent),
+            Some(_) => self.execute(world),
+        }
     }
 
-    fn execute(&self, choices: &[Choice], actor: &str, world: &mut World) {
-        let Some(army_id) = choices.first().map(|c| c.value.as_str()) else {
-            return;
-        };
-        begin_siege(world, actor, army_id);
+    fn update(&self, entity: Entity, is_selected: bool, world: &mut World) {
+        let bg = if is_selected { ROW_PANEL_SELECTED } else { ROW_PANEL };
+        if let Some(mut background) = world.get_mut::<BackgroundColor>(entity) {
+            background.0 = bg;
+        }
     }
 }
 
+impl LaySiege {
+    fn spawn_command_row(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
+        let row = world
+            .spawn((
+                Node {
+                    width: percent(100),
+                    padding: UiRect::all(px(8)),
+                    border: UiRect::all(px(1)),
+                    border_radius: BorderRadius::all(px(4)),
+                    flex_direction: FlexDirection::Column,
+                    ..default()
+                },
+                BackgroundColor(ROW_PANEL),
+                BorderColor::all(ROW_BORDER),
+                ChildOf(parent),
+                CommandHasId(self.get_command_id().to_string()),
+            ))
+            .id();
+        world.entity_mut(row).with_children(|c| {
+            c.spawn((
+                Text::new("Lay Siege"),
+                TextFont::from_font_size(16.0),
+                TextColor(Color::srgb(0.96, 0.96, 0.98)),
+            ));
+        });
+        (vec![row], false)
+    }
+
+    fn spawn_army_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
+        let actor = world
+            .resource::<Game>()
+            .ctx
+            .player_character_id
+            .clone();
+        let armies = foreign_armies_under(world, &actor);
+        let mut entities = Vec::new();
+        for (army_id, label) in armies {
+            let row = world
+                .spawn((
+                    Node {
+                        width: percent(100),
+                        padding: UiRect::all(px(8)),
+                        border: UiRect::all(px(1)),
+                        border_radius: BorderRadius::all(px(4)),
+                        flex_direction: FlexDirection::Column,
+                        ..default()
+                    },
+                    BackgroundColor(ROW_PANEL),
+                    BorderColor::all(ROW_BORDER),
+                    ChildOf(parent),
+                    CommandHasId(self.get_command_id().to_string()),
+                    CommandHasKey("army_id".to_string()),
+                    CommandHasValue(army_id),
+                ))
+                .id();
+            world.entity_mut(row).with_children(|c| {
+                c.spawn((
+                    Text::new(label),
+                    TextFont::from_font_size(16.0),
+                    TextColor(Color::srgb(0.96, 0.96, 0.98)),
+                ));
+            });
+            entities.push(row);
+        }
+        (entities, false)
+    }
+
+    fn execute(&self, world: &mut World) -> (Vec<Entity>, bool) {
+        let actor = world
+            .resource::<Game>()
+            .ctx
+            .player_character_id
+            .clone();
+        let army_id = world
+            .resource::<CommandMenuUiContext>()
+            .choices
+            .iter()
+            .find(|(k, _)| k == "army_id")
+            .map(|(_, v)| v.clone())
+            .expect("execute reached without an army_id pick");
+        begin_siege(world, &actor, &army_id);
+        (Vec::new(), true)
+    }
+}
+
+/// `(army_instance_id, "<ArmyName> at <LandName>")` for every army under
+/// the actor's kingdoms that's currently standing on a *foreign* land.
+fn foreign_armies_under(world: &World, actor: &str) -> Vec<(String, String)> {
+    let Some(actor_e) = world.resource::<Registry>().get(actor) else {
+        return Vec::new();
+    };
+    let Some(character_leads) = world.get::<CharacterLeads>(actor_e) else {
+        return Vec::new();
+    };
+    let actor_kingdoms: std::collections::HashSet<Entity> =
+        character_leads.kingdoms().iter().copied().collect();
+    let mut out = Vec::new();
+    for kingdom_e in character_leads.kingdoms() {
+        let Some(kha) = world.get::<KingdomHasArmies>(*kingdom_e) else {
+            continue;
+        };
+        for army_e in kha.iter() {
+            let (Some(army_id), Some(aol), Some(army_name)) = (
+                world.get::<StringId>(army_e).map(|s| s.0.clone()),
+                world.get::<ArmyOnLand>(army_e).map(|a| a.0),
+                world.get::<ArmyName>(army_e).map(|n| n.0.clone()),
+            ) else {
+                continue;
+            };
+            let is_foreign = world
+                .get::<LandHeldBy>(aol)
+                .map(|lhb| !actor_kingdoms.contains(&lhb.kingdom()))
+                .unwrap_or(false);
+            if !is_foreign {
+                continue;
+            }
+            let land_label = world
+                .get::<LandName>(aol)
+                .map(|ln| ln.0.clone())
+                .unwrap_or_else(|| "?".into());
+            out.push((army_id, format!("{army_name} at {land_label}")));
+        }
+    }
+    out
+}
+
 /// Spawn the siege entity, flip the army to `Sieging`, schedule the first
-/// event 10 days out. Validation re-checks the rules that `step_items`
-/// already enforces (army exists, belongs to actor's kingdom, is on a
-/// foreign land) — defense in depth in case a future caller bypasses the
-/// palette.
+/// event 10 days out.
+/// Spawn the siege entity, flip the army to `Sieging`, schedule the first
+/// event 10 days out.
 fn begin_siege(world: &mut World, actor: &str, army_id: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return note(world, format!("cannot siege with `{army_id}`: unknown actor"));
@@ -129,96 +220,70 @@ fn begin_siege(world: &mut World, actor: &str, army_id: &str) {
     let Some(army_e) = world.resource::<Registry>().get(army_id) else {
         return note(world, format!("cannot siege with `{army_id}`: no such army"));
     };
-    let actor_kingdoms = world
-        .get::<CharacterLeads>(actor_e)
-        .map(|character_leads| character_leads.kingdoms().iter().copied().collect::<Vec<_>>());
-    let army_k = world
+
+    // Snapshot the data we need (actor kingdoms, the army's land, the land's
+    // holding kingdom) so the immutable borrows drop before we mutate
+    // `world` to flip the army's status and spawn the siege entity.
+    let (actor_kingdoms, army_land_e, is_foreign) = {
+        let actor_kingdoms: std::collections::HashSet<Entity> = world
+            .get::<CharacterLeads>(actor_e)
+            .map(|cl| cl.kingdoms().iter().copied().collect())
+            .unwrap_or_default();
+        let army_kingdom = world
+            .get::<ArmyBelongsToKingdom>(army_e)
+            .map(|abtk| abtk.0);
+        let Some(army_on_land) = world.get::<ArmyOnLand>(army_e) else {
+            return;
+        };
+        let is_foreign = world
+            .get::<LandHeldBy>(army_on_land.0)
+            .map(|lhb| !actor_kingdoms.contains(&lhb.kingdom()))
+            .unwrap_or(false);
+        (actor_kingdoms, army_on_land.0, is_foreign)
+    };
+
+    if !world
         .get::<ArmyBelongsToKingdom>(army_e)
-        .map(|army_belongs_to_kingdom| army_belongs_to_kingdom.0);
-    let _ = match (actor_kingdoms, army_k) {
-        (Some(aks), Some(ak)) if aks.contains(&ak) => ak,
-        _ => {
-            return note(
-                world,
-                format!(
-                    "cannot siege with `{army_id}`: that army does not belong to your kingdom"
-                ),
-            );
-        }
-    };
-    let Some(land_e) = world
-        .get::<ArmyOnLand>(army_e)
-        .map(|army_on_land| army_on_land.0)
-    else {
-        return note(world, format!("cannot siege with `{army_id}`: army has no land"));
-    };
-    // Foreign check: refuses to siege your own kingdom's lands. Mirrors
-    // the step_items filter so the chronicle line is informative even if
-    // a player somehow gets here with an army on a friendly land (a stale
-    // step_items cache, modded palette, etc.). Multi-kingdom: any of the
-    // actor's kingdoms holding the land counts as "your own".
-    let actor_kingdoms = world
-        .get::<CharacterLeads>(actor_e)
-        .map(|character_leads| character_leads.kingdoms().iter().copied().collect::<Vec<_>>());
-    let land_kingdom = world
-        .get::<LandHeldBy>(land_e)
-        .map(|land_held_by| land_held_by.kingdom());
-    match (actor_kingdoms, land_kingdom) {
-        (Some(aks), Some(lk)) if aks.contains(&lk) => {
-            return note(
-                world,
-                format!("cannot siege with `{army_id}`: that land is your own"),
-            );
-        }
-        _ => {}
+        .map(|abtk| actor_kingdoms.contains(&abtk.0))
+        .unwrap_or(false)
+    {
+        return note(
+            world,
+            format!("cannot siege with `{army_id}`: that army does not belong to your kingdom"),
+        );
+    }
+    if !is_foreign {
+        return note(
+            world,
+            format!("cannot siege with `{army_id}`: a siege on your own land is a no-op"),
+        );
     }
 
-    let army_name = world
-        .get::<ArmyName>(army_e)
-        .map(|army_name| army_name.0.clone())
-        .unwrap_or_else(|| "Army".to_string());
-    let land_name = world
-        .get::<LandName>(land_e)
-        .map(|land_name| land_name.0.clone())
-        .unwrap_or_else(|| "?".into());
-
-    // First event 10 days from today. `Date::after_days` walks the
-    // calendar forward so the result lands on a valid month/day even if
-    // the +10 crosses a year boundary.
-    let next_date = {
-        let calendar = world.resource::<Calendar>();
-        let today = *world.resource::<Date>();
-        today.after_days(10, &calendar)
-    };
-
-    // Spawn the siege. `SiegeAttackerArmy` / `SiegeDefenderLand` are
-    // Bevy relationships — their hooks fill `ArmyHasSiege` on the army
-    // and `LandHasSiegesUnderAttack` on the land synchronously, so any
-    // same-frame reader (the very next tick) sees authoritative data.
-    let siege_entity_id = next_id(world);
-    let siege_e = world
-        .spawn((
-            StringId(siege_entity_id.clone()),
-            Siege,
-            SiegeAttackerArmy(army_e),
-            SiegeDefenderLand(land_e),
-            SiegeProgress(0),
-            SiegeNextEventDate(next_date),
-        ))
-        .id();
-    world
-        .resource_mut::<Registry>()
-        .insert(siege_entity_id, siege_e);
-
-    // Flip the army's status to `Sieging`. The marching tick's match on
-    // `Idle` / `Marching` doesn't touch `Sieging` armies — they're locked
-    // to the siege until the tick resolves it.
     if let Some(mut army_status) = world.get_mut::<ArmyStatus>(army_e) {
         *army_status = ArmyStatus::Sieging;
     }
+    let today = *world.resource::<Date>();
+    let next_event = {
+        let calendar = world.resource::<Calendar>();
+        today.after_days(10, calendar)
+    };
+    let _siege_e = world
+        .spawn((
+            Siege,
+            SiegeAttackerArmy(army_e),
+            SiegeDefenderLand(army_land_e),
+            SiegeProgress(0),
+            SiegeNextEventDate(next_event),
+        ))
+        .id();
 
+    let land_label = world
+        .get::<LandName>(army_land_e)
+        .map(|ln| ln.0.clone())
+        .unwrap_or_else(|| "?".into());
     note(
         world,
-        format!("{army_name} laid siege to {land_name}"),
+        format!("laid siege with `{army_id}` on {land_label} (first event {next_event})"),
     );
 }
+

@@ -1,14 +1,14 @@
 use anyhow::{Result, bail};
 use bevy::prelude::*;
 use kings_game::app::{Game, speed};
-use kings_game::commands::CommandRegistry;
+use kings_game::commands;
 use kings_game::ctx::Ctx;
 use kings_game::ecs;
 use kings_game::resources::chronicle::Chronicles;
 use kings_game::resources::input_layer::InputLayer;
 use kings_game::schedules::{OnDay, OnMonth};
 use kings_game::ui;
-use kings_game::ui::command_menu::CommandMenu;
+use kings_game::ui::command_menu::CommandMenuUiContext;
 use kings_game::game;
 use kings_game::map::components::army_icon;
 use kings_game::map::components::border_graphic;
@@ -117,9 +117,8 @@ fn main() -> Result<()> {
         )]))
         .insert_resource(calendar)
         .insert_resource(border)
-        .insert_resource(CommandMenu::default())
-        .insert_resource(CommandRegistry::default())
         .insert_resource(InputLayer::default())
+        .insert_resource(CommandMenuUiContext::default())
         .insert_resource(Time::<Fixed>::from_hz(hz))
         .add_systems(
             Startup,
@@ -128,6 +127,9 @@ fn main() -> Result<()> {
                 ui::startup::startup,
                 ui::camera::startup,
                 ui::command_menu::startup,
+                // Populates `CommandContext` with every command the
+                // palette can surface; must run before the panel opens.
+                commands::startup,
                 game::yields::recompute_yields,
                 border_graphic::startup,
                 holding_icon::startup,
@@ -155,8 +157,10 @@ fn main() -> Result<()> {
                 // keystroke while the `CommandMenu` layer is active.
                 (ui::input::global_keys, ui::input::map_selection)
                     .run_if(ui::input::root_layer_active),
-                ui::command_menu::input,
-                ui::command_menu::update,
+                // Palette input: Esc → close, gated to the command-menu
+                // layer via its own run-if so it stays dormant on root.
+                ui::command_menu::input
+                    .run_if(ui::command_menu::command_menu_layer_active),
                 ui::courts::update,
                 // Ponytail: keep debug systems last so they don't displace
                 // gameplay systems in the schedule.

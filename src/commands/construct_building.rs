@@ -10,83 +10,210 @@
 //!
 //! [`recompute_yields`]: crate::game::yields::recompute_yields
 
-use super::core::{Choice, Command, MenuItem, next_id, note, ruled_lands};
+use super::core::{next_id, note, ruled_lands, BaseCommand};
+use crate::app::Game;
+use crate::resources::buildings::BuildingDefs;
+use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue};
 use crate::ecs::{
     Building, BuildingConstructionDate, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand,
     BuildingStatus, CharacterGold, CharacterLeads, LandHeldBy, LandName, Registry, StringId,
 };
-use crate::resources::buildings::BuildingDefs;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
+use bevy::prelude::*;
 
 /// Build a building kind on a land the actor rules.
 pub struct ConstructBuilding;
 
-impl Command for ConstructBuilding {
-    fn name(&self) -> &str {
-        "Construct Building"
+// --- palette UI -------------------------------------------------------------
+// For now: a single padded card with the command's title text.
+
+/// Per-row background in the palette. One shade lighter than the panel.
+const ROW_PANEL: Color = Color::srgb(0.16, 0.16, 0.20);
+/// Background when the row is the player's selection.
+const ROW_PANEL_SELECTED: Color = Color::srgb(0.24, 0.40, 0.72);
+/// Hairline border around the card.
+const ROW_BORDER: Color = Color::srgba(0.55, 0.55, 0.62, 0.35);
+
+impl BaseCommand for ConstructBuilding {
+    fn get_command_id(&self) -> &'static str {
+        "command:construct_building"
     }
 
-    fn step_count(&self) -> usize {
-        2
-    }
-
-    fn step_title(&self, step: usize) -> &str {
-        match step {
-            0 => "Select a land",
-            _ => "Select a building",
-        }
-    }
-
-    fn step_items(
+    fn spawn_command(
         &self,
-        step: usize,
-        _choices: &[Choice],
-        actor: &str,
-        world: &World,
-    ) -> Vec<MenuItem> {
-        match step {
-            // Step 0: the lands the actor rules (can build on).
-            0 => ruled_lands(world, actor)
-                .into_iter()
-                .map(|(id, name)| MenuItem {
-                    label: name,
-                    value: id,
-                })
-                .collect(),
-            // Step 1: every building kind in the roster — construction is not
-            // land-specific. Price + construction time are shown so the player
-            // can see both what it costs and how long before it contributes.
-            _ => {
-                let cal = world.resource::<Calendar>();
-                world
-                    .resource::<BuildingDefs>()
-                    .0
-                    .iter()
-                    .map(|(id, d)| MenuItem {
-                        label: format!(
-                            "{} ({}g in {})",
-                            d.name,
-                            d.construction_price,
-                            cal.format_duration(d.construction_time),
-                        ),
-                        value: id.clone(),
-                    })
-                    .collect()
-            }
-        }
-    }
+        world: &mut World,
+        parent: Entity,
+        choices: &[(String, String)],
+    ) -> (Vec<Entity>, bool) {
+        // The current pick (if any) — `(key, value)` where key is
+        // `"command"`. Each branch bails out early so the happy path
+        // stays at the bottom of the function.
+        let command_pick = choices
+            .iter()
+            .find(|(k, _)| k == "command")
+            .map(|(_, v)| v.as_str());
 
-    fn execute(&self, choices: &[Choice], actor: &str, world: &mut World) {
-        let Some(land_id) = choices.get(0).map(|c| c.value.as_str()) else {
-            return;
-        };
-        let Some(def_id) = choices.get(1).map(|c| c.value.as_str()) else {
-            return;
-        };
-        construct(world, actor, land_id, def_id);
+        // No `"command"` key → first open, render the command row as
+        // usual. Sits above the land render so the source follows the
+        // player's selection order: pick a command first, then a land.
+        if command_pick.is_none() {
+            let row = world
+                .spawn((
+                    Node {
+                        width: percent(100),
+                        padding: UiRect::all(px(8)),
+                        border: UiRect::all(px(1)),
+                        border_radius: BorderRadius::all(px(4)),
+                        flex_direction: FlexDirection::Column,
+                        ..default()
+                    },
+                    BackgroundColor(ROW_PANEL),
+                    BorderColor::all(ROW_BORDER),
+                    ChildOf(parent),
+                    CommandHasId(self.get_command_id().to_string()),
+                ))
+                .id();
+            world.entity_mut(row).with_children(|c| {
+                c.spawn((
+                    Text::new("Construct Building"),
+                    TextFont::from_font_size(16.0),
+                    TextColor(Color::srgb(0.96, 0.96, 0.98)),
+                ));
+            });
+            return (vec![row], false);
+        }
+
+        // `"command"` key, value mismatch → another command was picked,
+        // skip this row entirely.
+        if command_pick != Some(self.get_command_id()) {
+            return (Vec::new(), false);
+        }
+
+        // Pre-step: pull the running step picks out of `choices` so the
+        // rest of the function can branch on them.
+        let land_pick = choices
+            .iter()
+            .find(|(k, _)| k == "land_id")
+            .map(|(_, v)| v.clone());
+        let building_pick = choices
+            .iter()
+            .find(|(k, _)| k == "building_id")
+            .map(|(_, v)| v.clone());
+
+        // Step 1: command picked, no land yet → render one row per
+        // land the player currently rules.
+        if land_pick.is_none() {
+            let actor = world
+                .resource::<Game>()
+                .ctx
+                .player_character_id
+                .clone();
+            let lands = ruled_lands(world, &actor);
+            let mut entities = Vec::new();
+            for (land_id, land_name) in lands {
+                let row = world
+                    .spawn((
+                        Node {
+                            width: percent(100),
+                            padding: UiRect::all(px(8)),
+                            border: UiRect::all(px(1)),
+                            border_radius: BorderRadius::all(px(4)),
+                            flex_direction: FlexDirection::Column,
+                            ..default()
+                        },
+                        BackgroundColor(ROW_PANEL),
+                        BorderColor::all(ROW_BORDER),
+                        ChildOf(parent),
+                        CommandHasId(self.get_command_id().to_string()),
+                        CommandHasKey("land_id".to_string()),
+                        CommandHasValue(land_id),
+                    ))
+                    .id();
+                world.entity_mut(row).with_children(|c| {
+                    c.spawn((
+                        Text::new(land_name),
+                        TextFont::from_font_size(16.0),
+                        TextColor(Color::srgb(0.96, 0.96, 0.98)),
+                    ));
+                });
+                entities.push(row);
+            }
+            return (entities, false);
+        }
+
+        // Step 2: land picked, no building yet → render one row per
+        // building kind from `BuildingDefs`. Snapshot the defs first so
+        // the immutable `Resource` borrow drops before we spawn.
+        if building_pick.is_none() {
+            let snapshot: Vec<(String, String)> = {
+                let defs = world.resource::<BuildingDefs>();
+                defs.0
+                    .iter()
+                    .map(|(id, def)| (id.clone(), def.name.clone()))
+                    .collect()
+            };
+            let mut entities = Vec::new();
+            for (id, name) in snapshot {
+                let row = world
+                    .spawn((
+                        Node {
+                            width: percent(100),
+                            padding: UiRect::all(px(8)),
+                            border: UiRect::all(px(1)),
+                            border_radius: BorderRadius::all(px(4)),
+                            flex_direction: FlexDirection::Column,
+                            ..default()
+                        },
+                        BackgroundColor(ROW_PANEL),
+                        BorderColor::all(ROW_BORDER),
+                        ChildOf(parent),
+                        CommandHasId(self.get_command_id().to_string()),
+                        CommandHasKey("building_id".to_string()),
+                        CommandHasValue(id),
+                    ))
+                    .id();
+                world.entity_mut(row).with_children(|c| {
+                    c.spawn((
+                        Text::new(name),
+                        TextFont::from_font_size(16.0),
+                        TextColor(Color::srgb(0.96, 0.96, 0.98)),
+                    ));
+                });
+                entities.push(row);
+            }
+            return (entities, false);
+        }
+
+        // Step 3: both picks present → execute. `construct` validates the
+        // picks against the world (actor must rule the land, must be
+        // able to afford the def) and pays + spawns the building on
+        // success. Failures land in the chronicle via `note` inside
+        // `construct`; the panel still closes either way.
+        let actor = world
+            .resource::<Game>()
+            .ctx
+            .player_character_id
+            .clone();
+        let land_id = land_pick
+            .as_deref()
+            .expect("step 3 reached without a land_id pick");
+        let building_id = building_pick
+            .as_deref()
+            .expect("step 3 reached without a building_id pick");
+        construct(world, &actor, land_id, building_id);
+        (Vec::new(), true)
+    }
+    fn update(&self, entity: Entity, is_selected: bool, world: &mut World) {
+        // The row is the one we spawned; the orchestrator's
+        // `crate::commands::core::update` passes it in. Swap the background
+        // to the highlight colour when the cursor lands on this row.
+        let bg = if is_selected { ROW_PANEL_SELECTED } else { ROW_PANEL };
+        if let Some(mut background) = world.get_mut::<BackgroundColor>(entity) {
+            background.0 = bg;
+        }
     }
 }
 

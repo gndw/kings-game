@@ -1,15 +1,15 @@
 //! Player commands: the one mutation path for player actions.
 //!
-//! A [`Command`] is self-describing — it owns its rules, its UI steps, and its
-//! effect — and [`CommandRegistry`] holds the roster. The command palette
-//! ([`crate::ui::command_menu`]) drives *any* registered command's steps the
-//! same way, so adding one is a new struct + a
-//! [`register`](CommandRegistry::register) line, not edits to the palette. The
-//! actor (a character id) is *who* and goes to [`Command::execute`], so the same
-//! path serves the player now and AI / networked peers later.
+//! Each command is a struct that owns its own logic; the shared helpers
+//! (menu types, levy pool ops, id generation, ruled-lands walk) live in
+//! [`core`]; the per-command logic is in each submodule. The
+//! [`BaseCommand`](core::BaseCommand) trait is the surface the palette
+//! drives every command through, and
+//! [`spawn_command`](core::spawn_command) is the orchestrator the panel
+//! calls to populate itself.
 //!
-//! - [`core`] — the [`Command`] trait, [`CommandRegistry`], and the shared
-//!   id/chronicle/ruled-lands helpers.
+//! - [`core`] — shared helpers, the [`BaseCommand`](core::BaseCommand)
+//!   trait, and the [`spawn_command`](core::spawn_command) orchestrator.
 //! - [`construct_building`] — build a building kind on a ruled land.
 //! - [`destroy_building`] — tear down a building on a ruled land.
 //! - [`raise_army`] — raise an army on a ruled land.
@@ -29,4 +29,6 @@ pub mod lay_siege;
 pub mod marching;
 pub mod raise_army;
 
-pub use core::{rules_land, Choice, Command, CommandRegistry, MenuItem};
+pub use core::{
+    rules_land, spawn_command, startup, update, BaseCommand, Choice, CommandContext, MenuItem,
+};

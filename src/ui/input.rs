@@ -17,49 +17,59 @@ pub fn root_layer_active(layer: Res<InputLayer>) -> bool {
     *layer == InputLayer::Root
 }
 
-/// Global sim keys: quit (`Q`/`Esc`), zoom toggle (`Z`), pause toggle
-/// (`Space`), and digit speed-jumps (`1`–`4`). Moved from
-/// [`crate::app::input`] so input handling for the root layer lives in one
-/// place; the run-if on the system list guarantees this only fires when the
-/// root layer is active.
-pub fn global_keys(
-    keys: Res<ButtonInput<KeyCode>>,
-    mut game: ResMut<Game>,
-    calendar: Res<Calendar>,
-    mut fixed: ResMut<Time<Fixed>>,
-    mut exit: MessageWriter<AppExit>,
-) {
+/// Global sim keys: quit (`Q`), open the palette (`C`), zoom toggle
+/// (`Z`), pause toggle (`Space`), and digit speed-jumps (`1`–`4`). Moved
+/// from [`crate::app::input`] so input handling for the root layer lives in
+/// one place; the run-if on the system list guarantees this only fires when
+/// the root layer is active.
+///
+/// Exclusive because opening the palette (`C`) calls
+/// [`crate::ui::command_menu::open_command`], which spawns UI entities
+/// through `&mut World`.
+pub fn global_keys(world: &mut World) {
+    let (toggle_palette, toggle_quit, toggle_zoom, toggle_pause, digit_pressed) = {
+        let keys = world.resource::<ButtonInput<KeyCode>>();
+        (
+            keys.just_pressed(KeyCode::KeyC),
+            keys.just_pressed(KeyCode::KeyQ) || keys.just_pressed(KeyCode::Escape),
+            keys.just_pressed(KeyCode::KeyZ),
+            keys.just_pressed(KeyCode::Space),
+            [
+                (KeyCode::Digit1, 0usize),
+                (KeyCode::Digit2, 1),
+                (KeyCode::Digit3, 2),
+                (KeyCode::Digit4, 3),
+            ]
+            .into_iter()
+            .find_map(|(k, i)| keys.just_pressed(k).then_some(i)),
+        )
+    };
+
+    if toggle_palette {
+        crate::ui::command_menu::open_command(world);
+    }
     // Escape closes the command palette while it's open, so it mustn't quit.
-    if keys.just_pressed(KeyCode::KeyQ) || keys.just_pressed(KeyCode::Escape) {
-        exit.write(AppExit::Success);
+    if toggle_quit {
+        world.write_message(AppExit::Success);
     }
-    if keys.just_pressed(KeyCode::KeyZ) {
-        game.zoomed = !game.zoomed;
+    if toggle_zoom {
+        world.resource_mut::<Game>().zoomed = !world.resource::<Game>().zoomed;
     }
-    // Space toggles pause (multi-word search queries no longer collide with
-    // this because the palette's `input_layer == CommandMenu` blocks the key
-    // from reaching us).
-    if keys.just_pressed(KeyCode::Space) {
+    if toggle_pause {
+        let mut game = world.resource_mut::<Game>();
         game.paused = !game.paused;
     }
-    // Digits 1–4 jump straight to a speed and unpause, faster than stepping.
-    // The index clamps if a mod lists fewer than four speeds.
-    let last = calendar.speeds.len().saturating_sub(1);
-    for (key, idx) in [
-        (KeyCode::Digit1, 0),
-        (KeyCode::Digit2, 1),
-        (KeyCode::Digit3, 2),
-        (KeyCode::Digit4, 3),
-    ] {
-        if keys.just_pressed(key) {
-            game.speed_idx = idx.min(last);
-            game.paused = false;
-        }
+    if let Some(idx) = digit_pressed {
+        let last = world.resource::<Calendar>().speeds.len().saturating_sub(1);
+        let mut game = world.resource_mut::<Game>();
+        game.speed_idx = idx.min(last);
+        game.paused = false;
     }
-    fixed.set_timestep_hz(f64::from(crate::app::speed(
-        &calendar.speeds,
-        game.speed_idx,
-    )));
+    let speed_idx = world.resource::<Game>().speed_idx;
+    let speeds = world.resource::<Calendar>().speeds.clone();
+    world
+        .resource_mut::<Time<Fixed>>()
+        .set_timestep_hz(f64::from(crate::app::speed(&speeds, speed_idx)));
 }
 
 /// Arrow keys move the selection to the neighbouring land in that direction.

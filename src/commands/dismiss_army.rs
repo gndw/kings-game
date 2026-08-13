@@ -11,51 +11,147 @@
 //! the way up) — regardless of which land the army currently sits on. So a
 //! dismissed army that marched away still returns its levy home.
 
-use super::core::{distribute_levy_back, Choice, Command, MenuItem, note};
+use super::core::{distribute_levy_back, note, BaseCommand};
+use crate::app::Game;
 use crate::ecs::army::{ArmyBelongsToKingdom, ArmyHasMarching, ArmyLevy, ArmyName};
 use crate::ecs::kingdom::KingdomHold;
 use crate::ecs::{CharacterLeads, KingdomHasArmies, Registry, StringId};
 use crate::events::{BuildingUpdateKind, OnArmyDismiss, OnBuildingUpdated};
+use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue};
+use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
-use bevy::prelude::RelationshipTarget;
+use bevy::prelude::*;
+
+// --- palette UI -------------------------------------------------------------
+// Same shape as `construct_building`: a single padded card whose title
+// text is the command's display name. The shared `update` swaps the
+// background between `ROW_PANEL` and `ROW_PANEL_SELECTED`.
+
+/// Per-row background in the palette. One shade lighter than the panel.
+const ROW_PANEL: Color = Color::srgb(0.16, 0.16, 0.20);
+/// Background when the row is the player's selection.
+const ROW_PANEL_SELECTED: Color = Color::srgb(0.24, 0.40, 0.72);
+/// Hairline border around the card.
+const ROW_BORDER: Color = Color::srgba(0.55, 0.55, 0.62, 0.35);
 
 /// Dismiss one of the armies the actor rules.
 pub struct DismissArmy;
 
-impl Command for DismissArmy {
-    fn name(&self) -> &str {
-        "Dismiss Army"
+impl BaseCommand for DismissArmy {
+    fn get_command_id(&self) -> &'static str {
+        "command:dismiss_army"
     }
 
-    fn step_count(&self) -> usize {
-        1
-    }
-
-    fn step_title(&self, step: usize) -> &str {
-        match step {
-            0 => "Select an army",
-            _ => "Select an army",
-        }
-    }
-
-    fn step_items(
+    fn spawn_command(
         &self,
-        _step: usize,
-        _choices: &[Choice],
-        actor: &str,
-        world: &World,
-    ) -> Vec<MenuItem> {
-        armies_under(world, actor)
-            .into_iter()
-            .map(|(id, label)| MenuItem { label, value: id })
-            .collect()
+        world: &mut World,
+        parent: Entity,
+        choices: &[(String, String)],
+    ) -> (Vec<Entity>, bool) {
+        // The current pick (if any) — `(key, value)` where key is
+        // `"command"`. Each branch bails out early so the happy path
+        // stays at the bottom of the function.
+        let command_pick = choices
+            .iter()
+            .find(|(k, _)| k == "command")
+            .map(|(_, v)| v.as_str());
+
+        // No `"command"` key → first open, render the command row as
+        // usual.
+        if command_pick.is_none() {
+            let row = world
+                .spawn((
+                    Node {
+                        width: percent(100),
+                        padding: UiRect::all(px(8)),
+                        border: UiRect::all(px(1)),
+                        border_radius: BorderRadius::all(px(4)),
+                        flex_direction: FlexDirection::Column,
+                        ..default()
+                    },
+                    BackgroundColor(ROW_PANEL),
+                    BorderColor::all(ROW_BORDER),
+                    ChildOf(parent),
+                    CommandHasId(self.get_command_id().to_string()),
+                ))
+                .id();
+            world.entity_mut(row).with_children(|c| {
+                c.spawn((
+                    Text::new("Dismiss Army"),
+                    TextFont::from_font_size(16.0),
+                    TextColor(Color::srgb(0.96, 0.96, 0.98)),
+                ));
+            });
+            return (vec![row], false);
+        }
+
+        // `"command"` key, value mismatch → another command was picked.
+        if command_pick != Some(self.get_command_id()) {
+            return (Vec::new(), false);
+        }
+
+        // Step 1: render one row per army the player rules.
+        let army_pick = choices
+            .iter()
+            .find(|(k, _)| k == "army_id")
+            .map(|(_, v)| v.clone());
+        if army_pick.is_none() {
+            let actor = world
+                .resource::<Game>()
+                .ctx
+                .player_character_id
+                .clone();
+            let armies = armies_under(world, &actor);
+            let mut entities = Vec::new();
+            for (army_id, label) in armies {
+                let row = world
+                    .spawn((
+                        Node {
+                            width: percent(100),
+                            padding: UiRect::all(px(8)),
+                            border: UiRect::all(px(1)),
+                            border_radius: BorderRadius::all(px(4)),
+                            flex_direction: FlexDirection::Column,
+                            ..default()
+                        },
+                        BackgroundColor(ROW_PANEL),
+                        BorderColor::all(ROW_BORDER),
+                        ChildOf(parent),
+                        CommandHasId(self.get_command_id().to_string()),
+                        CommandHasKey("army_id".to_string()),
+                        CommandHasValue(army_id),
+                    ))
+                    .id();
+                world.entity_mut(row).with_children(|c| {
+                    c.spawn((
+                        Text::new(label),
+                        TextFont::from_font_size(16.0),
+                        TextColor(Color::srgb(0.96, 0.96, 0.98)),
+                    ));
+                });
+                entities.push(row);
+            }
+            return (entities, false);
+        }
+
+        // Execute: both picks present → call the existing function.
+        let actor = world
+            .resource::<Game>()
+            .ctx
+            .player_character_id
+            .clone();
+        let army_id = army_pick
+            .as_deref()
+            .expect("step 1 reached without an army_id pick");
+        dismiss(world, &actor, army_id);
+        (Vec::new(), true)
     }
 
-    fn execute(&self, choices: &[Choice], actor: &str, world: &mut World) {
-        let Some(army_id) = choices.first().map(|c| c.value.as_str()) else {
-            return;
-        };
-        dismiss(world, actor, army_id);
+    fn update(&self, entity: Entity, is_selected: bool, world: &mut World) {
+        let bg = if is_selected { ROW_PANEL_SELECTED } else { ROW_PANEL };
+        if let Some(mut background) = world.get_mut::<BackgroundColor>(entity) {
+            background.0 = bg;
+        }
     }
 }
 
@@ -81,9 +177,6 @@ fn armies_under(world: &World, actor: &str) -> Vec<(String, String)> {
                 Some(s) => s.0.clone(),
                 None => continue,
             };
-            // For the label we need the land name (army → land → name) and the
-            // levy count. Army→land is via `ArmyOnLand`; the levy is
-            // `ArmyLevy`. Both reads are `world::get` so they stay `&World`.
             let army_on_land = match world.get::<crate::ecs::army::ArmyOnLand>(army_e) {
                 Some(a) => a,
                 None => continue,
@@ -102,10 +195,12 @@ fn armies_under(world: &World, actor: &str) -> Vec<(String, String)> {
     out
 }
 
-/// Despawn the army `army_id` for `actor`. Validates the actor's kingdom owns
+/// Despawn the army `army_id` for `actor
+/// Validates the actor's kingdom owns
 /// the army, then despawns + deregisters. Despawning auto-pulls the army out
 /// of both `LandHasArmies` and `KingdomHasArmies` via Bevy's relationship
-/// hooks.
+/// hooks. Any queued marchings under the army are reaped first so the
+/// marchings don't outlive their `MarchingArmy` target.
 fn dismiss(world: &mut World, actor: &str, army_id: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return note(world, format!("cannot dismiss `{army_id}`: unknown actor"));
@@ -168,21 +263,10 @@ fn dismiss(world: &mut World, actor: &str, army_id: &str) {
         .unwrap_or(0);
 
     // Distribute the army's levy back into the kingdom's-land buildings
-    // BEFORE the despawn — `distribute_levy_back` walks `LandHasBuildings`
-    // on the kingdom's home land. The levy was raised from those pools,
-    // so it returns there regardless of where the army ended up. The
-    // returned list is the buildings that were actually raised before
-    // (so the per-building `OnBuildingUpdated` only fires for real state
-    // transitions, not the defensive flag flips for never-raised buildings).
+    // BEFORE the despawn.
     let dismissed = distribute_levy_back(world, kingdom_land_e, army_levy);
 
-    // Despawn any queued marchings BEFORE the army goes — otherwise the
-    // marchings would be left holding a `MarchingArmy` pointing at a
-    // despawned entity. Bevy's relationship hooks drop the `MarchingArmy`
-    // off the marching on target despawn, but the marching itself would
-    // still be in the world with no army, no source land, and no status
-    // to walk. Snapshot the marching entities, then drop the borrow
-    // before despawning.
+    // Reap queued marchings first.
     let queued: Vec<bevy::ecs::entity::Entity> = world
         .get::<ArmyHasMarching>(army_e)
         .map(|q| q.iter().collect())
@@ -191,9 +275,7 @@ fn dismiss(world: &mut World, actor: &str, army_id: &str) {
         world.despawn(m_e);
     }
 
-    // Despawn + deregister. The relationship hooks remove the army from the
-    // land's `LandHasArmies` and the kingdom's `KingdomHasArmies` in the same
-    // operation.
+    // Despawn + deregister.
     world.entity_mut(army_e).despawn();
     world.resource_mut::<Registry>().by_id.remove(army_id);
 
@@ -204,12 +286,7 @@ fn dismiss(world: &mut World, actor: &str, army_id: &str) {
         ),
     );
 
-    // Publish after despawn. Observers must not read components on
-    // `army_e` (gone), only its former relationships — most cleanup work
-    // is keyed on the entity id alone.
     world.trigger(OnArmyDismiss { army: army_e });
-    // Per-building state event: each actually-raised building flipped its
-    // `BuildingIsRaised` flag back to false.
     for b_e in dismissed {
         world.trigger(OnBuildingUpdated {
             building: b_e,

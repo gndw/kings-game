@@ -21,60 +21,202 @@
 //! kingdom leader to player" semantics; the multi-kingdom model is
 //! future work.
 
-use super::core::{Choice, Command, MenuItem, note};
+use super::core::{note, BaseCommand};
 use crate::ecs::{
     ArmyBelongsToKingdom, CharacterLeads, KingdomHasWarsAttacking, KingdomHold,
-    LandControlledByArmy, LandName, Registry, StringId, WarDemands, WarName,
+    LandControlledByArmy, LandName, Registry, StringId, WarDemandType, WarDemands, WarName,
 };
 use crate::ecs::kingdom::KingdomLedBy;
+use crate::app::Game;
+use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue, CommandMenuUiContext};
 use bevy::ecs::world::World;
+use bevy::prelude::*;
 use bevy::prelude::RelationshipTarget;
 
 /// Resolve one demand on a player's war.
-pub struct EnforceDemands;
 
-impl Command for EnforceDemands {
-    fn name(&self) -> &str {
-        "Enforce Demands"
+// --- palette UI -------------------------------------------------------------
+// Same shape as the other commands.
+
+/// Per-row background in the palette.
+const ROW_PANEL: Color = Color::srgb(0.16, 0.16, 0.20);
+/// Background when the row is the player's selection.
+const ROW_PANEL_SELECTED: Color = Color::srgb(0.24, 0.40, 0.72);
+/// Hairline border around the card.
+const ROW_BORDER: Color = Color::srgba(0.55, 0.55, 0.62, 0.35);
+
+impl BaseCommand for EnforceDemands {
+    fn get_command_id(&self) -> &'static str {
+        "command:enforce_demands"
     }
 
-    fn step_count(&self) -> usize {
-        2
-    }
-
-    fn step_title(&self, step: usize) -> &str {
-        match step {
-            0 => "Select a war",
-            _ => "Select a demand",
-        }
-    }
-
-    fn step_items(
+    fn spawn_command(
         &self,
-        step: usize,
-        choices: &[Choice],
-        actor: &str,
-        world: &World,
-    ) -> Vec<MenuItem> {
-        match step {
-            0 => player_wars(world, actor)
-                .into_iter()
-                .map(|(id, label)| MenuItem { label, value: id })
-                .collect(),
-            _ => war_demands(world, choices),
+        world: &mut World,
+        parent: Entity,
+        choices: &[(String, String)],
+    ) -> (Vec<Entity>, bool) {
+        let command_pick = choices
+            .iter()
+            .find(|(k, _)| k == "command")
+            .map(|(_, v)| v.as_str());
+
+        if command_pick.is_none() {
+            return self.spawn_command_row(world, parent);
         }
+        if command_pick != Some(self.get_command_id()) {
+            return (Vec::new(), false);
+        }
+
+        // Step 1: pick the war.
+        let war_pick = choices
+            .iter()
+            .find(|(k, _)| k == "war_id")
+            .map(|(_, v)| v.clone());
+        if war_pick.is_none() {
+            return self.spawn_war_picker(world, parent);
+        }
+
+        // Step 2: pick the demand.
+        let demand_pick = choices
+            .iter()
+            .find(|(k, _)| k == "demand_idx")
+            .map(|(_, v)| v.clone());
+        if demand_pick.is_none() {
+            return self.spawn_demand_picker(world, parent, &war_pick.unwrap());
+        }
+
+        // Execute.
+        self.execute(world)
     }
 
-    fn execute(&self, choices: &[Choice], actor: &str, world: &mut World) {
-        let Some(war_id) = choices.get(0).map(|c| c.value.as_str()) else {
-            return;
-        };
-        let Some(demand_idx) = choices.get(1).map(|c| c.value.as_str()) else {
-            return;
-        };
-        enforce(world, actor, war_id, demand_idx);
+    fn update(&self, entity: Entity, is_selected: bool, world: &mut World) {
+        let bg = if is_selected { ROW_PANEL_SELECTED } else { ROW_PANEL };
+        if let Some(mut background) = world.get_mut::<BackgroundColor>(entity) {
+            background.0 = bg;
+        }
     }
 }
+
+impl EnforceDemands {
+    fn spawn_command_row(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
+        let row = self.spawn_row(world, parent, "Enforce Demands", None);
+        (vec![row], false)
+    }
+
+    fn spawn_war_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
+        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        // Snapshot the wars list.
+        let wars = player_wars(world, &actor);
+        let mut entities = Vec::new();
+        for (war_id, label) in wars {
+            let row = self.spawn_row(
+                world,
+                parent,
+                &label,
+                Some(("war_id".to_string(), war_id)),
+            );
+            entities.push(row);
+        }
+        (entities, false)
+    }
+
+    fn spawn_demand_picker(
+        &self,
+        world: &mut World,
+        parent: Entity,
+        war_id: &str,
+    ) -> (Vec<Entity>, bool) {
+        // Read the war's demands (or use a placeholder if the war is gone).
+        let war_e = world.resource::<Registry>().get(war_id);
+        let demands_label = match war_e.and_then(|e| world.get::<WarDemands>(e)) {
+            Some(wd) if !wd.0.is_empty() => wd
+                .0
+                .iter()
+                .enumerate()
+                .map(|(idx, d)| {
+                    let shape = match d.demand_type {
+                        WarDemandType::Take => "Take",
+                    };
+                    let target_label = world
+                        .get::<KingdomHold>(d.target)
+                        .and_then(|kh| world.get::<crate::ecs::LandName>(kh.0))
+                        .map(|ln| ln.0.clone())
+                        .unwrap_or_else(|| "?".into());
+                    (idx.to_string(), format!("{shape} Kingdom of {target_label}"))
+                })
+                .collect::<Vec<_>>(),
+            _ => Vec::new(),
+        };
+        let mut entities = Vec::new();
+        for (idx, label) in demands_label {
+            let row = self.spawn_row(
+                world,
+                parent,
+                &label,
+                Some(("demand_idx".to_string(), idx)),
+            );
+            entities.push(row);
+        }
+        (entities, false)
+    }
+
+    fn execute(&self, world: &mut World) -> (Vec<Entity>, bool) {
+        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let picks: Vec<(String, String)> =
+            world.resource::<CommandMenuUiContext>().choices.clone();
+        let war_id = picks
+            .iter()
+            .find(|(k, _)| k == "war_id")
+            .map(|(_, v)| v.clone())
+            .expect("execute reached without a war_id pick");
+        let demand_idx = picks
+            .iter()
+            .find(|(k, _)| k == "demand_idx")
+            .map(|(_, v)| v.clone())
+            .expect("execute reached without a demand_idx pick");
+        enforce(world, &actor, &war_id, &demand_idx);
+        (Vec::new(), true)
+    }
+
+    fn spawn_row(
+        &self,
+        world: &mut World,
+        parent: Entity,
+        title: &str,
+        key_value: Option<(String, String)>,
+    ) -> Entity {
+        let mut entity = world.spawn((
+            Node {
+                width: percent(100),
+                padding: UiRect::all(px(8)),
+                border: UiRect::all(px(1)),
+                border_radius: BorderRadius::all(px(4)),
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            BackgroundColor(ROW_PANEL),
+            BorderColor::all(ROW_BORDER),
+            ChildOf(parent),
+            CommandHasId(self.get_command_id().to_string()),
+        ));
+        if let Some((k, v)) = key_value {
+            entity.insert((CommandHasKey(k), CommandHasValue(v)));
+        }
+        let row = entity.id();
+        world.entity_mut(row).with_children(|c| {
+            c.spawn((
+                Text::new(title),
+                TextFont::from_font_size(16.0),
+                TextColor(Color::srgb(0.96, 0.96, 0.98)),
+            ));
+        });
+        row
+    }
+}
+/// Resolve one demand on a player's war.
+pub struct EnforceDemands;
+
 
 /// `(war_id, "<WarName>")` for every war any of the player's kingdoms
 /// is attacking in. Multi-kingdom: walks every kingdom the player leads
@@ -89,59 +231,21 @@ fn player_wars(world: &World, actor: &str) -> Vec<(String, String)> {
     };
     let mut out = Vec::new();
     for kingdom_e in character_leads.kingdoms() {
-        let Some(kingdom_has_wars) = world.get::<KingdomHasWarsAttacking>(*kingdom_e) else {
+        let Some(khwa) = world.get::<KingdomHasWarsAttacking>(*kingdom_e) else {
             continue;
         };
-        for war_e in kingdom_has_wars.iter() {
-            let Some(war_id) = world.get::<StringId>(war_e).map(|s| s.0.clone()) else {
+        for war_e in khwa.iter() {
+            let Some(war_id) = world.get::<crate::ecs::StringId>(war_e).map(|s| s.0.clone()) else {
                 continue;
             };
             let war_name = world
                 .get::<WarName>(war_e)
-                .map(|war_name| war_name.0.clone())
+                .map(|wn| wn.0.clone())
                 .unwrap_or_else(|| "?".into());
             out.push((war_id, war_name));
         }
     }
     out
-}
-
-/// One menu row per demand in the picked war's `WarDemands` list. The
-/// `value` is the demand's index in the list (string-encoded), the
-/// `label` is a human-readable shape like `"Take Kingdom of Riverrun"`.
-/// Empty demands list → empty step-1 menu, so the palette shows nothing
-/// and the player has to back out.
-fn war_demands(world: &World, choices: &[Choice]) -> Vec<MenuItem> {
-    let Some(war_id) = choices.get(0).map(|c| c.value.as_str()) else {
-        return Vec::new();
-    };
-    let Some(war_e) = world.resource::<Registry>().get(war_id) else {
-        return Vec::new();
-    };
-    let Some(w_demands) = world.get::<WarDemands>(war_e) else {
-        return Vec::new();
-    };
-    w_demands
-        .0
-        .iter()
-        .enumerate()
-        .map(|(idx, demand)| {
-            // Display label: shape + the target kingdom's land name (a
-            // kingdom has no name field; its held land is its label).
-            let target_label = world
-                .get::<KingdomHold>(demand.target)
-                .and_then(|kingdom_hold| world.get::<LandName>(kingdom_hold.0))
-                .map(|land_name| land_name.0.clone())
-                .unwrap_or_else(|| "?".into());
-            let shape_label = match demand.demand_type {
-                crate::ecs::WarDemandType::Take => "Take",
-            };
-            MenuItem {
-                label: format!("{shape_label} Kingdom of {target_label}"),
-                value: idx.to_string(),
-            }
-        })
-        .collect()
 }
 
 /// Resolve the picked demand. `Take` only succeeds if the target

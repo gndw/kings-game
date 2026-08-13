@@ -18,65 +18,176 @@
 //! name of its held land (the convention everywhere else in the codebase
 //! — a kingdom's seat is its single land).
 
-use super::core::{Choice, Command, MenuItem, next_id, note};
+use super::core::{next_id, note, BaseCommand};
 use crate::ecs::{
     CharacterLeads, Kingdom, KingdomHold, LandName, Registry, StringId, War, WarAttackerKingdom,
     WarBeginDate, WarCasusBelliType, WarDefenderKingdom, WarDemand, WarDemandType, WarDemands,
     WarName,
 };
+use crate::app::Game;
 use crate::resources::date::Date;
+use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue, CommandMenuUiContext};
 use bevy::ecs::world::World;
+use bevy::prelude::*;
 
 /// Declare war on a kingdom under a casus belli.
-pub struct DeclareWar;
 
-impl Command for DeclareWar {
-    fn name(&self) -> &str {
-        "Declare War"
+// --- palette UI -------------------------------------------------------------
+// Same shape as the other commands: a single padded card whose title text
+// is the command's display name. The shared `update` swaps the background
+// between `ROW_PANEL` and `ROW_PANEL_SELECTED`.
+
+/// Per-row background in the palette.
+const ROW_PANEL: Color = Color::srgb(0.16, 0.16, 0.20);
+/// Background when the row is the player's selection.
+const ROW_PANEL_SELECTED: Color = Color::srgb(0.24, 0.40, 0.72);
+/// Hairline border around the card.
+const ROW_BORDER: Color = Color::srgba(0.55, 0.55, 0.62, 0.35);
+
+impl BaseCommand for DeclareWar {
+    fn get_command_id(&self) -> &'static str {
+        "command:declare_war"
     }
 
-    fn step_count(&self) -> usize {
-        2
-    }
-
-    fn step_title(&self, step: usize) -> &str {
-        match step {
-            0 => "Select a target kingdom",
-            _ => "Select a casus belli",
-        }
-    }
-
-    fn step_items(
+    fn spawn_command(
         &self,
-        step: usize,
-        _choices: &[Choice],
-        actor: &str,
-        world: &World,
-    ) -> Vec<MenuItem> {
-        match step {
-            0 => other_kingdoms(world, actor)
-                .into_iter()
-                .map(|(id, label)| MenuItem { label, value: id })
-                .collect(),
-            // Only one CB type exists today. Listed by stable id so a future
-            // CB enum variant is additive — add a row, no other code changes.
-            _ => vec![MenuItem {
-                label: "Conquest (seize their land)".to_string(),
-                value: "conquest".to_string(),
-            }],
+        world: &mut World,
+        parent: Entity,
+        choices: &[(String, String)],
+    ) -> (Vec<Entity>, bool) {
+        let command_pick = choices
+            .iter()
+            .find(|(k, _)| k == "command")
+            .map(|(_, v)| v.as_str());
+
+        if command_pick.is_none() {
+            return self.spawn_command_row(world, parent);
         }
+        if command_pick != Some(self.get_command_id()) {
+            return (Vec::new(), false);
+        }
+
+        // Step 1: pick defender kingdom.
+        let defender_pick = choices
+            .iter()
+            .find(|(k, _)| k == "defender_id")
+            .map(|(_, v)| v.clone());
+        if defender_pick.is_none() {
+            return self.spawn_defender_picker(world, parent);
+        }
+
+        // Step 2: pick casus belli.
+        let cb_pick = choices
+            .iter()
+            .find(|(k, _)| k == "cb_id")
+            .map(|(_, v)| v.clone());
+        if cb_pick.is_none() {
+            return self.spawn_cb_picker(world, parent);
+        }
+
+        // Execute: both picks present.
+        self.execute(world)
     }
 
-    fn execute(&self, choices: &[Choice], actor: &str, world: &mut World) {
-        let Some(defender_id) = choices.get(0).map(|c| c.value.as_str()) else {
-            return;
-        };
-        let Some(cb_id) = choices.get(1).map(|c| c.value.as_str()) else {
-            return;
-        };
-        declare(world, actor, defender_id, cb_id);
+    fn update(&self, entity: Entity, is_selected: bool, world: &mut World) {
+        let bg = if is_selected { ROW_PANEL_SELECTED } else { ROW_PANEL };
+        if let Some(mut background) = world.get_mut::<BackgroundColor>(entity) {
+            background.0 = bg;
+        }
     }
 }
+
+impl DeclareWar {
+    fn spawn_command_row(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
+        let row = self.spawn_row(world, parent, "Declare War", None);
+        (vec![row], false)
+    }
+
+    fn spawn_defender_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
+        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        // Snapshot the picker result so the immutable borrows drop.
+        let others = other_kingdoms(world, &actor);
+        let mut entities = Vec::new();
+        for (def_id, label) in others {
+            let row = self.spawn_row(
+                world,
+                parent,
+                &label,
+                Some(("defender_id".to_string(), def_id)),
+            );
+            entities.push(row);
+        }
+        (entities, false)
+    }
+
+    fn spawn_cb_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
+        // Only one CB exists today.
+        let row = self.spawn_row(
+            world,
+            parent,
+            "Conquest (seize their land)",
+            Some((
+                "cb_id".to_string(),
+                "conquest".to_string(),
+            )),
+        );
+        (vec![row], false)
+    }
+
+    fn execute(&self, world: &mut World) -> (Vec<Entity>, bool) {
+        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let picks: Vec<(String, String)> =
+            world.resource::<CommandMenuUiContext>().choices.clone();
+        let defender_id = picks
+            .iter()
+            .find(|(k, _)| k == "defender_id")
+            .map(|(_, v)| v.clone())
+            .expect("execute reached without a defender_id pick");
+        let cb_id = picks
+            .iter()
+            .find(|(k, _)| k == "cb_id")
+            .map(|(_, v)| v.clone())
+            .expect("execute reached without a cb_id pick");
+        declare(world, &actor, &defender_id, &cb_id);
+        (Vec::new(), true)
+    }
+
+    fn spawn_row(
+        &self,
+        world: &mut World,
+        parent: Entity,
+        title: &str,
+        key_value: Option<(String, String)>,
+    ) -> Entity {
+        let mut entity = world.spawn((
+            Node {
+                width: percent(100),
+                padding: UiRect::all(px(8)),
+                border: UiRect::all(px(1)),
+                border_radius: BorderRadius::all(px(4)),
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            BackgroundColor(ROW_PANEL),
+            BorderColor::all(ROW_BORDER),
+            ChildOf(parent),
+            CommandHasId(self.get_command_id().to_string()),
+        ));
+        if let Some((k, v)) = key_value {
+            entity.insert((CommandHasKey(k), CommandHasValue(v)));
+        }
+        let row = entity.id();
+        world.entity_mut(row).with_children(|c| {
+            c.spawn((
+                Text::new(title),
+                TextFont::from_font_size(16.0),
+                TextColor(Color::srgb(0.96, 0.96, 0.98)),
+            ));
+        });
+        row
+    }
+}
+pub struct DeclareWar;
 
 /// `(kingdom_id, "<land_name>")` for every kingdom in the world except
 /// the actor's. Multi-kingdom: any of the actor's kingdoms counts as

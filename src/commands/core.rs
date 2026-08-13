@@ -1,40 +1,38 @@
-//! The player-command abstraction + the registry the palette drives, plus the
-//! shared helpers every command reaches for (a fresh id, a chronicle line, the
-//! "lands this actor rules" walk).
+//! Shared helpers every command reaches for: a fresh id, a chronicle line,
+//! the "lands this actor rules" walk, and the building-levy pool operations
+//! the raise / dismiss pair share.
 //!
-//! A [`Command`] is self-describing: it owns its rules (validation), its UI (a
-//! fixed run of selection [`steps`](Command::step_items)), and its effect
-//! ([`execute`](Command::execute)). The command palette
-//! ([`crate::ui::command_menu`]) drives the steps generically — it knows nothing
-//! about any concrete command — so adding a command is a new struct + a line in
-//! [`CommandRegistry::default`], not edits to the palette.
+//! Also owns the [`BaseCommand`] trait every command file implements and
+//! the [`spawn_command`] orchestrator the v2 palette calls to populate
+//! the panel. For now only [`ConstructBuilding`](crate::commands::construct_building::ConstructBuilding)
+//! adopts the trait; the others come in turn.
 
-use std::sync::Arc;
+use bevy::ecs::entity::Entity;
+use bevy::ecs::world::World;
 
-use super::construct_building::ConstructBuilding;
-use super::declare_war::DeclareWar;
-use super::destroy_building::DestroyBuilding;
-use super::dismiss_army::DismissArmy;
-use super::enforce_demands::EnforceDemands;
-use super::lay_siege::LaySiege;
-use super::marching::MarchingOrder;
-use super::raise_army::RaiseArmy;
 use crate::app::Game;
+use crate::commands::construct_building::ConstructBuilding;
+use crate::commands::dismiss_army::DismissArmy;
+use crate::commands::enforce_demands::EnforceDemands;
+use crate::commands::lay_siege::LaySiege;
+use crate::commands::marching::MarchingOrder;
+use crate::commands::raise_army::RaiseArmy;
+use crate::commands::declare_war::DeclareWar;
+use crate::commands::destroy_building::DestroyBuilding;
 use crate::ecs::{
     BuildingIsRaised, BuildingLevy, BuildingOf, BuildingStatus, CharacterLeads, KingdomHold,
     LandHasBuildings, LandHeldBy, LandName, Registry, StringId,
 };
 use crate::resources::buildings::BuildingDefs;
 use crate::resources::chronicle::Chronicles;
-use bevy::ecs::entity::Entity;
-use bevy::ecs::world::World;
 use bevy::prelude::RelationshipTarget;
 use bevy::prelude::Resource;
+use bevy::prelude::With;
 use rand::TryRng;
 
 /// One selectable row in a command's step list. `label` is what the player
-/// sees; `value` is the id the command reads back in a later step or in
-/// [`execute`](Command::execute).
+/// sees; `value` is the id the command reads back in a later step or in the
+/// command's effect.
 pub struct MenuItem {
     pub label: String,
     pub value: String,
@@ -47,75 +45,181 @@ pub struct Choice {
     pub value: String,
 }
 
-/// A player command: *what* to do, self-describing its own UI.
-///
-/// A command is a fixed run of selection steps (step `0` → … →
-/// `step_count() - 1`); the last step's pick runs
-/// [`execute`](Command::execute). Each step's items come from the world and the
-/// choices made so far, so a later step can depend on an earlier one (e.g. the
-/// buildings standing on the land picked at step 0).
-///
-/// The actor (a character id) is *who* the command runs for — the player today,
-/// an AI/replay peer later — and is passed to both [`step_items`] and
-/// [`execute`] so a command never assumes it is the player.
-///
-/// [`step_items`]: Command::step_items
-pub trait Command: Send + Sync {
-    /// Display name on the top-level command list.
-    fn name(&self) -> &str;
-
-    /// Window title while `step` (0-indexed) is showing.
-    fn step_title(&self, step: usize) -> &str;
-
-    /// How many selection steps before [`execute`](Command::execute) runs.
-    fn step_count(&self) -> usize;
-
-    /// The selectable items for `step`, given the choices made at earlier steps
-    /// and a read-only world snapshot.
-    fn step_items(
+/// The uniform interface every player command implements. Each command
+/// file supplies its own UI, so the palette orchestrator ([`spawn_command`])
+/// can drive every command through this surface without knowing the
+/// concrete struct. The command is responsible for returning the entities
+/// it spawned so the palette can track and despawn them, and for re-styling
+/// each row in response to selection.
+pub trait BaseCommand: Send + Sync {
+    /// Stable, unique string id for the command (e.g.
+    /// `"command:construct_building"`). Stored alongside the command
+    /// instance in [`CommandEntry`] so the orchestrator + future
+    /// selection / dispatch layer can look the command up by name.
+    fn get_command_id(&self) -> &'static str;
+    /// Spawn the command's UI into the palette's list panel. `parent` is
+    /// the list entity — the command should `ChildOf` its row to it and
+    /// add whatever child `Text` / `Node` elements the command wants.
+    /// Each command decides its own visual layout so the panel can host a
+    /// heterogeneous set of pickers.
+    ///
+    /// Returns a `(entities, is_executed)` pair:
+    /// - `entities`: every entity the command spawned (in display order),
+    ///   so the palette can despawn them on close and resolve a click
+    ///   back to a row.
+    /// - `is_executed`: `true` when the player's running choices already
+    ///   carry enough information for this command to act on (e.g. a
+    ///   `construct_building` that has both a land pick and a building
+    ///   pick). The orchestrator uses this to decide whether to close
+    ///   the panel.
+    ///
+    /// `choices` is the player's running selection list
+    /// (`(key, value)` pairs, e.g. `("command", "command:construct_building")`).
+    /// The command inspects it to decide what to show: no `"command"` key
+    /// means first time / fresh, a matching key means the command is the
+    /// current pick, a non-matching key means another command was picked.
+    fn spawn_command(
         &self,
-        step: usize,
-        choices: &[Choice],
-        actor: &str,
-        world: &World,
-    ) -> Vec<MenuItem>;
-
-    /// Run the effect. `choices` has one entry per step. Validate here too — a
-    /// chronicle line on rejection is the convention (see construct/destroy).
-    fn execute(&self, choices: &[Choice], actor: &str, world: &mut World);
+        world: &mut World,
+        parent: Entity,
+        choices: &[(String, String)],
+    ) -> (Vec<Entity>, bool);
+    /// Re-style one of the entities the command previously spawned.
+    /// `entity` is expected to be one of the entities returned by the
+    /// last call to `spawn_command` for this command. `is_selected`
+    /// indicates whether the palette's cursor is currently on this row;
+    /// the command decides what that visually means (background swap,
+    /// border, glow).
+    fn update(&self, entity: Entity, is_selected: bool, world: &mut World);
 }
 
-/// The roster of commands the palette offers. Held as a resource so the palette
-/// is driven by *what's registered*, not a hardcoded list — adding a command is
-/// a new [`Command`] struct + a [`register`](Self::register) line, no palette
-/// edits, and a mod/plugin could push its own before `App::run`.
+/// One entry in [`CommandContext`]: a stable id paired with the
+/// [`BaseCommand`] instance it labels. `id` mirrors what
+/// [`BaseCommand::get_command_id`] returns at runtime, captured at
+/// [`startup`] so the orchestrator and any future dispatch layer can
+/// match by name without holding a borrow on the command struct.
+pub struct CommandEntry {
+    pub id: &'static str,
+    pub cmd: &'static dyn BaseCommand,
+}
+
+/// Runtime roster of every command the palette can surface. Populated by
+/// [`startup`] from the concrete command structs and read by [`spawn_command`]
+/// and [`update`]. Replaces the old `const COMMANDS` table so the roster
+/// can grow without touching the orchestrator.
+#[derive(Resource, Default)]
+pub struct CommandContext {
+    pub commands: Vec<CommandEntry>,
+}
+
+pub fn startup(world: &mut World) {
+    let commands = vec![
+        CommandEntry {
+            id: ConstructBuilding.get_command_id(),
+            cmd: &ConstructBuilding,
+        },
+        CommandEntry {
+            id: DestroyBuilding.get_command_id(),
+            cmd: &DestroyBuilding,
+        },
+        CommandEntry {
+            id: RaiseArmy.get_command_id(),
+            cmd: &RaiseArmy,
+        },
+        CommandEntry {
+            id: DismissArmy.get_command_id(),
+            cmd: &DismissArmy,
+        },
+        CommandEntry {
+            id: MarchingOrder.get_command_id(),
+            cmd: &MarchingOrder,
+        },
+        CommandEntry {
+            id: DeclareWar.get_command_id(),
+            cmd: &DeclareWar,
+        },
+        CommandEntry {
+            id: LaySiege.get_command_id(),
+            cmd: &LaySiege,
+        },
+        CommandEntry {
+            id: EnforceDemands.get_command_id(),
+            cmd: &EnforceDemands,
+        },
+    ];
+    world.insert_resource(CommandContext { commands });
+}
+
+/// One row in the runtime command roster: a stable id paired with a
+/// reference to the [`BaseCommand`] instance it labels. The
+/// orchestrator ([`spawn_command`]) iterates this list at spawn time.
+/// Adding a new command is one line in [`startup`] — the spawn path
+/// picks it up automatically.
+
+/// Orchestrator: find the panel's list and let every entry in
+/// [`CommandContext`] spawn its own UI into it. Returns
+/// `(entities, is_executed)`. `entities` is the flat list of every
+/// entity every command produced, in roster order. `is_executed` is
+/// `true` if any of those commands reported it had enough information
+/// in `choices` to act (e.g. a `construct_building` with both a land
+/// pick and a building pick); the caller uses it to decide whether to
+/// close the panel.
 ///
-/// `Arc<dyn Command>` so the palette can hand a command to `execute` (which
-/// needs `&mut World`) without holding the registry's borrow.
-#[derive(Resource)]
-pub struct CommandRegistry {
-    pub commands: Vec<Arc<dyn Command>>,
-}
-
-impl Default for CommandRegistry {
-    fn default() -> Self {
-        let mut r = CommandRegistry { commands: Vec::new() };
-        r.register(Arc::new(ConstructBuilding));
-        r.register(Arc::new(DestroyBuilding));
-        r.register(Arc::new(RaiseArmy));
-        r.register(Arc::new(DismissArmy));
-        r.register(Arc::new(MarchingOrder));
-        r.register(Arc::new(DeclareWar));
-        r.register(Arc::new(LaySiege));
-        r.register(Arc::new(EnforceDemands));
-        r
+/// `choices` is forwarded to every command's
+/// [`BaseCommand::spawn_command`] so each row can decide what to show
+/// based on the player's running selection.
+pub fn spawn_command(
+    world: &mut World,
+    choices: &[(String, String)],
+) -> (Vec<Entity>, bool) {
+    let Some(list) = world
+        .query_filtered::<Entity, With<crate::ui::command_menu::CommandMenuUIList>>()
+        .iter(world)
+        .next()
+    else {
+        return (Vec::new(), false);
+    };
+    // Snapshot the cmd refs so the immutable borrow on `CommandContext`
+    // drops before we touch `world` mutably.
+    let cmds: Vec<&'static dyn BaseCommand> = world
+        .resource::<CommandContext>()
+        .commands
+        .iter()
+        .map(|e| e.cmd)
+        .collect();
+    let mut entities = Vec::new();
+    let mut any_executed = false;
+    for cmd in cmds {
+        let (spawned, executed) = cmd.spawn_command(world, list, choices);
+        entities.extend(spawned);
+        any_executed = any_executed || executed;
     }
+    (entities, any_executed)
 }
 
-impl CommandRegistry {
-    /// Register `cmd` at the end of the list.
-    pub fn register(&mut self, cmd: Arc<dyn Command>) {
-        self.commands.push(cmd);
+/// Re-style a single spawned entity to match the current selection
+/// state. The entity is expected to carry a
+/// [`CommandHasId`](crate::ui::command_menu::CommandHasId) (set by the
+/// spawning command); the orchestrator reads it, looks the command up
+/// in [`CommandContext`] by id, and delegates to that command's
+/// `update`. No-op for entities that aren't palette rows.
+pub fn update(entity: Entity, is_selected: bool, world: &mut World) {
+    let Some(command_id) = world
+        .get::<crate::ui::command_menu::CommandHasId>(entity)
+        .map(|c| c.0.clone())
+    else {
+        return;
+    };
+    // Snapshot the matched cmd so the `CommandContext` borrow drops
+    // before `cmd.update` takes `&mut World`.
+    let cmd: Option<&'static dyn BaseCommand> = world
+        .resource::<CommandContext>()
+        .commands
+        .iter()
+        .find(|e| e.id == command_id)
+        .map(|e| e.cmd);
+    if let Some(cmd) = cmd {
+        cmd.update(entity, is_selected, world);
     }
 }
 

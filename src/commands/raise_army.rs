@@ -13,56 +13,144 @@
 //! [`replenish_levy`](crate::game::replenish_levy::replenish) loop fills
 //! the pools back up over time.
 
-use super::core::{
-    available_levy, drain_buildings, ruled_lands, Choice, Command, MenuItem, next_id, note,
-};
+use super::core::{available_levy, drain_buildings, next_id, note, ruled_lands, BaseCommand};
+use crate::app::Game;
 use crate::ecs::army::{Army, ArmyBelongsToKingdom, ArmyLevy, ArmyName, ArmyOnLand, ArmyStatus};
 use crate::ecs::{
     CharacterLeads, CharacterOfHouse, HouseName, LandHeldBy, LandName, Registry, StringId,
 };
 use crate::events::{BuildingUpdateKind, OnArmyRaised, OnBuildingUpdated};
+use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue};
+use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
+use bevy::prelude::*;
+
+// --- palette UI -------------------------------------------------------------
+// Same shape as `construct_building`: a single padded card whose title
+// text is the command's display name. The shared `update` swaps the
+// background between `ROW_PANEL` and `ROW_PANEL_SELECTED`.
+
+/// Per-row background in the palette. One shade lighter than the panel.
+const ROW_PANEL: Color = Color::srgb(0.16, 0.16, 0.20);
+/// Background when the row is the player's selection.
+const ROW_PANEL_SELECTED: Color = Color::srgb(0.24, 0.40, 0.72);
+/// Hairline border around the card.
+const ROW_BORDER: Color = Color::srgba(0.55, 0.55, 0.62, 0.35);
 
 /// Raise an army on a land the actor rules.
 pub struct RaiseArmy;
 
-impl Command for RaiseArmy {
-    fn name(&self) -> &str {
-        "Raise Army"
+impl BaseCommand for RaiseArmy {
+    fn get_command_id(&self) -> &'static str {
+        "command:raise_army"
     }
 
-    fn step_count(&self) -> usize {
-        1
-    }
-
-    fn step_title(&self, step: usize) -> &str {
-        match step {
-            0 => "Select a land",
-            _ => "Select a land",
-        }
-    }
-
-    fn step_items(
+    fn spawn_command(
         &self,
-        _step: usize,
-        _choices: &[Choice],
-        actor: &str,
-        world: &World,
-    ) -> Vec<MenuItem> {
-        ruled_lands(world, actor)
-            .into_iter()
-            .map(|(id, name)| MenuItem {
-                label: name,
-                value: id,
-            })
-            .collect()
+        world: &mut World,
+        parent: Entity,
+        choices: &[(String, String)],
+    ) -> (Vec<Entity>, bool) {
+        let command_pick = choices
+            .iter()
+            .find(|(k, _)| k == "command")
+            .map(|(_, v)| v.as_str());
+
+        // No `"command"` key → render the command row.
+        if command_pick.is_none() {
+            let row = world
+                .spawn((
+                    Node {
+                        width: percent(100),
+                        padding: UiRect::all(px(8)),
+                        border: UiRect::all(px(1)),
+                        border_radius: BorderRadius::all(px(4)),
+                        flex_direction: FlexDirection::Column,
+                        ..default()
+                    },
+                    BackgroundColor(ROW_PANEL),
+                    BorderColor::all(ROW_BORDER),
+                    ChildOf(parent),
+                    CommandHasId(self.get_command_id().to_string()),
+                ))
+                .id();
+            world.entity_mut(row).with_children(|c| {
+                c.spawn((
+                    Text::new("Raise Army"),
+                    TextFont::from_font_size(16.0),
+                    TextColor(Color::srgb(0.96, 0.96, 0.98)),
+                ));
+            });
+            return (vec![row], false);
+        }
+
+        // Mismatch → skip.
+        if command_pick != Some(self.get_command_id()) {
+            return (Vec::new(), false);
+        }
+
+        // Step 1: render one row per land the player rules.
+        let land_pick = choices
+            .iter()
+            .find(|(k, _)| k == "land_id")
+            .map(|(_, v)| v.clone());
+        if land_pick.is_none() {
+            let actor = world
+                .resource::<Game>()
+                .ctx
+                .player_character_id
+                .clone();
+            let lands = ruled_lands(world, &actor);
+            let mut entities = Vec::new();
+            for (land_id, land_name) in lands {
+                let row = world
+                    .spawn((
+                        Node {
+                            width: percent(100),
+                            padding: UiRect::all(px(8)),
+                            border: UiRect::all(px(1)),
+                            border_radius: BorderRadius::all(px(4)),
+                            flex_direction: FlexDirection::Column,
+                            ..default()
+                        },
+                        BackgroundColor(ROW_PANEL),
+                        BorderColor::all(ROW_BORDER),
+                        ChildOf(parent),
+                        CommandHasId(self.get_command_id().to_string()),
+                        CommandHasKey("land_id".to_string()),
+                        CommandHasValue(land_id),
+                    ))
+                    .id();
+                world.entity_mut(row).with_children(|c| {
+                    c.spawn((
+                        Text::new(land_name),
+                        TextFont::from_font_size(16.0),
+                        TextColor(Color::srgb(0.96, 0.96, 0.98)),
+                    ));
+                });
+                entities.push(row);
+            }
+            return (entities, false);
+        }
+
+        // Execute: both picks present → call the existing function.
+        let actor = world
+            .resource::<Game>()
+            .ctx
+            .player_character_id
+            .clone();
+        let land_id = land_pick
+            .as_deref()
+            .expect("step 1 reached without a land_id pick");
+        raise(world, &actor, land_id);
+        (Vec::new(), true)
     }
 
-    fn execute(&self, choices: &[Choice], actor: &str, world: &mut World) {
-        let Some(land_id) = choices.first().map(|c| c.value.as_str()) else {
-            return;
-        };
-        raise(world, actor, land_id);
+    fn update(&self, entity: Entity, is_selected: bool, world: &mut World) {
+        let bg = if is_selected { ROW_PANEL_SELECTED } else { ROW_PANEL };
+        if let Some(mut background) = world.get_mut::<BackgroundColor>(entity) {
+            background.0 = bg;
+        }
     }
 }
 
@@ -102,13 +190,7 @@ fn raise(world: &mut World, actor: &str, land_id: &str) {
         .map(|land_name| land_name.0.clone())
         .unwrap_or_else(|| land_id.to_string());
 
-    // Pool gate: refuse when there's no `BuildingLevy` to draw from —
-    // either no ACTIVE buildings on the land, or every ACTIVE building's
-    // pool is `0` (a previous raise already drained them). Both
-    // `!has_levy` and `initial_levy == 0` are checked because
-    // `has_levy == true` doesn't guarantee a non-zero sum: an ACTIVE
-    // building still flags `has_levy` even when its pool is drained, so
-    // a guard on the sum itself is the real test.
+    // Pool gate: refuse when there's no `BuildingLevy` to draw from.
     let (initial_levy, has_levy) = available_levy(world, land_e);
     if !has_levy || initial_levy == 0 {
         return note(world, format!(
@@ -116,20 +198,15 @@ fn raise(world: &mut World, actor: &str, land_id: &str) {
         ));
     }
 
-    // Default army name: `<house> Army`, derived from the leader's house.
-    // Walk `actor → CharacterOfHouse → HouseName`. A leader with no house
-    // falls back to `"Army"` so the field is always populated (and the panel
-    // + map label never have to guess).
+    // Default army name: `<house> Army`.
     let army_name = world
         .get::<CharacterOfHouse>(actor_e)
-        .and_then(|coh| world.get::<HouseName>(coh.0))
-        .map(|hn| format!("{} Army", hn.0))
-        .unwrap_or_else(|| "Army".to_string());
+        
+            .and_then(|coh| world.get::<HouseName>(coh.0))
+            .map(|hn| format!("{} Army", hn.0))
+            .unwrap_or_else(|| "Army".to_string());
 
-    // Spawn the army bundle. Both `ArmyOnLand` and `ArmyBelongsToKingdom` are
-    // Bevy relationships; their hooks fill `LandHasArmies` and
-    // `KingdomHasArmies` synchronously, so any later same-frame reader sees
-    // authoritative data.
+    // Spawn the army bundle.
     let id = next_id(world);
     let eid = world
         .spawn((
@@ -139,19 +216,11 @@ fn raise(world: &mut World, actor: &str, land_id: &str) {
             ArmyLevy(initial_levy),
             ArmyOnLand(land_e),
             ArmyBelongsToKingdom(kingdom_e),
-            // New armies start idle. The marching tick flips this to
-            // `Marching` when activating the first scheduled marching in
-            // the queue (starts empty).
             ArmyStatus::Idle,
         ))
         .id();
     world.resource_mut::<Registry>().insert(id, eid);
 
-    // Drain every ACTIVE building's `BuildingLevy` to 0 and flag it. The
-    // spawn above is the source of truth for the new `ArmyLevy`; this
-    // keeps the per-building pool in lock-step. The returned list is the
-    // buildings that actually transitioned, so we can fire one
-    // `OnBuildingUpdated` per building below.
     let drained = drain_buildings(world, land_e);
 
     note(
@@ -159,12 +228,7 @@ fn raise(world: &mut World, actor: &str, land_id: &str) {
         format!("raised {army_name} on {land_name} ({initial_levy} levy)"),
     );
 
-    // Publish the per-army event so observers see authoritative
-    // `LandHasArmies` / `KingdomHasArmies` (the relationship hooks filled
-    // them when the bundle spawned above).
     world.trigger(OnArmyRaised { army: eid });
-    // Per-building state event: each drained building flipped its
-    // `BuildingIsRaised` flag.
     for b_e in drained {
         world.trigger(OnBuildingUpdated {
             building: b_e,

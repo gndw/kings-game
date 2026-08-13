@@ -29,7 +29,7 @@
 //! marching, moving the army, advancing to the next one in the queue).
 //! See [`crate::game::marching::tick`].
 
-use super::core::{Choice, Command, MenuItem, next_id, note};
+use super::core::{next_id, note, BaseCommand};
 use crate::ecs::army::{
     ArmyBelongsToKingdom, ArmyLevy, ArmyName, ArmyOnLand,
 };
@@ -40,10 +40,12 @@ use crate::ecs::marching::{
 };
 use crate::ecs::road::{Road, RoadBetweenLands};
 use crate::ecs::{CharacterLeads, LandName, Registry, StringId};
+use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue, CommandMenuUiContext};
+use crate::app::Game;
 use crate::game::marching::road_days;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
-use bevy::prelude::RelationshipTarget;
+use bevy::prelude::*;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 
@@ -55,49 +57,177 @@ use std::collections::VecDeque;
 /// between the army and the target.
 pub struct MarchingOrder;
 
-impl Command for MarchingOrder {
-    fn name(&self) -> &str {
-        "Marching Army"
+// --- palette UI -------------------------------------------------------------
+// Same shape as the other commands: a single padded card whose title text
+// is the command's display name. The shared `update` swaps the background
+// between `ROW_PANEL` and `ROW_PANEL_SELECTED`.
+
+/// Per-row background in the palette.
+const ROW_PANEL: Color = Color::srgb(0.16, 0.16, 0.20);
+/// Background when the row is the player's selection.
+const ROW_PANEL_SELECTED: Color = Color::srgb(0.24, 0.40, 0.72);
+/// Hairline border around the card.
+const ROW_BORDER: Color = Color::srgba(0.55, 0.55, 0.62, 0.35);
+
+impl BaseCommand for MarchingOrder {
+    fn get_command_id(&self) -> &'static str {
+        "command:marching_order"
     }
 
-    fn step_count(&self) -> usize {
-        2
-    }
-
-    fn step_title(&self, step: usize) -> &str {
-        match step {
-            0 => "Select an army",
-            _ => "Select a target land",
-        }
-    }
-
-    fn step_items(
+    fn spawn_command(
         &self,
-        step: usize,
-        _choices: &[Choice],
-        actor: &str,
-        world: &World,
-    ) -> Vec<MenuItem> {
-        match step {
-            0 => armies_under(world, actor)
-                .into_iter()
-                .map(|(id, label)| MenuItem { label, value: id })
-                .collect(),
-            _ => all_lands(world)
-                .into_iter()
-                .map(|(id, name)| MenuItem { label: name, value: id })
-                .collect(),
+        world: &mut World,
+        parent: Entity,
+        choices: &[(String, String)],
+    ) -> (Vec<Entity>, bool) {
+        let command_pick = choices
+            .iter()
+            .find(|(k, _)| k == "command")
+            .map(|(_, v)| v.as_str());
+
+        if command_pick.is_none() {
+            return self.spawn_command_row(world, parent);
         }
+        if command_pick != Some(self.get_command_id()) {
+            return (Vec::new(), false);
+        }
+
+        // Step 1: pick an army.
+        let army_pick = choices
+            .iter()
+            .find(|(k, _)| k == "army_id")
+            .map(|(_, v)| v.clone());
+        if army_pick.is_none() {
+            return self.spawn_army_picker(world, parent);
+        }
+
+        // Step 2: pick a target land.
+        let target_pick = choices
+            .iter()
+            .find(|(k, _)| k == "target_id")
+            .map(|(_, v)| v.clone());
+        if target_pick.is_none() {
+            return self.spawn_target_picker(world, parent);
+        }
+
+        // Execute: both picks present.
+        self.execute(world)
     }
 
-    fn execute(&self, choices: &[Choice], actor: &str, world: &mut World) {
-        let Some(army_id) = choices.get(0).map(|c| c.value.as_str()) else {
-            return;
-        };
-        let Some(target_id) = choices.get(1).map(|c| c.value.as_str()) else {
-            return;
-        };
-        march(world, actor, army_id, target_id);
+    fn update(&self, entity: Entity, is_selected: bool, world: &mut World) {
+        let bg = if is_selected { ROW_PANEL_SELECTED } else { ROW_PANEL };
+        if let Some(mut background) = world.get_mut::<BackgroundColor>(entity) {
+            background.0 = bg;
+        }
+    }
+}
+
+impl MarchingOrder {
+    fn spawn_command_row(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
+        let row = self
+            .spawn_row(
+                world,
+                parent,
+                "Marching Army",
+                None,
+                None,
+            );
+        (vec![row], false)
+    }
+
+    fn spawn_army_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
+        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let armies = armies_under(world, &actor);
+        let mut entities = Vec::new();
+        for (army_id, label) in armies {
+            let row = self.spawn_row(
+                world,
+                parent,
+                &label,
+                Some(("army_id".to_string(), army_id)),
+                None,
+            );
+            entities.push(row);
+        }
+        (entities, false)
+    }
+
+    fn spawn_target_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
+        let lands = all_lands(world);
+        let mut entities = Vec::new();
+        for (land_id, name) in lands {
+            let row = self.spawn_row(
+                world,
+                parent,
+                &name,
+                Some(("target_id".to_string(), land_id)),
+                None,
+            );
+            entities.push(row);
+        }
+        (entities, false)
+    }
+
+    fn execute(&self, world: &mut World) -> (Vec<Entity>, bool) {
+        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let picks: Vec<(String, String)> = world
+            .resource::<CommandMenuUiContext>()
+            .choices
+            .clone();
+        let army_id = picks
+            .iter()
+            .find(|(k, _)| k == "army_id")
+            .map(|(_, v)| v.clone())
+            .expect("execute reached without an army_id pick");
+        let target_id = picks
+            .iter()
+            .find(|(k, _)| k == "target_id")
+            .map(|(_, v)| v.clone())
+            .expect("execute reached without a target_id pick");
+        march(world, &actor, &army_id, &target_id);
+        (Vec::new(), true)
+    }
+
+    /// Helper: spawn a single styled row with optional `CommandHasKey` /
+    /// `CommandHasValue` attached. Used by the command / army / target
+    /// pickers above.
+    fn spawn_row(
+        &self,
+        world: &mut World,
+        parent: Entity,
+        title: &str,
+        key_value: Option<(String, String)>,
+        _unused: Option<Entity>,
+    ) -> Entity {
+        let mut entity = world.spawn((
+            Node {
+                width: percent(100),
+                padding: UiRect::all(px(8)),
+                border: UiRect::all(px(1)),
+                border_radius: BorderRadius::all(px(4)),
+                flex_direction: FlexDirection::Column,
+                ..default()
+            },
+            BackgroundColor(ROW_PANEL),
+            BorderColor::all(ROW_BORDER),
+            ChildOf(parent),
+            CommandHasId(self.get_command_id().to_string()),
+        ));
+        if let Some((k, v)) = key_value {
+            entity.insert((
+                CommandHasKey(k),
+                CommandHasValue(v),
+            ));
+        }
+        let row = entity.id();
+        world.entity_mut(row).with_children(|c| {
+            c.spawn((
+                Text::new(title),
+                TextFont::from_font_size(16.0),
+                TextColor(Color::srgb(0.96, 0.96, 0.98)),
+            ));
+        });
+        row
     }
 }
 

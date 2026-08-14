@@ -167,22 +167,22 @@ fn main() -> Result<()> {
         )
         .add_systems(
             FixedUpdate,
-            game::advancing_date::advance.run_if(|g: Res<Game>| g.running()),
+            game::advancing_date::tick.run_if(|g: Res<Game>| g.running()),
         )
         .add_systems(
             OnDay,
             (
-                game::constructing::construction,
-                game::marching::tick,
+                game::constructing::on_day,
+                game::marching::on_day,
                 game::raising_army::on_day,
-                game::besieging::tick,
+                game::besieging::on_day,
             ),
         )
         .add_systems(
             OnMonth,
             (
-                game::paying_out::payout,
-                game::replenishing_levy::replenish,
+                game::paying_out::on_month,
+                game::replenishing_levy::on_month,
             ),
         )
         .run();

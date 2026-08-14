@@ -16,7 +16,7 @@ const EVENT_INTERVAL_DAYS: u32 = 10;
 const EVENT_PROGRESS_GAIN: u32 = 30;
 
 /// Resolve every siege whose event date is today. One exclusive pass per day.
-pub fn tick(world: &mut World) {
+pub fn on_day(world: &mut World) {
     let calendar = world.resource::<Calendar>().clone();
     let today = *world.resource::<Date>();
     let today_ord = today.ordinal(&calendar);

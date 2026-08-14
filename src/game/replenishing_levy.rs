@@ -1,7 +1,7 @@
 //! Monthly levy replenishment: every ACTIVE building's `BuildingLevy` pool
 //! grows by its def's `levy_rate`, capped at the def's `levy`.
 //!
-//! Runs on the `OnMonth` schedule from [`crate::game::advancing_date::advance`],
+//! Runs on the `OnMonth` schedule from [`crate::game::advancing_date::tick`],
 //! so a building with `levy_rate: 1` and `levy: 50` reaches a full pool in
 //! 50 in-game months after the previous raise. Buildings whose levy is
 //! currently sitting in an army (`BuildingIsRaised = true`) are skipped —
@@ -21,7 +21,7 @@ use bevy::ecs::world::World;
 /// def's `levy_rate`, capped at the def's `levy`. A raised building
 /// (`BuildingIsRaised == true`) is left alone — its pool is currently in an
 /// army and won't refill until the army is dismissed.
-pub fn replenish(world: &mut World) {
+pub fn on_month(world: &mut World) {
     // Pass 1: collect `(entity, def_id)` for every ACTIVE, non-raised
     // building. The query borrows world mutably, so the def lookup happens
     // in pass 2 (immutable borrow) before the mutation in pass 3 reborrows

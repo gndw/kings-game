@@ -210,10 +210,18 @@ code touches.
   `paying_out` (from "pay out"), not `payouting`. Ugly English, but
   the only honest gerund.
 - **Archaisms:** "siege" as a verb is archaic — use `besieging`.
-- **Function names don't have to match.** `pub fn age` in `aging.rs`,
-  `pub fn payout` in `paying_out.rs`, etc. The function name describes
-  what the call computes; the file name describes the ongoing action.
-  Two different roles, two different names.
+- **Function names follow how the system is invoked.**
+  - Schedule-driven systems name their entry point after the schedule
+    that runs them: `advancing_date::tick` (`FixedUpdate`),
+    `constructing::on_day`, `marching::on_day`, `besieging::on_day`,
+    `paying_out::on_month`, `replenishing_levy::on_month`. The function
+    name tells you where it fires without reading the registration.
+  - Observer-driven systems keep the `on_<event>` name
+    (`yielding::on_building_updated`, `building_releasing::*`,
+    `court_releasing::*`).
+  - Pure helpers keep a name that describes what the call computes —
+    `aging::age` derives an age, `marching::road_days` returns a
+    duration. They have no schedule; naming them after one would lie.
 - **Scope is `src/game/` only.** Other layers hold nouns by design
   (entities, commands, resources). The gerund rule is a fit for
   scheduled-tick modules; forcing it elsewhere would mis-name code

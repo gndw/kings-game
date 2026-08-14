@@ -10,7 +10,7 @@ use bevy::prelude::*;
 /// the date rolls back to 1 (a month boundary) it also runs the [`OnMonth`]
 /// schedule, which holds the monthly payout. Exclusive so it can
 /// `run_schedule`, which needs `&mut World`.
-pub fn advance(world: &mut World) {
+pub fn tick(world: &mut World) {
     let (days_per_month, months_per_year) = {
         let calendar = world.resource::<Calendar>();
         (calendar.days_per_month, calendar.months_per_year)

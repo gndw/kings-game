@@ -1,9 +1,9 @@
 //! Per-day construction completion: any building whose status is `BUILDING`
 //! and whose `BuildingConstructionDate` has been reached flips to `ACTIVE`.
 //!
-//! Runs on the `OnDay` schedule from [`crate::game::advancing_date::advance`],
+//! Runs on the `OnDay` schedule from [`crate::game::advancing_date::tick`],
 //! so a building placed today with `construction_time = 5` finishes at the
-//! start of day 6 (advance already moved the date there).
+//! start of day 6 (tick already moved the date there).
 //!
 //! ponytail: two queries (`BUILDING` rows; the transition list) instead of one
 //! mutable query + a side list — turns what could be a "mut-during-iter"
@@ -21,7 +21,7 @@ use bevy::ecs::world::World;
 /// `ACTIVE`, drop the now-stale `BuildingConstructionDate`, append a
 /// chronicle line, and fire the per-kingdom yield observer so the realm's
 /// `CharacterGoldYield` / `CharacterLevy` pick up the new contribution.
-pub fn construction(world: &mut World) {
+pub fn on_day(world: &mut World) {
     let (calendar, today) = {
         let c = world.resource::<Calendar>();
         let d = *world.resource::<Date>();

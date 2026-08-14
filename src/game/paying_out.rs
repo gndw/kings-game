@@ -9,7 +9,7 @@ use bevy::prelude::*;
 /// [`crate::ecs::KingdomLedBy`]) earn; a leader whose yield is zero pays
 /// nothing (`gold += 0`), and a negative yield deepens debt with no floor.
 /// Runs in the [`crate::schedules::OnMonth`] schedule, fired on month rollover.
-pub fn payout(
+pub fn on_month(
     mut character_leads: Query<
         (&mut CharacterGold, &CharacterGoldYield),
         With<CharacterLeads>,

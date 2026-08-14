@@ -2,7 +2,7 @@
 //! armies to another land. Armies travel by road, one marching per road.
 //!
 //! Two steps: pick an army (any army under the actor's kingdom), pick a target
-//! land. The daily `game::marching::tick` does the actual lifting.
+//! land. The daily `game::marching::on_day` does the actual lifting.
 
 use super::core::{
     army_status_text, error, next_id, picker_row, set_row_selected, BaseCommand, NAME_COLOR,

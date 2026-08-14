@@ -25,7 +25,7 @@ pub fn road_days(world: &World, road_e: Entity) -> Option<u32> {
 /// Walk every army once: idle armies get their first matching scheduled
 /// marching activated; marching armies that have arrived get moved onto the
 /// target land and either chain or stand down.
-pub fn tick(world: &mut World) {
+pub fn on_day(world: &mut World) {
     let (calendar, today) = {
         let c = world.resource::<Calendar>();
         let d = *world.resource::<Date>();
@@ -111,7 +111,7 @@ pub fn tick(world: &mut World) {
                     continuing,
                 });
             }
-            // Sieging armies are owned by `game::besieging::tick`.
+            // Sieging armies are owned by `game::besieging::on_day`.
             ArmyStatus::Sieging => {}
         }
     }

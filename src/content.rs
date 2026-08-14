@@ -25,6 +25,9 @@ pub struct Content {
     pub buildings: IndexMap<String, Building>,
     pub houses: IndexMap<String, House>,
     pub characters: IndexMap<String, Character>,
+    /// Family ties between characters: parent↔child and spouse↔spouse.
+    /// Definition-only — these don't change in play.
+    pub families: IndexMap<String, Family>,
     /// Realms. Wholly state — arrives only via the state overlay.
     pub kingdoms: IndexMap<String, Kingdom>,
     pub courtiers: IndexMap<String, Courtier>,
@@ -43,6 +46,7 @@ impl Default for Content {
             buildings: IndexMap::new(),
             houses: IndexMap::new(),
             characters: IndexMap::new(),
+            families: IndexMap::new(),
             kingdoms: IndexMap::new(),
             courtiers: IndexMap::new(),
             roads: IndexMap::new(),
@@ -69,6 +73,8 @@ pub struct ContentFile {
     #[serde(default)]
     pub characters: Vec<Character>,
     #[serde(default)]
+    pub families: Vec<Family>,
+    #[serde(default)]
     pub roads: Vec<Road>,
 }
 
@@ -92,6 +98,9 @@ impl Content {
         }
         for character in file.characters {
             self.characters.insert(character.id.clone(), character);
+        }
+        for family in file.families {
+            self.families.insert(family.id.clone(), family);
         }
         for road in file.roads {
             self.roads.insert(road.id.clone(), road);
@@ -121,6 +130,38 @@ pub struct Land {
 pub struct House {
     pub id: String,
     pub name: String,
+}
+
+/// A family tie between characters — either a parent/child link or a marriage.
+/// One entry per relation, not per household; many entries together describe a
+/// family's tree.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Family {
+    pub id: String,
+    /// Discriminates the entry's shape: `Family` for parent/child links,
+    /// `Marriage` for spousal links.
+    #[serde(rename = "type")]
+    pub family_type: FamilyType,
+    // Family-type fields (parent/child link).
+    #[serde(default)]
+    pub child_character_id: String,
+    #[serde(default)]
+    pub father_character_id: String,
+    #[serde(default)]
+    pub mother_character_id: String,
+    // Marriage-type fields (spousal link).
+    #[serde(default)]
+    pub husband_character_id: String,
+    #[serde(default)]
+    pub wife_character_id: String,
+}
+
+/// Discriminator for [`Family`] entries.
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+pub enum FamilyType {
+    Family,
+    Marriage,
 }
 
 /// One character: definition (name/house) + state (numbers). State fields default
@@ -229,6 +270,25 @@ pub fn validate(content: &Content) -> Result<()> {
                 c.id,
                 c.house_id
             );
+        }
+    }
+    for (_, f) in &content.families {
+        let check_char = |label: &str, id: &str| -> Result<()> {
+            if !content.characters.contains_key(id) {
+                bail!("family `{}` {} references unknown character `{id}`", f.id, label);
+            }
+            Ok(())
+        };
+        match f.family_type {
+            FamilyType::Family => {
+                check_char("child", &f.child_character_id)?;
+                check_char("father", &f.father_character_id)?;
+                check_char("mother", &f.mother_character_id)?;
+            }
+            FamilyType::Marriage => {
+                check_char("husband", &f.husband_character_id)?;
+                check_char("wife", &f.wife_character_id)?;
+            }
         }
     }
     for (_, r) in &content.roads {

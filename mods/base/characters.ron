@@ -3,19 +3,56 @@
 // the house.
 //
 // Ages and treasuries change in play, so they are state: start.state.ron.
+//
+// Family ties (parent↔child, husband↔wife) live in families.ron.
 (
     characters: [
-        (id: "char-leyton",  name: "Leyton",  house_id: "house-hightower", sex: "m"),
-        (id: "char-alerie",  name: "Alerie",  house_id: "house-hightower", sex: "f"),
-        (id: "char-tywin",   name: "Tywin",   house_id: "house-lannister", sex: "m"),
-        (id: "char-jaime",   name: "Jaime",   house_id: "house-lannister", sex: "m"),
-        (id: "char-jon",     name: "Jon",     house_id: "house-arryn",     sex: "m"),
-        (id: "char-lysa",    name: "Lysa",    house_id: "house-arryn",     sex: "f"),
-        (id: "char-minisa",  name: "Minisa",  house_id: "house-tully",     sex: "f"),
-        (id: "char-edmure",  name: "Edmure",  house_id: "house-tully",     sex: "m"),
-        (id: "char-olenna",  name: "Olenna",  house_id: "house-tyrell",    sex: "f"),
-        (id: "char-mace",    name: "Mace",    house_id: "house-tyrell",    sex: "m"),
-        (id: "char-doran",   name: "Doran",   house_id: "house-martell",   sex: "m"),
-        (id: "char-oberyn",  name: "Oberyn",  house_id: "house-martell",   sex: "m"),
+        // House Hightower — Leyton rules Oldtown; Alerie is his wife.
+        (id: "char-leyton",   name: "Leyton",   house_id: "house-hightower", sex: "m"),
+        (id: "char-alerie",   name: "Alerie",   house_id: "house-hightower", sex: "f"),
+        (id: "char-baelor",   name: "Baelor",   house_id: "house-hightower", sex: "m"),
+        (id: "char-rhea",     name: "Rhea",     house_id: "house-hightower", sex: "f"),
+        (id: "char-denyse",   name: "Denyse",   house_id: "house-hightower", sex: "f"),
+        (id: "char-gunthor",  name: "Gunthor",  house_id: "house-hightower", sex: "m"),
+
+        // House Lannister — Tywin rules Lannisport; Joanna is his wife.
+        (id: "char-tywin",    name: "Tywin",    house_id: "house-lannister", sex: "m"),
+        (id: "char-jaime",    name: "Jaime",    house_id: "house-lannister", sex: "m"),
+        (id: "char-cersei",   name: "Cersei",   house_id: "house-lannister", sex: "f"),
+        (id: "char-tyrion",   name: "Tyrion",   house_id: "house-lannister", sex: "m"),
+        (id: "char-joanna",   name: "Joanna",   house_id: "house-lannister", sex: "f"),
+        (id: "char-lancel",   name: "Lancel",   house_id: "house-lannister", sex: "m"),
+
+        // House Arryn — Jon rules Gulltown; Jeyne is his wife.
+        (id: "char-jon",      name: "Jon",      house_id: "house-arryn",     sex: "m"),
+        (id: "char-lysa",     name: "Lysa",     house_id: "house-arryn",     sex: "f"),
+        (id: "char-jeyne",    name: "Jeyne",    house_id: "house-arryn",     sex: "f"),
+        (id: "char-elbert",   name: "Elbert",   house_id: "house-arryn",     sex: "m"),
+        (id: "char-aemma",    name: "Aemma",    house_id: "house-arryn",     sex: "f"),
+        (id: "char-alaric",   name: "Alaric",   house_id: "house-arryn",     sex: "m"),
+
+        // House Tully — Minisa rules Riverrun; Hoster is her husband.
+        (id: "char-minisa",   name: "Minisa",   house_id: "house-tully",     sex: "f"),
+        (id: "char-edmure",   name: "Edmure",   house_id: "house-tully",     sex: "m"),
+        (id: "char-hoster",   name: "Hoster",   house_id: "house-tully",     sex: "m"),
+        (id: "char-brynden",  name: "Brynden",  house_id: "house-tully",     sex: "m"),
+        (id: "char-catelyn",  name: "Catelyn",  house_id: "house-tully",     sex: "f"),
+        (id: "char-lysara",   name: "Lysara",   house_id: "house-tully",     sex: "f"),
+
+        // House Tyrell — Olenna rules the Reach; Luthor is her husband.
+        (id: "char-olenna",   name: "Olenna",   house_id: "house-tyrell",    sex: "f"),
+        (id: "char-mace",     name: "Mace",     house_id: "house-tyrell",    sex: "m"),
+        (id: "char-luthor",   name: "Luthor",   house_id: "house-tyrell",    sex: "m"),
+        (id: "char-willas",   name: "Willas",   house_id: "house-tyrell",    sex: "m"),
+        (id: "char-garlan",   name: "Garlan",   house_id: "house-tyrell",    sex: "m"),
+        (id: "char-margaery", name: "Margaery", house_id: "house-tyrell",    sex: "f"),
+
+        // House Martell — Doran rules Dorne; Mellario is his wife.
+        (id: "char-doran",    name: "Doran",    house_id: "house-martell",   sex: "m"),
+        (id: "char-oberyn",   name: "Oberyn",   house_id: "house-martell",   sex: "m"),
+        (id: "char-mellario", name: "Mellario", house_id: "house-martell",   sex: "f"),
+        (id: "char-arianne",  name: "Arianne",  house_id: "house-martell",   sex: "f"),
+        (id: "char-quentyn",  name: "Quentyn",  house_id: "house-martell",   sex: "m"),
+        (id: "char-trystane", name: "Trystane", house_id: "house-martell",   sex: "m"),
     ],
 )

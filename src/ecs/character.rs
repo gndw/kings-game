@@ -61,3 +61,52 @@ impl CharacterLeads {
 #[derive(Component, Debug, Default)]
 #[relationship_target(relationship = CourtierOfCharacter)]
 pub struct CharacterHasCourtiers(Vec<Entity>);
+
+/// A character's father. Bevy relationship; auto-maintains `CharacterHasFatheredChildren`.
+#[derive(Component, Debug, Clone, Copy)]
+#[relationship(relationship_target = CharacterHasFatheredChildren)]
+pub struct CharacterHasFather(pub Entity);
+
+/// A character's mother. Bevy relationship; auto-maintains `CharacterHasMotheredChildren`.
+#[derive(Component, Debug, Clone, Copy)]
+#[relationship(relationship_target = CharacterHasMotheredChildren)]
+pub struct CharacterHasMother(pub Entity);
+
+/// The children a character has fathered — auto-maintained reverse of `CharacterHasFather`.
+#[derive(Component, Debug, Default)]
+#[relationship_target(relationship = CharacterHasFather)]
+pub struct CharacterHasFatheredChildren(Vec<Entity>);
+
+impl CharacterHasFatheredChildren {
+    pub fn children(&self) -> &[Entity] {
+        &self.0
+    }
+}
+
+/// The children a character has borne — auto-maintained reverse of `CharacterHasMother`.
+#[derive(Component, Debug, Default)]
+#[relationship_target(relationship = CharacterHasMother)]
+pub struct CharacterHasMotheredChildren(Vec<Entity>);
+
+impl CharacterHasMotheredChildren {
+    pub fn children(&self) -> &[Entity] {
+        &self.0
+    }
+}
+
+/// A character's husband. Bevy relationship on the wife; auto-maintains
+/// `CharacterHasWife` on the husband.
+#[derive(Component, Debug, Clone, Copy)]
+#[relationship(relationship_target = CharacterHasWife)]
+pub struct CharacterHasHusband(pub Entity);
+
+/// A husband's wife — one-to-one target of `CharacterHasHusband`. Sits on the husband.
+#[derive(Component, Debug, Clone, Copy)]
+#[relationship_target(relationship = CharacterHasHusband)]
+pub struct CharacterHasWife(Entity);
+
+impl CharacterHasWife {
+    pub fn wife(&self) -> Entity {
+        self.0
+    }
+}

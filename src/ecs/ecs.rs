@@ -9,8 +9,8 @@ use std::collections::HashMap;
 
 use super::building::{Building, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand};
 use super::character::{
-    Character, CharacterDateOfBirth, CharacterGold, CharacterGoldYield, CharacterLevy,
-    CharacterName, CharacterOfHouse,
+    Character, CharacterDateOfBirth, CharacterGold, CharacterGoldYield, CharacterHasFather,
+    CharacterHasHusband, CharacterHasMother, CharacterLevy, CharacterName, CharacterOfHouse,
 };
 use super::courtier::{Courtier, CourtierOfCharacter, CourtierOfKingdom};
 use super::house::{House, HouseName};
@@ -79,6 +79,36 @@ pub fn populate(world: &mut World, content: Content) {
             ec.id()
         };
         world.resource_mut::<Registry>().insert(id, eid);
+    }
+
+    // Wire up family ties after every character exists. `validate` has already
+    // confirmed all ids resolve; `filter_map`s here would silently drop a
+    // malformed entry, which the validator would have caught.
+    for (_, f) in content.families.into_iter() {
+        use crate::content::FamilyType;
+        let registry = world.resource::<Registry>();
+        let lookup = |id: &str| registry.get(id);
+        match f.family_type {
+            FamilyType::Family => {
+                let child = lookup(&f.child_character_id);
+                let father = lookup(&f.father_character_id);
+                let mother = lookup(&f.mother_character_id);
+                if let (Some(child), Some(father)) = (child, father) {
+                    world.entity_mut(child).insert(CharacterHasFather(father));
+                }
+                if let (Some(child), Some(mother)) = (child, mother) {
+                    world.entity_mut(child).insert(CharacterHasMother(mother));
+                }
+            }
+            FamilyType::Marriage => {
+                let husband = lookup(&f.husband_character_id);
+                let wife = lookup(&f.wife_character_id);
+                if let (Some(husband), Some(wife)) = (husband, wife) {
+                    // Set the relationship on one side; Bevy's hook maintains the reverse.
+                    world.entity_mut(wife).insert(CharacterHasHusband(husband));
+                }
+            }
+        }
     }
 
     for (id, l) in content.lands.into_iter() {

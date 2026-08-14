@@ -1,0 +1,57 @@
+// Family ties between characters — parent/child links and spousal links. One
+// entry per relation: a child's parents produce one entry, a marriage produces
+// one. The ECS turns these into `CharacterHasFather` / `CharacterHasMother` /
+// `CharacterHasHusband` / `CharacterHasWife` and auto-maintained reverse Vecs
+// on the parents.
+//
+// A character not named here is unlinked — `validate` rejects any id this file
+// references that the loaded characters don't define.
+(
+    families: [
+        // ----- House Hightower: Leyton × Alerie -----
+        // The ruling couple.
+        (id: "fam-mar-leyton-alerie",   type: Marriage, husband_character_id: "char-leyton", wife_character_id: "char-alerie"),
+        // Their four children.
+        (id: "fam-baelor",   type: Family, child_character_id: "char-baelor",  father_character_id: "char-leyton",  mother_character_id: "char-alerie"),
+        (id: "fam-rhea",     type: Family, child_character_id: "char-rhea",    father_character_id: "char-leyton",  mother_character_id: "char-alerie"),
+        (id: "fam-denyse",   type: Family, child_character_id: "char-denyse",  father_character_id: "char-leyton",  mother_character_id: "char-alerie"),
+        (id: "fam-gunthor",  type: Family, child_character_id: "char-gunthor", father_character_id: "char-leyton",  mother_character_id: "char-alerie"),
+
+        // ----- House Lannister: Tywin × Joanna -----
+        (id: "fam-mar-tywin-joanna",    type: Marriage, husband_character_id: "char-tywin", wife_character_id: "char-joanna"),
+        (id: "fam-jaime",   type: Family, child_character_id: "char-jaime",  father_character_id: "char-tywin", mother_character_id: "char-joanna"),
+        (id: "fam-cersei",  type: Family, child_character_id: "char-cersei", father_character_id: "char-tywin", mother_character_id: "char-joanna"),
+        (id: "fam-tyrion",  type: Family, child_character_id: "char-tyrion", father_character_id: "char-tywin", mother_character_id: "char-joanna"),
+
+        // ----- House Arryn: Jon × Jeyne -----
+        (id: "fam-mar-jon-jeyne",       type: Marriage, husband_character_id: "char-jon", wife_character_id: "char-jeyne"),
+        (id: "fam-lysa",    type: Family, child_character_id: "char-lysa",   father_character_id: "char-jon", mother_character_id: "char-jeyne"),
+        (id: "fam-elbert",  type: Family, child_character_id: "char-elbert", father_character_id: "char-jon", mother_character_id: "char-jeyne"),
+        (id: "fam-aemma",   type: Family, child_character_id: "char-aemma",  father_character_id: "char-jon", mother_character_id: "char-jeyne"),
+
+        // ----- House Tully: Hoster × Minisa -----
+        (id: "fam-mar-hoster-minisa",   type: Marriage, husband_character_id: "char-hoster", wife_character_id: "char-minisa"),
+        (id: "fam-edmure",  type: Family, child_character_id: "char-edmure",  father_character_id: "char-hoster", mother_character_id: "char-minisa"),
+        (id: "fam-catelyn", type: Family, child_character_id: "char-catelyn", father_character_id: "char-hoster", mother_character_id: "char-minisa"),
+        (id: "fam-lysara",  type: Family, child_character_id: "char-lysara",  father_character_id: "char-hoster", mother_character_id: "char-minisa"),
+
+        // ----- House Tyrell: Luthor × Olenna -----
+        (id: "fam-mar-luthor-olenna",   type: Marriage, husband_character_id: "char-luthor", wife_character_id: "char-olenna"),
+        (id: "fam-mace",     type: Family, child_character_id: "char-mace",     father_character_id: "char-luthor", mother_character_id: "char-olenna"),
+        (id: "fam-willas",   type: Family, child_character_id: "char-willas",   father_character_id: "char-luthor", mother_character_id: "char-olenna"),
+        (id: "fam-garlan",   type: Family, child_character_id: "char-garlan",   father_character_id: "char-luthor", mother_character_id: "char-olenna"),
+        (id: "fam-margaery", type: Family, child_character_id: "char-margaery", father_character_id: "char-luthor", mother_character_id: "char-olenna"),
+
+        // ----- House Martell: Doran × Mellario -----
+        (id: "fam-mar-doran-mellario",  type: Marriage, husband_character_id: "char-doran", wife_character_id: "char-mellario"),
+        (id: "fam-arianne",  type: Family, child_character_id: "char-arianne",  father_character_id: "char-doran", mother_character_id: "char-mellario"),
+        (id: "fam-quentyn",  type: Family, child_character_id: "char-quentyn",  father_character_id: "char-doran", mother_character_id: "char-mellario"),
+        (id: "fam-trystane", type: Family, child_character_id: "char-trystane", father_character_id: "char-doran", mother_character_id: "char-mellario"),
+
+        // ----- Cross-house marriage: Hightower × Lannister -----
+        (id: "fam-mar-baelor-cersei",   type: Marriage, husband_character_id: "char-baelor", wife_character_id: "char-cersei"),
+
+        // ----- Cross-house marriage: Tyrell × Arryn -----
+        (id: "fam-mar-willas-aemma",    type: Marriage, husband_character_id: "char-willas", wife_character_id: "char-aemma"),
+    ],
+)

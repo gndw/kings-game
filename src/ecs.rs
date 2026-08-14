@@ -10,7 +10,12 @@
 //! - **House** entities: [`StringId`], [`House`], [`HouseName`].
 //! - **Character** entities: [`StringId`], [`Character`], [`CharacterName`],
 //!   [`CharacterDateOfBirth`], [`CharacterGold`], [`CharacterLevy`],
-//!   [`CharacterGoldYield`], [`CharacterOfHouse`], maybe [`CharacterLeads`].
+//!   [`CharacterGoldYield`], [`CharacterOfHouse`], maybe [`CharacterLeads`],
+//!   plus family ties ([`CharacterHasFather`] / [`CharacterHasMother`] on the
+//!   child, [`CharacterHasHusband`] on the wife with the auto-maintained
+//!   [`CharacterHasWife`] target on the husband) and reverse Vecs
+//!   (`CharacterHasFatheredChildren` / `CharacterHasMotheredChildren`) on the parents.
+//!   Populated from `families.ron` after every character entity exists.
 //! - **Land** entities: [`StringId`], [`Land`], [`LandName`], [`LandBorders`],
 //!   [`LandHolding`], maybe [`LandHeldBy`] (auto-maintained from the holding
 //!   kingdom's [`KingdomHold`]), plus a [`LandHasBuildings`] collection

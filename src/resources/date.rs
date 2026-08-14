@@ -1,5 +1,5 @@
 //! The date that walks the calendar. Seeded in `main` from `Calendar::start`; the
-//! day-by-day rollover lives in `game::advance_date`.
+//! day-by-day rollover lives in `game::advancing_date`.
 
 use super::calendar::Calendar;
 use bevy::prelude::Resource;

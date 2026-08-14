@@ -7,7 +7,7 @@ use bevy::prelude::*;
 /// Debug: on **I** press, list every character's name, treasury (`gold`),
 /// monthly `gold_yield`, and `levy`. Helpful for verifying that the
 /// `On<Insert, BuildingOnLand>` / `On<Remove, BuildingOnLand>` observers in
-/// [`crate::game::yields`] recompute the realm's yield the moment a
+/// [`crate::game::yielding`] recompute the realm's yield the moment a
 /// building is constructed or torn down — the resource bar shows only the
 /// player's slice.
 pub fn dump_characters(

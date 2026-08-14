@@ -205,7 +205,7 @@ pub fn update(
             .map(|land_held_by| player_kingdoms.contains(&land_held_by.kingdom()))
             .unwrap_or(false);
         if is_own {
-            let (gold, levy) = crate::game::yields::sum_land_yield(
+            let (gold, levy) = crate::game::yielding::sum_land_yield(
                 label.0,
                 &land_has_buildings,
                 &building_of,

@@ -108,14 +108,14 @@ fn main() -> Result<()> {
                 ui::command_menu::startup,
                 ui::error::startup,
                 commands::startup,
-                game::yields::recompute_yields,
+                game::yielding::recompute_yields,
                 border_graphic::startup,
                 holding_icon::startup,
                 land_graphic::startup,
                 road_graphic::startup,
             ),
         )
-        .add_observer(game::yields::on_building_updated)
+        .add_observer(game::yielding::on_building_updated)
         .add_observer(army_icon::on_army_raised)
         .add_observer(army_icon::on_army_dismiss)
         .add_observer(ui::error::on_error_occured)
@@ -167,22 +167,22 @@ fn main() -> Result<()> {
         )
         .add_systems(
             FixedUpdate,
-            game::advance_date::advance.run_if(|g: Res<Game>| g.running()),
+            game::advancing_date::advance.run_if(|g: Res<Game>| g.running()),
         )
         .add_systems(
             OnDay,
             (
-                game::construction::construction,
+                game::constructing::construction,
                 game::marching::tick,
                 game::raising_army::on_day,
-                game::siege::tick,
+                game::besieging::tick,
             ),
         )
         .add_systems(
             OnMonth,
             (
-                game::payout::payout,
-                game::replenish_levy::replenish,
+                game::paying_out::payout,
+                game::replenishing_levy::replenish,
             ),
         )
         .run();

@@ -19,7 +19,7 @@ pub enum BuildingStatus {
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Building;
 
-/// The current available levy pool. Replenished by `game::replenish_levy` up to the def's `levy`.
+/// The current available levy pool. Replenished by `game::replenishing_levy` up to the def's `levy`.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct BuildingLevy(pub u32);
 

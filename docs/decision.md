@@ -189,3 +189,32 @@ world and write one past-tense line per event.
 - **Subject for player-driven events.** The observer module resolves
   the player character once per observer batch via a `PlayerCtx`
   `SystemParam` and formats the actor as "You".
+
+## Game system files use verb-ing (gerund) names
+
+Every file under `src/game/` is named with the present participle of the
+action its system performs: `aging`, `advancing_date`, `besieging`,
+`building_releasing`, `constructing`, `court_releasing`, `marching`,
+`paying_out`, `raising_army`, `replenishing_levy`, `yielding`. The name
+describes what's *currently happening* in the system (a date is being
+advanced, levies are being replenished), not what kind of object the
+code touches.
+
+- **Why:** the modules under `src/game/` are *scheduled ticks* — they
+  fire on `OnDay` / `OnMonth` and re-run forever while the game is
+  alive. They're not entities or one-shot operations. A noun (`payout`,
+  `siege`, `yields`) reads as "this is a thing"; a gerund reads as
+  "this is ongoing". The module list at the top of `src/game.rs` is
+  then a list of verbs, which matches the schedule it owns.
+- **Phrasal verbs:** keep the preposition as an underscore.
+  `paying_out` (from "pay out"), not `payouting`. Ugly English, but
+  the only honest gerund.
+- **Archaisms:** "siege" as a verb is archaic — use `besieging`.
+- **Function names don't have to match.** `pub fn age` in `aging.rs`,
+  `pub fn payout` in `paying_out.rs`, etc. The function name describes
+  what the call computes; the file name describes the ongoing action.
+  Two different roles, two different names.
+- **Scope is `src/game/` only.** Other layers hold nouns by design
+  (entities, commands, resources). The gerund rule is a fit for
+  scheduled-tick modules; forcing it elsewhere would mis-name code
+  that isn't a running system.

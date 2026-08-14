@@ -1,7 +1,7 @@
 //! Monthly levy replenishment: every ACTIVE building's `BuildingLevy` pool
 //! grows by its def's `levy_rate`, capped at the def's `levy`.
 //!
-//! Runs on the `OnMonth` schedule from [`crate::game::advance_date::advance`],
+//! Runs on the `OnMonth` schedule from [`crate::game::advancing_date::advance`],
 //! so a building with `levy_rate: 1` and `levy: 50` reaches a full pool in
 //! 50 in-game months after the previous raise. Buildings whose levy is
 //! currently sitting in an army (`BuildingIsRaised = true`) are skipped —

@@ -111,7 +111,7 @@ pub fn tick(world: &mut World) {
                     continuing,
                 });
             }
-            // Sieging armies are owned by `game::siege::tick`.
+            // Sieging armies are owned by `game::besieging::tick`.
             ArmyStatus::Sieging => {}
         }
     }

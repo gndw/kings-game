@@ -144,7 +144,7 @@ fn raise(world: &mut World, actor: &str, land_id: &str) {
         .id();
     world.resource_mut::<Registry>().insert(id, eid);
 
-    // Flag every ACTIVE building on the land as raised so the monthly `replenish_levy`
+    // Flag every ACTIVE building on the land as raised so the monthly `replenishing_levy`
     // loop skips them. The pool value itself is untouched here; only the flag flips.
     let entities: Vec<Entity> = world
         .get::<LandHasBuildings>(land_e)

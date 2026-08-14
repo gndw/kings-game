@@ -7,7 +7,7 @@ use crate::ecs::{
     CharacterDateOfBirth, CharacterName, CharacterOfHouse, HouseName, KingdomHold, KingdomLedBy,
     LandName, Registry,
 };
-use crate::game::age::age;
+use crate::game::aging::age;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
 use bevy::prelude::*;

@@ -144,8 +144,6 @@ fn main() -> Result<()> {
                     .run_if(ui::command_menu::command_menu_layer_active),
                 ui::wiki::input
                     .run_if(ui::wiki::wiki_layer_active),
-                ui::wiki::update
-                    .run_if(ui::wiki::wiki_layer_active),
                 ui::error::input
                     .run_if(ui::error::error_popup_layer_active),
                 ui::courts::update,

@@ -181,6 +181,9 @@ Bevy flex tree + `Gizmos` line drawing; no asset sprites.
   `GlobalZIndex` above the panels. `CommandMenu` resource holds
   open/active-command/step/cursor + the cached list + search query.
   Command-agnostic — drives any registered command's steps.
+- **Wiki window** — a `W`-toggled modal panel (`ui::wiki`); `Esc`
+  closes it. An `InputLayer::Wiki` gates root-layer keys while it's
+  open.
 
 ## Key invariants
 

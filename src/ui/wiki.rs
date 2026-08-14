@@ -121,7 +121,7 @@ pub fn startup(mut commands: Commands) {
                     TextColor(TITLE_COLOR),
                 ));
                 win.spawn((
-                    Text::new("W: open / close   \u{2191}\u{2193}: select   Enter: open house   Esc: back"),
+                    Text::new("W: open / close    Up/Down: select    Enter: open house    Esc: back"),
                     TextFont::from_font_size(FONT - 4.0),
                     TextColor(HINT_COLOR),
                 ));
@@ -140,7 +140,7 @@ pub fn startup(mut commands: Commands) {
                 .with_children(|body| {
                     body.spawn((
                         WikiBackHint,
-                        Text::new("\u{2190} Back to Houses (Esc)"),
+                        Text::new("<-- Back to Houses (Esc)"),
                         TextFont::from_font_size(FONT - 2.0),
                         TextColor(BACK_TEXT),
                         Node {
@@ -546,15 +546,15 @@ fn draw_couple_line(
     let Some(p) = people.get(&primary) else {
         return;
     };
-    let connector = if prefix.is_empty() { "" } else { "├─ " };
+    let connector = if prefix.is_empty() { "" } else { "|- " };
     let primary_str = format!("{} (age {})", p.name, p.age);
 
     let spouse_str = match spouse.and_then(|s| people.get(&s)) {
-        Some(sp) => format!(" \u{2500} {} (age {})", sp.name, sp.age),
+        Some(sp) => format!(" - {} (age {})", sp.name, sp.age),
         None => p
             .spouse
             .filter(|s| !people.contains_key(s))
-            .and_then(|s| spouse_house_label(s).map(|h| format!(" \u{2500} of {h}")))
+            .and_then(|s| spouse_house_label(s).map(|h| format!(" - of {h}")))
             .unwrap_or_default(),
     };
 
@@ -580,7 +580,7 @@ fn draw_subtree(
         return;
     };
 
-    let connector = if is_last_sibling { "└─ " } else { "├─ " };
+    let connector = if is_last_sibling { "\\- " } else { "|- " };
     let line_prefix = format!("{prefix}{connector}");
     let partner = p.spouse.filter(|s| people.contains_key(s));
     let already_drawn = partner
@@ -611,7 +611,7 @@ fn draw_subtree(
         }
     }
 
-    let child_indent = if is_last_sibling { "    " } else { "│   " };
+    let child_indent = if is_last_sibling { "    " } else { "|   " };
     let child_prefix = format!("{prefix}{child_indent}");
     let children = merged_children(person, people);
     let m = children.len();
@@ -643,11 +643,11 @@ fn draw_couple_line_with_prefix(
     };
     let primary_str = format!("{} (age {})", p.name, p.age);
     let spouse_str = match spouse.and_then(|s| people.get(&s)) {
-        Some(sp) => format!(" \u{2500} {} (age {})", sp.name, sp.age),
+        Some(sp) => format!(" - {} (age {})", sp.name, sp.age),
         None => p
             .spouse
             .filter(|s| !people.contains_key(s))
-            .and_then(|s| spouse_house_label(s).map(|h| format!(" \u{2500} of {h}")))
+            .and_then(|s| spouse_house_label(s).map(|h| format!(" - of {h}")))
             .unwrap_or_default(),
     };
     let _ = writeln!(out, "{prefix}{primary_str}{spouse_str}");

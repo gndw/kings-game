@@ -27,13 +27,14 @@ pub fn root_layer_active(layer: Res<InputLayer>) -> bool {
 /// [`crate::ui::command_menu::open_command`], which spawns UI entities
 /// through `&mut World`.
 pub fn global_keys(world: &mut World) {
-    let (toggle_palette, toggle_quit, toggle_zoom, toggle_pause, digit_pressed) = {
+    let (toggle_palette, toggle_quit, toggle_zoom, toggle_pause, toggle_wiki, digit_pressed) = {
         let keys = world.resource::<ButtonInput<KeyCode>>();
         (
             keys.just_pressed(KeyCode::KeyC),
             keys.just_pressed(KeyCode::KeyQ) || keys.just_pressed(KeyCode::Escape),
             keys.just_pressed(KeyCode::KeyZ),
             keys.just_pressed(KeyCode::Space),
+            keys.just_pressed(KeyCode::KeyW),
             [
                 (KeyCode::Digit1, 0usize),
                 (KeyCode::Digit2, 1),
@@ -47,6 +48,9 @@ pub fn global_keys(world: &mut World) {
 
     if toggle_palette {
         crate::ui::command_menu::open_command(world);
+    }
+    if toggle_wiki {
+        crate::ui::wiki::toggle_wiki(world);
     }
     // Escape closes the command palette while it's open, so it mustn't quit.
     if toggle_quit {

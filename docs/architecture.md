@@ -148,7 +148,9 @@ the same way — the menu is command-agnostic.
 digit speed, `Z` zoom); yields to the palette while it's open.
 `ui::map::update_input` (exclusive) — arrow keys move the selection,
 yields to the palette. `ui::command_menu::input` (exclusive) — `c`
-opens the palette, drives the active command's steps. `ui::error::input`
+opens the palette, drives the active command's steps. `ui::wiki::input`
+(exclusive) — `w` toggles the wiki; arrow keys navigate the house list,
+`Enter` drills into a house's family tree, `Esc` backs out. `ui::error::input`
 (Update) — `esc` closes the error popup, gated to the popup layer.
 
 ## Chronicle generation

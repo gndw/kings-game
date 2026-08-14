@@ -18,6 +18,7 @@ pub mod resource;
 pub mod startup;
 pub mod status;
 pub mod wars;
+pub mod wiki;
 
 const FONT: f32 = 14.0;
 

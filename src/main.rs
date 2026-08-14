@@ -98,6 +98,7 @@ fn main() -> Result<()> {
         .insert_resource(border)
         .insert_resource(InputLayer::default())
         .insert_resource(CommandMenuUiContext::default())
+        .insert_resource(kings_game::ui::wiki::WikiUiContext::default())
         .insert_resource(Time::<Fixed>::from_hz(hz))
         .add_systems(
             Startup,
@@ -107,6 +108,7 @@ fn main() -> Result<()> {
                 ui::camera::startup,
                 ui::command_menu::startup,
                 ui::error::startup,
+                ui::wiki::startup,
                 commands::startup,
                 game::yielding::recompute_yields,
                 border_graphic::startup,
@@ -140,6 +142,10 @@ fn main() -> Result<()> {
                     .run_if(ui::input::root_layer_active),
                 ui::command_menu::input
                     .run_if(ui::command_menu::command_menu_layer_active),
+                ui::wiki::input
+                    .run_if(ui::wiki::wiki_layer_active),
+                ui::wiki::update
+                    .run_if(ui::wiki::wiki_layer_active),
                 ui::error::input
                     .run_if(ui::error::error_popup_layer_active),
                 ui::courts::update,

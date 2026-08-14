@@ -14,4 +14,5 @@ pub enum InputLayer {
     Root = 1,
     CommandMenu = 2,
     ErrorPopup = 3,
+    Wiki = 4,
 }

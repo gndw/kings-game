@@ -1,42 +1,19 @@
-//! The error popup: a modal that surfaces a single validation
-//! rejection from a command. Commands reach for
-//! [`crate::commands::core::error`] (which fires [`OnErrorOccured`])
-//! when their `validate` returns `Err`; this module owns the popup
-//! shell, the observer that shows it, and the input handler that
-//! dismisses it on **Esc**.
-//!
-//! Lifecycle:
-//!
-//! - `startup` spawns the popup shell once, hidden (`Display::None`),
-//!   sitting above the command palette in z-order.
-//! - The [`on_error_occured`] observer fires on every
-//!   [`OnErrorOccured`] trigger. It force-closes any open command
-//!   palette (so the player isn't left with a stale UI behind the
-//!   popup), updates the message, shows the popup, and flips the
-//!   input layer to [`InputLayer::ErrorPopup`]. Multiple errors in
-//!   quick succession just overwrite the message.
-//! - [`input`] is gated to the error-popup layer and listens for
-//!   **Esc** — it hides the popup and flips the layer back to
-//!   [`InputLayer::Root`]. The root-layer systems then take over
-//!   normally.
+//! The error popup: a modal that surfaces a single validation rejection from
+//! a command. Commands reach for `commands::core::error` (which fires
+//! `OnErrorOccured`) when their `validate` returns `Err`; this module owns
+//! the popup shell, the observer that shows it, and the input handler that
+//! dismisses it on `Esc`.
 
 use crate::events::OnErrorOccured;
 use crate::resources::input_layer::InputLayer;
 use bevy::prelude::*;
 
-// --- shell components -------------------------------------------------------
-
 #[derive(Component)]
 pub struct ErrorPopupUIRoot;
-
-/// Marker on the message text node — the observer reads this to write
-/// the latest error message into the popup body. Single entity, so a
-/// `Single<&mut Text, With<ErrorPopupMessage>>` works on the observer
-/// side.
+/// Marker on the message text node — the observer reads this to write the
+/// latest error message into the popup body.
 #[derive(Component)]
 pub struct ErrorPopupMessage;
-
-// --- styling ---------------------------------------------------------------
 
 const BACKDROP: Color = Color::srgba(0.0, 0.0, 0.0, 0.55);
 const WINDOW: Color = Color::srgb(0.16, 0.10, 0.10);
@@ -45,20 +22,10 @@ const TITLE_COLOR: Color = Color::srgb(0.95, 0.45, 0.45);
 const BODY_COLOR: Color = Color::srgb(0.96, 0.96, 0.98);
 const HINT_COLOR: Color = Color::srgba(0.75, 0.75, 0.80, 0.85);
 const FONT: f32 = 16.0;
-
-/// z-index sitting above the command palette (`GlobalZIndex(100)`),
-/// so the popup lands on top when an error fires while the palette
-/// is open.
+/// Above the command palette's `GlobalZIndex(100)`, so the popup lands on top.
 const Z_INDEX: i32 = 200;
 
-// --- startup --------------------------------------------------------------
-
-/// Spawn the popup shell once, hidden. Mirrors
-/// [`crate::ui::command_menu::startup`] — the body is one column with
-/// a title, a message slot, and an "Esc to close" hint; the body
-/// wraps inside the centered window, which wraps inside the
-/// full-screen backdrop. `Display::None` keeps it off the layout
-/// until the observer flips it on.
+/// Spawn the popup shell once, hidden.
 pub fn startup(mut commands: Commands) {
     commands
         .spawn((
@@ -110,34 +77,8 @@ pub fn startup(mut commands: Commands) {
         });
 }
 
-// --- observer -------------------------------------------------------------
-
-/// Observer for [`OnErrorOccured`]. Shows the popup, writes
-/// `event.message` into the body, force-closes any open command
-/// palette (so the player isn't left with a stale palette UI behind
-/// the popup), and flips the input layer to
-/// [`InputLayer::ErrorPopup`]. If the popup was already up, only the
-/// message is refreshed — the player keeps reading the latest error.
-///
-/// The force-close of the palette is a defensive UX choice: an error
-/// from `validate` interrupts the player's command flow, and the
-/// cleanest landing is a single dismissable modal over a normal Root
-/// state, not a modal over a palette that won't accept input anymore.
-/// The palette's existing `close_command` does the cleanup (despawn
-/// rows, clear context, hide panel, set layer to Root) — we set the
-/// layer to `ErrorPopup` right after so the popup owns input.
-///
-/// Bevy 0.19 forbids `&mut World` in observers ("Exclusive system
-/// may not be used as observer"), and the cleanup mixes structural
-/// changes (`close_command` despawns palette rows) with non-
-/// structural ones (`Node.display`, `Text.0`, `InputLayer`).
-/// `commands.queue` accepts a `FnOnce(&mut World)` closure (the
-/// `Command` trait is blanket-impl'd for such closures) and applies
-/// it when Bevy flushes the observer's command queue — despawn →
-/// show popup → write message → flip layer to `ErrorPopup`. All
-/// four writes land in one pass so the palette is torn down before
-/// the popup appears, and the layer is `ErrorPopup` before the next
-/// frame's input system runs.
+/// Observer for `OnErrorOccured`. Shows the popup, writes the message,
+/// force-closes any open command palette, and flips the input layer.
 pub fn on_error_occured(trigger: On<OnErrorOccured>, mut commands: Commands) {
     let message = trigger.event().message.clone();
     commands.queue(move |world: &mut World| {
@@ -164,21 +105,12 @@ pub fn on_error_occured(trigger: On<OnErrorOccured>, mut commands: Commands) {
     });
 }
 
-// --- input -----------------------------------------------------------------
-
-/// Run condition: the error-popup input layer is active (popup is up).
-/// Pair with [`input`] via `.run_if` so it stays dormant on root or
-/// while the command palette owns input.
+/// Run condition: the error-popup input layer is active.
 pub fn error_popup_layer_active(layer: Res<InputLayer>) -> bool {
     *layer == InputLayer::ErrorPopup
 }
 
-/// Per-frame input handler for the popup. Gated to the error-popup
-/// layer via [`error_popup_layer_active`]; listens for **Esc**
-/// (just-released so a held key doesn't dismiss N times) and on press
-/// hides the popup + flips the layer back to [`InputLayer::Root`].
-/// The popup takes every other keystroke too — the same ownership
-/// model the command palette uses.
+/// Per-frame input: `Esc` (just-released) hides the popup and restores the layer.
 pub fn input(
     keys: Res<ButtonInput<KeyCode>>,
     mut layer: ResMut<InputLayer>,

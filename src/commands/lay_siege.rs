@@ -1,16 +1,9 @@
 //! The siege command: lay siege to a land with one of the player's armies.
 //!
-//! One selection step: pick an army. The army must be standing on a land
-//! that is *not* held by the player's kingdom. The picked army's current
-//! land is the target; the army's `ArmyStatus` flips to `Sieging` and a
-//! fresh [`Siege`](crate::ecs::Siege) entity is spawned with progress 0
-//! and a first event 10 days out. From there the per-day
-//! [`tick`](crate::game::siege::tick) advances progress on each scheduled
-//! event until 100% — then the siege resolves (buildings flip to
-//! `Inactive`, the army gets [`ArmyControlsLand`](crate::ecs::ArmyControlsLand)).
-//!
-//! The actor must rule the army's kingdom (via `ArmyBelongsToKingdom`) — the
-//! same rule every other army command uses.
+//! One step: pick an army. The army must be standing on a foreign land. The
+//! picked army's current land is the target; the army's `ArmyStatus` flips to
+//! `Sieging` and a fresh `Siege` entity is spawned with progress 0 and a first
+//! event 10 days out.
 
 use super::core::{error, picker_row, set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR,
     STAT_DIM};
@@ -22,15 +15,12 @@ use crate::ecs::{
     Siege, SiegeAttackerArmy, SiegeDefenderLand, SiegeNextEventDate, SiegeProgress, StringId,
 };
 use crate::events::OnSiegeLaid;
-use crate::resources::calendar::Calendar;
-use crate::resources::date::Date;
 use crate::ui::command_menu::CommandMenuUiContext;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
 use bevy::prelude::*;
 use bevy::prelude::RelationshipTarget;
 
-/// Lay siege to a land with one of the player's armies.
 pub struct LaySiege;
 
 impl BaseCommand for LaySiege {
@@ -44,22 +34,12 @@ impl BaseCommand for LaySiege {
         parent: Entity,
         choices: &[(String, String)],
     ) -> (Vec<Entity>, bool) {
-        let command_pick = choices
-            .iter()
-            .find(|(k, _)| k == "command")
-            .map(|(_, v)| v.as_str());
+        let command_pick = choices.iter().find(|(k, _)| k == "command").map(|(_, v)| v.as_str());
 
         if command_pick.is_none() {
             let row = picker_row(
-                world,
-                parent,
-                self.get_command_id(),
-                None,
-                "Lay Siege",
-                NAME_COLOR,
-                None,
-                None,
-                None,
+                world, parent, self.get_command_id(), None,
+                "Lay Siege", NAME_COLOR, None, None, None,
             );
             return (vec![row], false);
         }
@@ -67,11 +47,7 @@ impl BaseCommand for LaySiege {
             return (Vec::new(), false);
         }
 
-        // Step 1: pick the army.
-        let army_pick = choices
-            .iter()
-            .find(|(k, _)| k == "army_id")
-            .map(|(_, v)| v.clone());
+        let army_pick = choices.iter().find(|(k, _)| k == "army_id").map(|(_, v)| v.clone());
         match army_pick {
             None => self.spawn_army_picker(world, parent),
             Some(_) => self.execute(world),
@@ -85,21 +61,14 @@ impl BaseCommand for LaySiege {
 
 impl LaySiege {
     fn spawn_army_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
-        let actor = world
-            .resource::<Game>()
-            .ctx
-            .player_character_id
-            .clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone();
         let armies = foreign_army_rows(world, &actor);
         let mut entities = Vec::new();
         for row_data in armies {
             let row = picker_row(
-                world,
-                parent,
-                self.get_command_id(),
+                world, parent, self.get_command_id(),
                 Some(("army_id".to_string(), row_data.army_id)),
-                &row_data.name,
-                NAME_COLOR,
+                &row_data.name, NAME_COLOR,
                 row_data.description.as_deref(),
                 Some((row_data.levy_text.as_str(), STAT_COLOR)),
                 Some((row_data.target_text.as_str(), STAT_DIM)),
@@ -110,11 +79,7 @@ impl LaySiege {
     }
 
     fn execute(&self, world: &mut World) -> (Vec<Entity>, bool) {
-        let actor = world
-            .resource::<Game>()
-            .ctx
-            .player_character_id
-            .clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone();
         let army_id = world
             .resource::<CommandMenuUiContext>()
             .choices
@@ -127,9 +92,6 @@ impl LaySiege {
     }
 }
 
-/// One siege-eligible army's row data. `target_text` describes who
-/// rules the foreign land the army stands on — useful intel before
-/// committing to a 30-day siege.
 struct SiegeArmyRow {
     army_id: String,
     name: String,
@@ -138,10 +100,7 @@ struct SiegeArmyRow {
     target_text: String,
 }
 
-/// `(army_id, name, levy, "<land>, <ruler>")` for every army under the
-/// actor's kingdoms standing on a foreign land. The picker already
-/// filters to foreign lands; `target_text` reads the defender's ruler
-/// so the player sees who they'd be laying siege to.
+/// `(army_id, name, levy, "<land>, <ruler>")` for every army under the actor's kingdoms on a foreign land.
 fn foreign_army_rows(world: &World, actor: &str) -> Vec<SiegeArmyRow> {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return Vec::new();
@@ -149,37 +108,23 @@ fn foreign_army_rows(world: &World, actor: &str) -> Vec<SiegeArmyRow> {
     let Some(character_leads) = world.get::<CharacterLeads>(actor_e) else {
         return Vec::new();
     };
-    let actor_kingdoms: std::collections::HashSet<Entity> =
-        character_leads.kingdoms().iter().copied().collect();
+    let actor_kingdoms: std::collections::HashSet<Entity> = character_leads.kingdoms().iter().copied().collect();
     let mut out = Vec::new();
     for kingdom_e in character_leads.kingdoms() {
-        let Some(kha) = world.get::<KingdomHasArmies>(*kingdom_e) else {
-            continue;
-        };
+        let Some(kha) = world.get::<KingdomHasArmies>(*kingdom_e) else { continue };
         for army_e in kha.iter() {
             let (Some(army_id), Some(aol), Some(army_name)) = (
                 world.get::<StringId>(army_e).map(|s| s.0.clone()),
                 world.get::<ArmyOnLand>(army_e).map(|a| a.0),
                 world.get::<ArmyName>(army_e).map(|n| n.0.clone()),
-            ) else {
-                continue;
-            };
+            ) else { continue };
             let is_foreign = world
                 .get::<LandHeldBy>(aol)
                 .map(|lhb| !actor_kingdoms.contains(&lhb.kingdom()))
                 .unwrap_or(false);
-            if !is_foreign {
-                continue;
-            }
-            let levy = world
-                .get::<ArmyLevy>(army_e)
-                .map(|army_levy| army_levy.0)
-                .unwrap_or(0);
-            // Target land name + ruling character (for intel).
-            let land_label = world
-                .get::<LandName>(aol)
-                .map(|ln| ln.0.clone())
-                .unwrap_or_else(|| "?".into());
+            if !is_foreign { continue };
+            let levy = world.get::<ArmyLevy>(army_e).map(|x| x.0).unwrap_or(0);
+            let land_label = world.get::<LandName>(aol).map(|ln| ln.0.clone()).unwrap_or_else(|| "?".into());
             let target_text = world
                 .get::<LandHeldBy>(aol)
                 .and_then(|lhb| world.get::<KingdomLedBy>(lhb.kingdom()))
@@ -211,10 +156,7 @@ fn foreign_army_rows(world: &World, actor: &str) -> Vec<SiegeArmyRow> {
     out
 }
 
-/// Spawn the siege entity, flip the army to `Sieging`, schedule the first
-/// event 10 days out.
-/// Spawn the siege entity, flip the army to `Sieging`, schedule the first
-/// event 10 days out.
+/// Spawn the siege entity, flip the army to `Sieging`, schedule the first event 10 days out.
 fn begin_siege(world: &mut World, actor: &str, army_id: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return error(world, format!("cannot siege with `{army_id}`: unknown actor"));
@@ -223,20 +165,12 @@ fn begin_siege(world: &mut World, actor: &str, army_id: &str) {
         return error(world, format!("cannot siege with `{army_id}`: no such army"));
     };
 
-    // Snapshot the data we need (actor kingdoms, the army's land, the land's
-    // holding kingdom) so the immutable borrows drop before we mutate
-    // `world` to flip the army's status and spawn the siege entity.
     let (actor_kingdoms, army_land_e, is_foreign) = {
         let actor_kingdoms: std::collections::HashSet<Entity> = world
             .get::<CharacterLeads>(actor_e)
             .map(|cl| cl.kingdoms().iter().copied().collect())
             .unwrap_or_default();
-        let _army_kingdom = world
-            .get::<ArmyBelongsToKingdom>(army_e)
-            .map(|abtk| abtk.0);
-        let Some(army_on_land) = world.get::<ArmyOnLand>(army_e) else {
-            return;
-        };
+        let Some(army_on_land) = world.get::<ArmyOnLand>(army_e) else { return };
         let is_foreign = world
             .get::<LandHeldBy>(army_on_land.0)
             .map(|lhb| !actor_kingdoms.contains(&lhb.kingdom()))
@@ -249,41 +183,30 @@ fn begin_siege(world: &mut World, actor: &str, army_id: &str) {
         .map(|abtk| actor_kingdoms.contains(&abtk.0))
         .unwrap_or(false)
     {
-        return error(
-            world,
-            format!("cannot siege with `{army_id}`: that army does not belong to your kingdom"),
-        );
+        return error(world, format!("cannot siege with `{army_id}`: that army does not belong to your kingdom"));
     }
     if !is_foreign {
-        return error(
-            world,
-            format!("cannot siege with `{army_id}`: a siege on your own land is a no-op"),
-        );
+        return error(world, format!("cannot siege with `{army_id}`: a siege on your own land is a no-op"));
     }
 
     if let Some(mut army_status) = world.get_mut::<ArmyStatus>(army_e) {
         *army_status = ArmyStatus::Sieging;
     }
-    let today = *world.resource::<Date>();
+    let today = *world.resource::<crate::resources::date::Date>();
     let next_event = {
-        let calendar = world.resource::<Calendar>();
+        let calendar = world.resource::<crate::resources::calendar::Calendar>();
         today.after_days(10, calendar)
     };
-    let _siege_e = world
-        .spawn((
-            Siege,
-            SiegeAttackerArmy(army_e),
-            SiegeDefenderLand(army_land_e),
-            SiegeProgress(0),
-            SiegeNextEventDate(next_event),
-        ))
-        .id();
+    world.spawn((
+        Siege,
+        SiegeAttackerArmy(army_e),
+        SiegeDefenderLand(army_land_e),
+        SiegeProgress(0),
+        SiegeNextEventDate(next_event),
+    ));
 
-    // Chronicle observer pulls the land + army names off the entities —
-    // no need to capture them here for the line itself.
     world.trigger(OnSiegeLaid {
         army: army_e,
         land: army_land_e,
     });
 }
-

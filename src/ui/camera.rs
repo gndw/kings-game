@@ -1,6 +1,4 @@
 //! The camera: spawn, framing, and the tween between zoomed/unzoomed views.
-//! Map drawing lives in `super::map`; this module only knows about the
-//! projection and where the camera is pointed.
 
 use super::startup::RIGHT_BAR;
 use crate::app::Game;
@@ -10,27 +8,16 @@ use bevy::camera::ScalingMode;
 use bevy::prelude::*;
 
 /// Padding around the selected land's bbox when zoomed in, in world units per
-/// land-unit. 3.0 = 200% of the bbox in each axis, i.e. the land takes the
-/// middle third of the visible area.
+/// land-unit.
 const ZOOM_MARGIN: f64 = 3.0;
-/// Floor on the zoomed view's `min_w`/`min_h`. Even a tiny land won't zoom
-/// in past this — the camera still shows at least `MIN_ZOOM` world units on
-/// each axis, so the view stays readable on small lands.
+/// Floor on the zoomed view's `min_w`/`min_h` so the view stays readable on small lands.
 const MIN_ZOOM: f32 = 2000.0;
-/// The 0.7 default scale on the orthographic projection (30% zoom-in over a
-/// 1:1 view). Kept consistent across default and zoomed views so the
-/// transition doesn't pop.
+/// 30% zoom-in over a 1:1 view. Kept consistent across default and zoomed views so the transition doesn't pop.
 const CAMERA_SCALE: f32 = 0.7;
-/// Seconds to interpolate between camera views. Short enough to feel snappy
-/// on zoom toggle, long enough that a pan across the map doesn't strobe.
+/// Seconds to interpolate between camera views.
 const TRANSITION_DURATION: f32 = 0.2;
 
-/// The view the camera is currently rendering — kept in sync with the
-/// `Projection`/`Transform` after each [`update_camera`] frame. Doubles as
-/// the "where are we now" source for re-tweening: when the destination moves
-/// mid-transition, [`update_camera`] copies this into the tween's `from` so
-/// the new transition starts from the actual on-screen position, not the
-/// tween's original start.
+/// The view the camera is currently rendering. Doubles as the source for re-tweening.
 #[derive(Component, Clone, Copy, Default, PartialEq)]
 pub struct CameraView {
     pub translation: Vec2,
@@ -39,8 +26,7 @@ pub struct CameraView {
 }
 
 /// In-flight camera tween. `from` is the view at the moment the destination
-/// last changed; `to` is the destination; `t` is normalised progress
-/// (0 = at `from`, 1 = at `to`).
+/// last changed; `to` is the destination; `t` is normalised progress.
 #[derive(Component, Clone, Copy, Default)]
 pub struct CameraTween {
     pub from: CameraView,
@@ -48,9 +34,7 @@ pub struct CameraTween {
     pub t: f32,
 }
 
-/// Smoothstep ease — gentle start and end, linear-ish middle. Feels right
-/// for camera moves: avoids the jump-cut of linear lerp and the overshoot of
-/// back/elastic.
+/// Smoothstep ease — gentle start and end.
 fn ease_in_out(t: f32) -> f32 {
     let t = t.clamp(0.0, 1.0);
     t * t * (3.0 - 2.0 * t)
@@ -58,13 +42,7 @@ fn ease_in_out(t: f32) -> f32 {
 
 /// Camera framed on the whole map. `update_camera` rewrites the projection
 /// every frame to follow `Game::zoomed`; the tween starts settled so the
-/// first frame doesn't kick an unintended transition toward the default view.
-///
-/// Pan/zoom hooks: pan = `Transform::translation`, zoom =
-/// `OrthographicProjection::scale` (currently constant at `CAMERA_SCALE`,
-/// 30% zoom-in over a 1:1 view). The `viewport_origin` shift centres the
-/// rendered area on the left `(1 - RIGHT_BAR)` slice of the window so the
-/// map lands beside the right-hand UI column instead of under it.
+/// first frame doesn't kick an unintended transition.
 pub fn startup(mut commands: Commands, border: Res<Border>) {
     let (x0, x1, y0, y1) = border.bounds();
     let default_view = CameraView {
@@ -74,12 +52,6 @@ pub fn startup(mut commands: Commands, border: Res<Border>) {
     };
     commands.spawn((
         Camera2d,
-        // AutoMin keeps the whole map visible whatever the window shape, so
-        // the island never distorts — the viewport maths the terminal needed
-        // is free here. Widened and pushed left so the map lands beside the
-        // chronicle, not under it: the camera renders the whole window, the
-        // panels just sit on top. `update_camera` rewrites `scaling_mode` and
-        // `transform` every frame to follow `Game::zoomed`.
         Projection::from(OrthographicProjection {
             scaling_mode: ScalingMode::AutoMin {
                 min_width: default_view.min_w,
@@ -99,11 +71,7 @@ pub fn startup(mut commands: Commands, border: Res<Border>) {
     ));
 }
 
-/// Compute the camera target for the current `(Game::zoomed, selection)`
-/// state. Returns the default map view when unzoomed or when the selection
-/// can't be resolved; otherwise the selected land's bbox + `ZOOM_MARGIN`,
-/// centred on the bbox (polygons can be off-centre, so the holding point
-/// isn't always the visual centre).
+/// The camera target for the current `(Game::zoomed, selection)` state.
 fn compute_target(
     game: &Game,
     border: &Border,
@@ -137,7 +105,6 @@ fn compute_target(
             ((lx0 + lx1) / 2.0) as f32,
             ((ly0 + ly1) / 2.0) as f32,
         );
-        // Clamp to MIN_ZOOM so very small lands don't zoom past readability.
         target.min_w = (((lx1 - lx0) * ZOOM_MARGIN) as f32 / (1.0 - RIGHT_BAR)).max(MIN_ZOOM);
         target.min_h = (((ly1 - ly0) * ZOOM_MARGIN) as f32).max(MIN_ZOOM);
     }
@@ -145,10 +112,7 @@ fn compute_target(
 }
 
 /// Drive the camera from `Game::zoomed` and the current selection. Re-tweens
-/// whenever the destination moves (zoom toggle, or selection change while
-/// zoomed); otherwise just advances the in-flight tween. The new `from` is
-/// the camera's current rendered view, so a re-target mid-transition stays
-/// smooth instead of snapping back to the previous `from`.
+/// whenever the destination moves; otherwise just advances the tween.
 pub fn update_camera(
     game: Res<Game>,
     border: Res<Border>,

@@ -2,13 +2,9 @@
 
 use bevy::prelude::*;
 
-/// Fired when something about a building changes. Lifecycle variants
-/// ([`BuildingUpdateKind::ConstructionStarted`] / [`BuildingUpdateKind::Constructed`] /
-/// [`BuildingUpdateKind::Destroyed`]) fire from the construct / destroy commands and
-/// the daily construction tick; state variants
-/// ([`BuildingUpdateKind::Raised`] / [`BuildingUpdateKind::Dismissed`]) fire
-/// from the raise / dismiss army commands, one event per affected ACTIVE
-/// building, after the structural change settles Bevy's relationship hooks.
+/// Fired when something about a building changes. Lifecycle variants come from
+/// the construct/destroy commands and the daily construction tick; state
+/// variants come from the raise/dismiss army commands.
 #[derive(Event)]
 pub struct OnBuildingUpdated {
     pub building: Entity,
@@ -18,40 +14,28 @@ pub struct OnBuildingUpdated {
 
 #[derive(Clone, Copy)]
 pub enum BuildingUpdateKind {
-    /// Fired by [`crate::commands::construct_building`] the moment a building
-    /// is queued (status = `BUILDING`). Distinct from `Constructed`, which
-    /// fires from the daily tick when the building finishes and flips to
-    /// `ACTIVE` — two different chronicle-worthy moments (the construction
-    /// starting, and the construction completing).
+    /// Construction queued (status = `BUILDING`).
     ConstructionStarted,
-    /// Fired by [`crate::game::construction`] the day a building's finish
-    /// date passes and its status flips to `ACTIVE`.
+    /// Building finished and flipped to `ACTIVE` (fired by the daily tick).
     Constructed,
     Destroyed,
     Raised,
     Dismissed,
 }
 
-/// Fired by [`crate::commands::raise_army`] after the army bundle is spawned
-/// and its building pools drained. Observers read `ArmyOnLand` / `ArmyName`
-/// from `army` to position and label the icon.
+/// Raised by `commands::raise_army` after the army bundle is spawned.
 #[derive(Event)]
 pub struct OnArmyRaised {
     pub army: Entity,
 }
 
-/// Fired by [`crate::commands::dismiss_army`] after the army entity is
-/// despawned. Observers use this to clean up the icon + label trio.
+/// Dismissed by `commands::dismiss_army` after the army entity is despawned.
 #[derive(Event)]
 pub struct OnArmyDismiss {
     pub army: Entity,
 }
 
-/// Fired by [`crate::commands::marching`] after the per-hop marching
-/// entities are spawned. `roads` is the count of hops on the route; `days`
-/// is the summed `RoadDistanceDays` of those hops (the number the player
-/// was quoted in the command palette). `from`/`to` are the route's two
-/// ends — the army's current land and the picked destination.
+/// Ordered by `commands::marching` after the per-hop marching entities are spawned.
 #[derive(Event)]
 pub struct OnMarchingOrdered {
     pub army: Entity,
@@ -61,12 +45,8 @@ pub struct OnMarchingOrdered {
     pub days: u32,
 }
 
-/// Fired by [`crate::game::marching::tick`] when an army hops onto the
-/// target land of one of its marchings. `continuing` is `true` when the
-/// army's queue still has a `Scheduled` marching whose `MarchingFromLand`
-/// matches the land just arrived on (chain march — the chronicle should
-/// mention the next hop); `false` when the queue is empty (route done —
-/// army stands idle).
+/// Fired by the marching tick when an army hops onto a target land.
+/// `continuing: true` means the queue still has a Scheduled marching on this land.
 #[derive(Event)]
 pub struct OnArmyArrived {
     pub army: Entity,
@@ -75,28 +55,21 @@ pub struct OnArmyArrived {
     pub continuing: bool,
 }
 
-/// Fired by [`crate::commands::lay_siege`] after the siege entity is
-/// spawned and the army's status flips to `Sieging`.
+/// Laid by `commands::lay_siege` after the siege entity is spawned.
 #[derive(Event)]
 pub struct OnSiegeLaid {
     pub army: Entity,
     pub land: Entity,
 }
 
-/// Fired by [`crate::game::siege::tick`] the moment a siege resolves at
-/// 100% — buildings on the land flip to `Inactive`, `ArmyControlsLand`
-/// lands on the army, and the army returns to `Idle`.
+/// Won by the siege tick the moment a siege resolves at 100%.
 #[derive(Event)]
 pub struct OnSiegeWon {
     pub army: Entity,
     pub land: Entity,
 }
 
-/// Fired by [`crate::commands::declare_war`] after the war entity is
-/// spawned. `attacker` / `defender` are the two kingdoms; `casus_belli`
-/// is the war's CB type (so the chronicle can pick the verb per shape —
-/// "demanding its lands" for `Conquest`, future variants get their own
-/// phrasing).
+/// Declared by `commands::declare_war` after the war entity is spawned.
 #[derive(Event)]
 pub struct OnWarDeclared {
     pub attacker: Entity,
@@ -104,35 +77,21 @@ pub struct OnWarDeclared {
     pub casus_belli: crate::ecs::war::WarCasusBelliType,
 }
 
-/// Fired by [`crate::commands::enforce_demands`] when a single demand is
-/// resolved against a war. `target` is the demand's target kingdom (the
-/// kingdom the `Take` demand was set against); `demand_type` lets the
-/// chronicle pick a verb per shape.
+/// Enforced by `commands::enforce_demands` when a single demand is resolved.
 #[derive(Event)]
 pub struct OnDemandEnforced {
     pub demand_type: crate::ecs::war::WarDemandType,
     pub target: Entity,
 }
 
-/// Fired by [`crate::commands::enforce_demands`] when a war is despawned
-/// after a demand resolution. `defender` is the war's defender kingdom
-/// (the war's name in the chronicle is the target kingdom — "the war
-/// over Riverrun ended"). Fires after `OnDemandEnforced` for the same
-/// demand; the chronicle observer drops the second event because the
-/// first already told the player what happened.
+/// Ended by `commands::enforce_demands` when a war is despawned after a demand.
 #[derive(Event)]
 pub struct OnWarEnded {
     pub defender: Entity,
 }
 
-/// Fired by a command's validation when a player input is rejected
-/// (unknown actor / not enough gold / no road route / …). The
-/// `ui::error` module is the only observer: it pops a modal showing
-/// `message` and switches the input layer to
-/// [`InputLayer::ErrorPopup`](crate::resources::input_layer::InputLayer::ErrorPopup)
-/// until the player dismisses it. Carries a single `message: String`
-/// rather than a structured kind so commands can hand the player a
-/// human-readable line verbatim without a code↔text table.
+/// Fired by a command's validation when a player input is rejected. The error
+/// popup is the only observer.
 #[derive(Event)]
 pub struct OnErrorOccured {
     pub message: String,

@@ -1,34 +1,12 @@
-//! What a kind of building is, from `building_definitions.ron`. An ECS resource
-//! holding the read-only roster, seeded into the world in
-//! [`crate::ecs::populate`].
-//!
-//! The *definitions* live here (one entry per building kind, shared across every
-//! instance); the *instances* standing in lands are ECS entities
-//! (see [`crate::ecs::building`]). A building entity carries the id of its
-//! definition in [`BuildingOf`](crate::ecs::BuildingOf); yields and the
-//! buildings panel look the stats up here.
+//! Building definitions (one entry per kind) from `building_definitions.ron`.
+//! Instances are ECS entities; this is the read-only stat roster.
 
 use bevy::prelude::Resource;
 use indexmap::IndexMap;
 use serde::Deserialize;
 
-/// One building definition. Military ones cost `gold_upkeep` and add `levy`
-/// troops; civil ones earn `gold_profit`. One gold field set, never both — the
-/// other stays 0. `construction_price` is the one-off gold cost to build one;
-/// `construction_time` is how many in-game days it takes (the new building
-/// spawns as `BuildingStatus::Building` and flips to `Active` once the date
-/// advances past the start date + this value).
-///
-/// `levy_rate` is the per-month replenishment the building contributes to
-/// armies raised on its land (military only — defaults to 0 on civil kinds).
-/// Read by future replenishment code, not yet consumed: this commit just
-/// declares the field.
-///
-/// `fort_level` is the fortification tier of the building — `0` for
-/// non-fortified kinds (the default; existing buildings don't specify it)
-/// and a positive value for fortified kinds like `Castle`. The field exists
-/// on the roster so future war-resolution code (siege modifiers, conquest
-/// defense) can read it; no sim path consumes it yet.
+/// One building definition. Military kinds cost `gold_upkeep` and add `levy`;
+/// civil ones earn `gold_profit`. Construction cost + time apply to both.
 #[derive(Clone, Debug, Deserialize)]
 pub struct BuildingDef {
     pub id: String,
@@ -49,8 +27,7 @@ pub struct BuildingDef {
     pub construction_time: u32,
 }
 
-/// The roster: ID-keyed for O(1) lookup, insertion-ordered for deterministic
-/// iteration — the same rule as the rest of `Content`.
+/// The roster: ID-keyed for O(1) lookup, insertion-ordered for deterministic iteration.
 #[derive(Clone, Debug, Default, Resource)]
 pub struct BuildingDefs(pub IndexMap<String, BuildingDef>);
 

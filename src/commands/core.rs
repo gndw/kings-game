@@ -1,10 +1,5 @@
-//! Shared helpers every command reaches for: a fresh id, a chronicle line,
-//! the "lands this actor rules" walk, and the building-levy pool operations
-//! the raise / dismiss pair share.
-//!
-//! Also owns the [`BaseCommand`] trait every command file implements and
-//! the [`spawn_command`] orchestrator the v2 palette calls to populate
-//! the panel.
+//! Shared helpers every command reaches for, plus the `BaseCommand` trait
+//! every command file implements and the `spawn_command` orchestrator.
 
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
@@ -37,68 +32,30 @@ use bevy::prelude::With;
 use bevy::prelude::*;
 use rand::TryRng;
 
-/// The uniform interface every player command implements. Each command
-/// file supplies its own UI, so the palette orchestrator ([`spawn_command`])
-/// can drive every command through this surface without knowing the
-/// concrete struct. The command is responsible for returning the entities
-/// it spawned so the palette can track and despawn them, and for re-styling
-/// each row in response to selection.
+/// The uniform interface every player command implements.
 pub trait BaseCommand: Send + Sync {
-    /// Stable, unique string id for the command (e.g.
-    /// `"command:construct_building"`). Stored alongside the command
-    /// instance in [`CommandEntry`] so the orchestrator + future
-    /// selection / dispatch layer can look the command up by name.
+    /// Stable, unique string id for the command (e.g. `"command:construct_building"`).
     fn get_command_id(&self) -> &'static str;
-    /// Spawn the command's UI into the palette's list panel. `parent` is
-    /// the list entity — the command should `ChildOf` its row to it and
-    /// add whatever child `Text` / `Node` elements the command wants.
-    /// Each command decides its own visual layout so the panel can host a
-    /// heterogeneous set of pickers.
-    ///
-    /// Returns a `(entities, is_executed)` pair:
-    /// - `entities`: every entity the command spawned (in display order),
-    ///   so the palette can despawn them on close and resolve a click
-    ///   back to a row.
-    /// - `is_executed`: `true` when the player's running choices already
-    ///   carry enough information for this command to act on (e.g. a
-    ///   `construct_building` that has both a land pick and a building
-    ///   pick). The orchestrator uses this to decide whether to close
-    ///   the panel.
-    ///
-    /// `choices` is the player's running selection list
-    /// (`(key, value)` pairs, e.g. `("command", "command:construct_building")`).
-    /// The command inspects it to decide what to show: no `"command"` key
-    /// means first time / fresh, a matching key means the command is the
-    /// current pick, a non-matching key means another command was picked.
+    /// Spawn the command's UI into the palette's list. Returns `(entities, is_executed)`:
+    /// `entities` is what to track/despawn, `is_executed` is `true` when the choices
+    /// already carry enough info for the command to act on.
     fn spawn_command(
         &self,
         world: &mut World,
         parent: Entity,
         choices: &[(String, String)],
     ) -> (Vec<Entity>, bool);
-    /// Re-style one of the entities the command previously spawned.
-    /// `entity` is expected to be one of the entities returned by the
-    /// last call to `spawn_command` for this command. `is_selected`
-    /// indicates whether the palette's cursor is currently on this row;
-    /// the command decides what that visually means (background swap,
-    /// border, glow).
+    /// Re-style one of the entities previously spawned by `spawn_command`.
     fn update(&self, entity: Entity, is_selected: bool, world: &mut World);
 }
 
-/// One entry in [`CommandContext`]: a stable id paired with the
-/// [`BaseCommand`] instance it labels. `id` mirrors what
-/// [`BaseCommand::get_command_id`] returns at runtime, captured at
-/// [`startup`] so the orchestrator and any future dispatch layer can
-/// match by name without holding a borrow on the command struct.
+/// One entry in `CommandContext`: a stable id paired with the `BaseCommand` instance.
 pub struct CommandEntry {
     pub id: &'static str,
     pub cmd: &'static dyn BaseCommand,
 }
 
-/// Runtime roster of every command the palette can surface. Populated by
-/// [`startup`] from the concrete command structs and read by [`spawn_command`]
-/// and [`update`]. Replaces the old `const COMMANDS` table so the roster
-/// can grow without touching the orchestrator.
+/// Runtime roster of every command the palette can surface.
 #[derive(Resource, Default)]
 pub struct CommandContext {
     pub commands: Vec<CommandEntry>,
@@ -106,54 +63,19 @@ pub struct CommandContext {
 
 pub fn startup(world: &mut World) {
     let commands = vec![
-        CommandEntry {
-            id: ConstructBuilding.get_command_id(),
-            cmd: &ConstructBuilding,
-        },
-        CommandEntry {
-            id: DestroyBuilding.get_command_id(),
-            cmd: &DestroyBuilding,
-        },
-        CommandEntry {
-            id: RaiseArmy.get_command_id(),
-            cmd: &RaiseArmy,
-        },
-        CommandEntry {
-            id: DismissArmy.get_command_id(),
-            cmd: &DismissArmy,
-        },
-        CommandEntry {
-            id: MarchingOrder.get_command_id(),
-            cmd: &MarchingOrder,
-        },
-        CommandEntry {
-            id: DeclareWar.get_command_id(),
-            cmd: &DeclareWar,
-        },
-        CommandEntry {
-            id: LaySiege.get_command_id(),
-            cmd: &LaySiege,
-        },
-        CommandEntry {
-            id: EnforceDemands.get_command_id(),
-            cmd: &EnforceDemands,
-        },
+        CommandEntry { id: ConstructBuilding.get_command_id(), cmd: &ConstructBuilding },
+        CommandEntry { id: DestroyBuilding.get_command_id(), cmd: &DestroyBuilding },
+        CommandEntry { id: RaiseArmy.get_command_id(), cmd: &RaiseArmy },
+        CommandEntry { id: DismissArmy.get_command_id(), cmd: &DismissArmy },
+        CommandEntry { id: MarchingOrder.get_command_id(), cmd: &MarchingOrder },
+        CommandEntry { id: DeclareWar.get_command_id(), cmd: &DeclareWar },
+        CommandEntry { id: LaySiege.get_command_id(), cmd: &LaySiege },
+        CommandEntry { id: EnforceDemands.get_command_id(), cmd: &EnforceDemands },
     ];
     world.insert_resource(CommandContext { commands });
 }
 
-/// Orchestrator: find the panel's list and let every entry in
-/// [`CommandContext`] spawn its own UI into it. Returns
-/// `(entities, is_executed)`. `entities` is the flat list of every
-/// entity every command produced, in roster order. `is_executed` is
-/// `true` if any of those commands reported it had enough information
-/// in `choices` to act (e.g. a `construct_building` with both a land
-/// pick and a building pick); the caller uses it to decide whether to
-/// close the panel.
-///
-/// `choices` is forwarded to every command's
-/// [`BaseCommand::spawn_command`] so each row can decide what to show
-/// based on the player's running selection.
+/// Orchestrator: let every entry in `CommandContext` spawn its own UI into the panel's list.
 pub fn spawn_command(
     world: &mut World,
     choices: &[(String, String)],
@@ -165,8 +87,7 @@ pub fn spawn_command(
     else {
         return (Vec::new(), false);
     };
-    // Snapshot the cmd refs so the immutable borrow on `CommandContext`
-    // drops before we touch `world` mutably.
+    // Snapshot the cmd refs so the immutable borrow on `CommandContext` drops before mutation.
     let cmds: Vec<&'static dyn BaseCommand> = world
         .resource::<CommandContext>()
         .commands
@@ -183,12 +104,7 @@ pub fn spawn_command(
     (entities, any_executed)
 }
 
-/// Re-style a single spawned entity to match the current selection
-/// state. The entity is expected to carry a
-/// [`CommandHasId`](crate::ui::command_menu::CommandHasId) (set by the
-/// spawning command); the orchestrator reads it, looks the command up
-/// in [`CommandContext`] by id, and delegates to that command's
-/// `update`. No-op for entities that aren't palette rows.
+/// Re-style a single spawned entity by looking up its owning command and delegating to `update`.
 pub fn update(entity: Entity, is_selected: bool, world: &mut World) {
     let Some(command_id) = world
         .get::<crate::ui::command_menu::CommandHasId>(entity)
@@ -196,8 +112,6 @@ pub fn update(entity: Entity, is_selected: bool, world: &mut World) {
     else {
         return;
     };
-    // Snapshot the matched cmd so the `CommandContext` borrow drops
-    // before `cmd.update` takes `&mut World`.
     let cmd: Option<&'static dyn BaseCommand> = world
         .resource::<CommandContext>()
         .commands
@@ -209,14 +123,8 @@ pub fn update(entity: Entity, is_selected: bool, world: &mut World) {
     }
 }
 
-/// The lands `actor` rules (can act on): walks
-/// `actor → CharacterLeads → kingdoms → KingdomHold → land`. With the
-/// multi-kingdom model the player can lead several kingdoms, so this
-/// collects every ruled land across every kingdom the player leads —
-/// `ruled_lands` is the union, not the held land of "the" kingdom.
-/// Reads the relationship target with `world::get` so it stays a
-/// `&World` read (`world::query` needs `&mut World`); the buildings
-/// panel reads the same targets.
+/// The lands `actor` rules: walks `actor → CharacterLeads → kingdoms → KingdomHold`,
+/// collecting every ruled land across every kingdom the actor leads.
 pub(super) fn ruled_lands(world: &World, actor: &str) -> Vec<(String, String)> {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return Vec::new();
@@ -240,13 +148,7 @@ pub(super) fn ruled_lands(world: &World, actor: &str) -> Vec<(String, String)> {
     out
 }
 
-/// A fresh v4 UUID for a runtime-built entity, drawn from the seeded `SimRng`.
-///
-/// ponytail: the id is generated from `SimRng`, not OS entropy, so it keeps the
-/// codebase's one-entropy-source invariant (every bit routed through
-/// `try_next_u64`). It is a valid v4 UUID string and unique, but deterministic
-/// across replays — which is what this sim wants. Format only, no `uuid` crate,
-/// no new dependency.
+/// A fresh v4 UUID drawn from the seeded `SimRng` (one-entropy-source invariant).
 pub(super) fn next_id(world: &mut World) -> String {
     let rng = world.resource::<Game>().ctx.rng.clone();
     let mut b = [0u8; 16];
@@ -264,29 +166,15 @@ pub(super) fn next_id(world: &mut World) -> String {
     )
 }
 
-/// Fire [`OnErrorOccured`] with `message`. The validation side of
-/// commands reaches for this so the player sees the failure in a modal
-/// popup (`ui::error`) rather than buried in the chronicle scroll.
-/// Game-event lines (construction begun, army arrived, war declared)
-/// reach the chronicle via events observed in
-/// [`crate::chronicles`].
+/// Fire `OnErrorOccured` with `message`; the error popup shows it as a modal.
 pub(crate) fn error(world: &mut World, message: String) {
     world.trigger(OnErrorOccured { message });
 }
 
 // --- building-levy helpers ---------------------------------------------------
-// The raise / dismiss pair share three operations on `BuildingLevy` and
-// `BuildingIsRaised`: sum the available pool, drain it to the army, and
-// distribute it back. Kept here so both commands reach for the same code
-// path; not in `game/yields.rs` because they're command-internal.
+// Sum the available pool, drain it to the army, and distribute it back.
 
-/// Sum every ACTIVE building's `BuildingLevy` on `land_e`. Returns
-/// `(total, has_any)` — `has_any` distinguishes "no ACTIVE buildings" from
-/// "ACTIVE buildings exist but their pools are all drained". The raise
-/// gate is `has_any && total > 0`; the second is implied by the first
-/// (`has_any` requires at least one contributing building), but kept
-/// explicit so a future `BuildingLevy` default of `0` doesn't slip past
-/// the check.
+/// Sum every ACTIVE building's `BuildingLevy` on `land_e`. Returns `(total, has_any)`.
 pub(super) fn available_levy(world: &World, land_e: Entity) -> (u64, bool) {
     let Some(land_has_buildings) = world.get::<LandHasBuildings>(land_e) else {
         return (0, false);
@@ -305,21 +193,13 @@ pub(super) fn available_levy(world: &World, land_e: Entity) -> (u64, bool) {
     (total, any)
 }
 
-/// Distribute `army_levy` back into each ACTIVE building's `BuildingLevy`
-/// on `land_e`, capped at the def's `levy`. Sets `BuildingIsRaised` back
-/// to `false` for every ACTIVE building on the land (a no-op for ones that
-/// weren't raised — defensive against torn edge cases). Levy that won't fit
-/// in any building (rare — only if the army outgrew the buildings' caps) is
-/// dropped, since there's no "overflow" building to pour into. Returns only
-/// the buildings that were actually raised (so callers can fire per-building
-/// `OnBuildingUpdated` for real state transitions, not the defensive flips).
+/// Distribute `army_levy` back into each ACTIVE building's `BuildingLevy` on `land_e`,
+/// capped at the def's `levy`. Returns buildings that were actually raised.
 pub(super) fn distribute_levy_back(
     world: &mut World,
     land_e: Entity,
     army_levy: u64,
 ) -> Vec<Entity> {
-    // Snapshot entities, then drop the borrow before any `get_mut` —
-    // holding `&LandHasBuildings` across the mutation loop would conflict.
     let entities: Vec<Entity> = match world.get::<LandHasBuildings>(land_e) {
         Some(land_has_buildings) => land_has_buildings.iter().collect(),
         None => return Vec::new(),
@@ -330,15 +210,11 @@ pub(super) fn distribute_levy_back(
         if !is_active_building(world, b_e) {
             continue;
         }
-        // Snapshot the previous raised state so we only fire events for
-        // buildings that genuinely transitioned raised → not-raised.
         let was_raised = world
             .get::<BuildingIsRaised>(b_e)
             .map(|bir| bir.0)
             .unwrap_or(false);
-        // Cap lookup in its own scope so `defs` drops before the `get_mut`
-        // below — otherwise the immutable `defs` borrow collides with the
-        // mutable `get_mut` borrow of `world`.
+        // Cap lookup in its own scope so `defs` drops before the `get_mut` below.
         let cap = {
             let defs = world.resource::<BuildingDefs>();
             world
@@ -350,11 +226,6 @@ pub(super) fn distribute_levy_back(
             && cap > 0
             && let Some(mut building_levy) = world.get_mut::<BuildingLevy>(b_e)
         {
-            // Pour up to `cap` (or the rest of the army's levy, whichever is
-            // smaller) into this building's pool. Order of iteration isn't
-            // weighted — archetype order is deterministic, so the "first
-            // building" always wins any overflow race. A future
-            // weighted/proportional fill is the obvious upgrade.
             let space = cap.saturating_sub(building_levy.0);
             let add = space.min(remaining as u32);
             building_levy.0 += add;
@@ -370,8 +241,7 @@ pub(super) fn distribute_levy_back(
     dismissed
 }
 
-/// True if `b_e` is a building entity with status `Active`. Used by the
-/// levy helpers so they only touch the buildings that count toward raising.
+/// True if `b_e` is a building entity with status `Active`.
 fn is_active_building(world: &World, b_e: Entity) -> bool {
     world
         .get::<BuildingStatus>(b_e)
@@ -380,18 +250,9 @@ fn is_active_building(world: &World, b_e: Entity) -> bool {
 }
 
 // --- per-land / per-army read helpers -------------------------------------
-// The land and army pickers in every command need a handful of stats
-// (yield, available levy, army status, …) that come from the world in
-// `&World` form. Each helper is a thin `world.get` walk that mirrors
-// the corresponding Bevy-system logic so the picker functions stay
-// readable and don't repeat the same loops.
+// Thin `world.get` walks mirroring the corresponding Bevy-system logic.
 
-/// `(net_gold_per_month, total_levy)` for every ACTIVE building on
-/// `land_e`. Mirrors [`crate::game::yields::sum_land_yield`] but reads
-/// via `world.get` so the picker functions (which take `&mut World`)
-/// can call it without rebuilding the Bevy `Query` plumbing. Used by
-/// the construct / destroy land pickers to show what each ruled land
-/// earns and drafts.
+/// `(net_gold_per_month, total_levy)` for every ACTIVE building on `land_e`.
 pub(super) fn land_yield(world: &World, land_e: Entity) -> (i64, u64) {
     let Some(land_has_buildings) = world.get::<LandHasBuildings>(land_e) else {
         return (0, 0);
@@ -417,11 +278,8 @@ pub(super) fn land_yield(world: &World, land_e: Entity) -> (i64, u64) {
     (gold, levy)
 }
 
-/// One-line status text for an army: `idle`, `→ <land> in <days>d`,
-/// or `sieging <land> (<progress>%)`. Mirrors the ARMIES panel's line
-/// format so the picker rows read identically. Reads everything via
-/// `world.get` so it stays a `&World` helper. `None` when the army's
-/// required components are missing — the caller skips the row.
+/// One-line status text for an army: `idle`, `→ <land> in <days>d`, `sieging (<progress>%)`,
+/// or `raising <levy>/<max>`. `None` when components are missing.
 pub(super) fn army_status_text(
     world: &World,
     army_e: Entity,
@@ -431,25 +289,12 @@ pub(super) fn army_status_text(
     let status = world.get::<ArmyStatus>(army_e).copied().unwrap_or(ArmyStatus::Idle);
     match status {
         ArmyStatus::Idle => Some("idle".into()),
-        // A `Raising` army is mustering — its `ArmyLevy < ArmyMaxLevy`
-        // until the formation tick flips it to `Idle`. Show the current
-        // fill against the target so the player can see how close it is.
         ArmyStatus::Raising => {
-            let levy = world
-                .get::<ArmyLevy>(army_e)
-                .map(|army_levy| army_levy.0)
-                .unwrap_or(0);
-            let max = world
-                .get::<ArmyMaxLevy>(army_e)
-                .map(|army_max_levy| army_max_levy.0)
-                .unwrap_or(0);
+            let levy = world.get::<ArmyLevy>(army_e).map(|x| x.0).unwrap_or(0);
+            let max = world.get::<ArmyMaxLevy>(army_e).map(|x| x.0).unwrap_or(0);
             Some(format!("raising {levy}/{max}"))
         }
         ArmyStatus::Marching => {
-            // Walk the queue: find the final destination (last hop's
-            // `MarchingToLand` land name) and the total days remaining
-            // (today's ordinal to the OnRoute arrival plus each
-            // subsequent Scheduled hop's `RoadDistanceDays`).
             let queue = world.get::<ArmyHasMarching>(army_e)?;
             let hops: Vec<Entity> = queue.iter().collect();
             let current_marching = world
@@ -503,60 +348,28 @@ pub(super) fn army_status_text(
 }
 
 // --- palette row styling --------------------------------------------------
-// Every command's picker row is the same shape: a padded card with the
-// same per-row colours, a name (plus an optional smaller description)
-// on the left, and up to two right-aligned stat cells. The constants
-// and the builder live here so commands don't redeclare them and the
-// styling stays in one place. The selection tint is also shared — every
-// command's `update` is a one-liner now.
+// Shared row colours and a builder so commands don't redeclare them.
 
-/// Per-row background in the palette. One shade lighter than the panel.
 pub(super) const ROW_PANEL: Color = Color::srgb(0.16, 0.16, 0.20);
-/// Background when the row is the player's selection.
 pub(super) const ROW_PANEL_SELECTED: Color = Color::srgb(0.24, 0.40, 0.72);
-/// Hairline border around the card.
 pub(super) const ROW_BORDER: Color = Color::srgba(0.55, 0.55, 0.62, 0.35);
-/// Width of each right-aligned stat column.
 pub(super) const STAT_W: f32 = 96.0;
-/// Default name colour (the regular pickable row).
 pub(super) const NAME_COLOR: Color = Color::srgb(0.96, 0.96, 0.98);
-/// Name colour when the row's choice is unavailable — cannot afford, no
-/// road route, gate not met. The row is still in the list (no disabled
-/// state); the suffix on the name explains why.
+/// Name colour when the row's choice is unavailable (can't afford, no route, gate not met).
 pub(super) const HINT_RED: Color = Color::srgb(0.92, 0.40, 0.40);
-/// Description-line colour (smaller font under the name).
 pub(super) const DESC_COLOR: Color = Color::srgba(0.78, 0.78, 0.82, 0.95);
-/// Default stat colour.
 pub(super) const STAT_COLOR: Color = Color::srgba(0.92, 0.92, 0.95, 1.0);
-/// Stat colour when the value is empty / the slot doesn't apply.
 pub(super) const STAT_DIM: Color = Color::srgba(0.55, 0.55, 0.60, 0.85);
 
 /// Swap the row's background between the unselected/selected shades.
-/// Called from every command's `update`; centralised so the palette
-/// styling stays in one place.
 pub(super) fn set_row_selected(world: &mut World, entity: Entity, is_selected: bool) {
-    let bg = if is_selected {
-        ROW_PANEL_SELECTED
-    } else {
-        ROW_PANEL
-    };
+    let bg = if is_selected { ROW_PANEL_SELECTED } else { ROW_PANEL };
     if let Some(mut background) = world.get_mut::<BackgroundColor>(entity) {
         background.0 = bg;
     }
 }
 
-/// Spawn one picker row. `name` is the main line; `description` is an
-/// optional smaller line under it (effect summary for `ConstructBuilding`
-/// building rows, defender/ruler detail for `LaySiege` army rows).
-/// `stat1` / `stat2` are optional right-aligned cells — pass `None` to
-/// leave the slot empty. `key_value` carries the step's
-/// `(CommandHasKey, CommandHasValue)` for step rows; `None` for the
-/// command's own top-level row.
-///
-/// The row is also stamped with [`CommandHasQueryable`] (the search
-/// key — same as the displayed `name`) and [`RowNameText`] (the name
-/// text child, so the palette can recolour the name alone when the row
-/// is grayed by a search filter).
+/// Spawn one picker row with optional description and up to two right-aligned stat cells.
 pub(super) fn picker_row(
     world: &mut World,
     parent: Entity,
@@ -590,7 +403,6 @@ pub(super) fn picker_row(
     let row = entity.id();
     let mut name_text_entity: Option<Entity> = None;
     world.entity_mut(row).with_children(|c| {
-        // Name column — fills remaining width.
         let mut name_col = c.spawn(Node {
             flex_direction: FlexDirection::Column,
             flex_grow: 1.0,
@@ -619,10 +431,7 @@ pub(super) fn picker_row(
                 TextFont::from_font_size(14.0),
                 TextColor(color),
                 TextLayout::justify(Justify::Right),
-                Node {
-                    width: px(STAT_W),
-                    ..default()
-                },
+                Node { width: px(STAT_W), ..default() },
             ));
         }
         if let Some((text, color)) = stat2 {
@@ -631,10 +440,7 @@ pub(super) fn picker_row(
                 TextFont::from_font_size(14.0),
                 TextColor(color),
                 TextLayout::justify(Justify::Right),
-                Node {
-                    width: px(STAT_W),
-                    ..default()
-                },
+                Node { width: px(STAT_W), ..default() },
             ));
         }
     });

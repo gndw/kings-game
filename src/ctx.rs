@@ -1,8 +1,5 @@
-//! The simulation context: everything that isn't an entity. The entity world
-//! lives in the App's `World`; this holds only session state — the rng,
-//! who the player is, and the map selection. The chronicle log is its own
-//! resource (`crate::resources::chronicle`); the calendar the sim runs on
-//! lives in `crate::resources`.
+//! The simulation context: session state — rng, player id, map selection —
+//! that isn't an entity. The chronicle log is its own resource.
 
 use crate::app::Game;
 use crate::ecs::{CharacterLeads, KingdomHold, LandHolding, Registry, StringId};
@@ -16,26 +13,14 @@ pub struct Ctx {
     pub seed: u64,
     pub rng: Arc<Mutex<SimRng>>,
     /// Whoever the player is playing as. An id into the character entities,
-    /// resolved through the [`Registry`] when a component is needed.
-    ///
-    /// Gold and levy are not kept here: every character has their own, as
-    /// `CharacterGold`/`CharacterLevy`, and the player is only distinguished
-    /// by this id.
+    /// resolved through `Registry` when a component is needed.
     pub player_character_id: String,
-    /// The land the map selection sits on, as a `StringId`. Set on startup to
-    /// the player's own seat by [`Ctx::startup`]; arrow keys move it via [`step`].
+    /// The land the map selection sits on. Set on startup to the player's own seat.
     pub selected_land_id: Option<String>,
 }
 
 impl Ctx {
-    /// `player` is who to play as — `--player-character-id` on the command
-    /// line, with no default: there is no such thing as the obvious character
-    /// to be. It is only an id, though, and one the content doesn't have
-    /// simply leaves the player bar blank rather than failing here.
-    ///
-    /// This builds only the session state — entities are spawned into the App
-    /// world by [`crate::ecs::populate`], and `selected_land_id` is set by
-    /// [`Ctx::startup`] in the `Startup` schedule once those entities exist.
+    /// `player` is `--player-character-id` on the command line. No default.
     pub fn new_game(seed: u64, player: &str) -> Self {
         let rng = Arc::new(Mutex::new(SimRng::new(seed)));
         Ctx {
@@ -46,13 +31,9 @@ impl Ctx {
         }
     }
 
-    /// Resolve the opening selection: the player's own capital, via the
-    /// held land of the first kingdom they lead. Runs in the `Startup`
-    /// schedule, after [`crate::ecs::populate`] has spawned the entities.
-    /// Left `None` if the player leads no kingdom, or that kingdom holds
-    /// no land. Multi-kingdom: only the *first* kingdom opens the selection
-    /// — the player can move to their other kingdoms with the arrow
-    /// keys once the game starts.
+    /// Resolve the opening selection: the player's own capital, via the held
+    /// land of the first kingdom they lead. Multi-kingdom: only the first
+    /// kingdom opens the selection.
     pub fn startup(
         mut game: ResMut<Game>,
         registry: Res<Registry>,
@@ -75,16 +56,9 @@ impl Ctx {
 }
 
 // --- entity reads, `&mut World` free functions -----------------------------
-// The UI does its reads through Bevy `Query` system params directly (see the
-// `ui` modules); `step` mixes `Registry` lookup with component reads and so
-// runs as an exclusive system.
 
-/// The land to move the selection to when stepping from `from` along `dir`
-/// (a unit-ish direction). Picks the nearest holding that lies in that
-/// direction, penalising sideways offset so "up" prefers straight up.
-///
-/// ponytail: distance heuristic over holdings, no adjacency graph. Add real
-/// borders-touch adjacency in lands.ron if the picks feel wrong on odd shapes.
+/// The land to move the selection to when stepping from `from` along `dir`.
+/// Picks the nearest holding that lies in that direction, penalising sideways offset.
 pub fn step(world: &mut World, from_id: &str, dir: (f64, f64)) -> Option<String> {
     let from_e = world.resource::<Registry>().get(from_id)?;
     let origin = world.get::<LandHolding>(from_e)?.0;
@@ -96,7 +70,6 @@ pub fn step(world: &mut World, from_id: &str, dir: (f64, f64)) -> Option<String>
         }
         let (dx, dy) = (land_holding.0.0 - origin.0, land_holding.0.1 - origin.1);
         let along = dx * dir.0 + dy * dir.1;
-        // Perpendicular component: how far off-axis the candidate sits.
         let perp = (dx * dir.1 - dy * dir.0).abs();
         if along > perp {
             let score = along + perp * 2.0;

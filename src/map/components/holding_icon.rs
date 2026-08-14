@@ -1,29 +1,6 @@
 //! Visual marker for a kingdom's holding (castle) on the map, plus the
-//! per-land name + yield `Text2d` label that sits just below the holding
-//! point. The castle is a white-line silhouette with three towers (centre
-//! taller than sides), crenellations on every tower top, connecting walls
-//! at the side-tower height, and a central gate.
-//!
-//! Both the castle and the label are anchored to the same land-holding
-//! point (one land has at most one kingdom and one holding), so they live
-//! in the same module: the castle is the visual hook, the label is the
-//! identification underneath it.
-//!
-//! Lifecycle:
-//! - [`startup`] (system) spawns one [`HoldingIcon`] per kingdom, attaching
-//!   [`UIWithKingdom`](super::common::UIWithKingdom) so the per-frame
-//!   [`update`] can look up the kingdom data. It also spawns five
-//!   [`LandLabel`] `Text2d` entities per land (one main white label + four
-//!   black shadow siblings forming a 1px outline).
-//! - [`update`] (system) positions each castle at its kingdom's home land
-//!   (`KingdomHold` → `LandHolding`) and draws it. The selected land's
-//!   castle flips to yellow (the selection cue); the rest stay brown. It
-//!   also refreshes the per-land label: lands held by the player's kingdom
-//!   show `name\ngold/m levy/m` (the same yield the buildings panel uses);
-//!   other lands show the name alone — a non-player only needs to read
-//!   the names, the yield is the player's bookkeeping.
-//!
-//! Visual-only — lifecycle is event-free.
+//! per-land name + yield `Text2d` label. Both anchor to the same
+//! land-holding point.
 
 use super::common::UIWithKingdom;
 use super::super::FONT_SIZE;
@@ -37,19 +14,15 @@ use bevy::color::palettes::css;
 use bevy::prelude::*;
 use bevy::sprite::Anchor;
 
-/// Marker on an entity whose world translation is the anchor point for
-/// the holding-icon visual (the ground at the castle's base).
+/// Marker on the entity whose world translation is the anchor for the holding-icon visual.
 #[derive(Component, Debug, Clone, Copy)]
 pub struct HoldingIcon;
 
-/// Marker on the `Text2d` entities spawned for a land's name + yield label,
-/// so [`update`] can find them and refresh the yield line each frame. The
-/// inner `Entity` is the land the label belongs to.
+/// Marker on the `Text2d` entities spawned for a land's name + yield label.
 #[derive(Component)]
 pub struct LandLabel(pub Entity);
 
-// Castle proportions, world units. Sized to sit next to the army icon
-// sword at comparable visual weight.
+// Castle proportions, world units.
 const TOWER_W: f32 = 8.0;
 const TOWER_H: f32 = 22.0;
 const SIDE_TOWER_H: f32 = 14.0;
@@ -59,21 +32,9 @@ const GATE_H: f32 = 6.0;
 const CRENEL_W: f32 = 2.0;
 const CRENEL_GAP: f32 = 2.0;
 const CRENEL_DEPTH: f32 = 2.0;
-
-/// Unselected castle colour.
 const CASTLE_BROWN: Srgba = Srgba::rgb(0.59, 0.29, 0.0);
-
-/// Gap between the holding's ground point and the per-land label's top
-/// edge. The castle icon's base sits on the holding point, so this is just
-/// a small pad below the gate.
 const HOLDING_LABEL_OFFSET: f32 = 6.0;
-/// World-space offset for the per-label black outline. At the camera's 0.7
-/// scale this is roughly a 1px border, just enough to lift the white text off
-/// the varied land fills without overpowering the names.
 const LABEL_BORDER_OFFSET: f32 = 1.5;
-/// Black-text offsets that form a four-direction outline around each label.
-/// `Text2d` has no built-in outline; the trick is to spawn one black copy at
-/// each cardinal direction behind the main white text.
 const LABEL_BORDER_SHADOWS: [(f32, f32); 4] = [
     (LABEL_BORDER_OFFSET, 0.0),
     (-LABEL_BORDER_OFFSET, 0.0),
@@ -81,18 +42,11 @@ const LABEL_BORDER_SHADOWS: [(f32, f32); 4] = [
     (0.0, -LABEL_BORDER_OFFSET),
 ];
 
-/// Draw the castle silhouette in `color` lines at world point `at`. `at`
-/// is the bottom-centre of the castle (ground level).
-///
-/// Drawn back-to-front by z-order of gizmo draws in the frame: walls
-/// first, then towers (which overlap the wall tops), then crenellations
-/// and the gate last. All in the default gizmo group; the relative order
-/// within a single `draw` call is what matters visually.
+/// Draw the castle silhouette in `color` lines at world point `at` (the bottom-centre).
 pub fn draw(gizmos: &mut Gizmos, at: Vec2, color: Srgba) {
     let tower_xs = [at.x - TOWER_SPACING, at.x, at.x + TOWER_SPACING];
     let tower_heights = [SIDE_TOWER_H, TOWER_H, SIDE_TOWER_H];
 
-    // Wall sections between adjacent towers, at side-tower height.
     for i in 0..2 {
         let prev_right = tower_xs[i] + TOWER_W / 2.0;
         let next_left = tower_xs[i + 1] - TOWER_W / 2.0;
@@ -108,7 +62,6 @@ pub fn draw(gizmos: &mut Gizmos, at: Vec2, color: Srgba) {
         );
     }
 
-    // Three towers: side towers shorter, centre taller.
     for (i, &tx) in tower_xs.iter().enumerate() {
         let h = tower_heights[i];
         let top = at.y + h;
@@ -124,7 +77,6 @@ pub fn draw(gizmos: &mut Gizmos, at: Vec2, color: Srgba) {
         crenellations(gizmos, left, right, top, color);
     }
 
-    // Gate: small rectangle at the centre of the central tower's base.
     gizmos.rect_2d(
         Isometry2d::from_translation(Vec2::new(at.x, at.y + GATE_H / 2.0)),
         Vec2::new(GATE_W, GATE_H),
@@ -140,7 +92,6 @@ fn crenellations(gizmos: &mut Gizmos, left: f32, right: f32, top: f32, color: Sr
         return;
     }
 
-    // Centre the tooth pattern in the tower's width.
     let total_w = n_teeth as f32 * CRENEL_W + (n_teeth as f32 - 1.0) * CRENEL_GAP;
     let start = left + (tower_w - total_w) / 2.0;
 
@@ -158,10 +109,7 @@ fn crenellations(gizmos: &mut Gizmos, left: f32, right: f32, top: f32, color: Sr
     gizmos.linestrip_2d(path.iter().copied(), color);
 }
 
-/// Spawn one [`HoldingIcon`] per kingdom at world origin, plus five
-/// [`LandLabel`] `Text2d` entities per land (one main white label + four
-/// black shadow siblings forming a 1px outline). The per-frame [`update`]
-/// system positions each castle, draws it, and refreshes each label.
+/// Spawn one `HoldingIcon` per kingdom plus five `LandLabel` `Text2d` entities per land.
 pub fn startup(
     mut commands: Commands,
     kingdoms: Query<Entity, With<Kingdom>>,
@@ -174,10 +122,6 @@ pub fn startup(
     for (land_e, name, holding) in &lands {
         let x = holding.0.0 as f32;
         let y = holding.0.1 as f32 - HOLDING_LABEL_OFFSET;
-        // Black outline: four black copies of the text at cardinal offsets
-        // behind the main white text. `Text2dShadow` is a single drop
-        // shadow, not a real outline, so the border is faked with sibling
-        // entities.
         for (dx, dy) in LABEL_BORDER_SHADOWS {
             commands.spawn((
                 Text2d::new(name.0.clone()),
@@ -189,7 +133,6 @@ pub fn startup(
                 Transform::from_xyz(x + dx, y + dy, 1.0),
             ));
         }
-        // Main label on top of the outline.
         commands.spawn((
             Text2d::new(name.0.clone()),
             TextFont::from_font_size(FONT_SIZE).with_font_weight(FontWeight::EXTRA_BOLD),
@@ -202,12 +145,9 @@ pub fn startup(
     }
 }
 
-/// Per-frame update: position each castle at its kingdom's home land and
-/// draw the castle gizmo (yellow on the selected land, brown otherwise),
-/// then refresh each land label's text. Labels on lands the player's
-/// kingdom holds show `name\ngold/m levy/m`; labels on other lands show
-/// the name only — the yield is the player's bookkeeping, not foreign
-/// intel.
+/// Per-frame update: position each castle at its kingdom's home land and draw
+/// the castle gizmo (yellow on the selected land, brown otherwise); refresh
+/// each land label's text.
 pub fn update(
     mut icons: Query<(&UIWithKingdom, &mut Transform), With<HoldingIcon>>,
     kingdoms: Query<&KingdomHold>,
@@ -230,20 +170,11 @@ pub fn update(
         .as_deref()
         .and_then(|id| registry.get(id));
 
-    // Player's kingdoms: walk player → CharacterLeads → kingdoms. Used
-    // both for the castle gizmo (a kingdom holding the selected land →
-    // flip yellow) and the per-land label (lands held by any of these
-    // kingdoms get the yield line). Multi-kingdom: collect into a set
-    // so the predicate is O(1) per kingdom. `player_kingdom_first`
-    // keeps the legacy "first kingdom" pick around for any future
-    // single-kingdom reads (currently unused — kept as a reminder that
-    // the multi-kingdom model has multiple pickers depending on intent).
     let player_kingdoms: std::collections::HashSet<bevy::ecs::entity::Entity> = registry
         .get(&game.ctx.player_character_id)
         .and_then(|pe| character_leads.get(pe).ok())
         .map(|cl| cl.kingdoms().iter().copied().collect())
         .unwrap_or_default();
-    let player_kingdom_first = player_kingdoms.iter().next().copied();
 
     for (ui_with_kingdom, mut transform) in &mut icons {
         let Ok(kingdom_hold) = kingdoms.get(ui_with_kingdom.0) else {
@@ -259,33 +190,11 @@ pub fn update(
         let color = if sel_land_e == Some(kingdom_hold.0) {
             css::YELLOW
         } else {
-            // Multi-kingdom: a kingdom the player leads that isn't the
-            // currently-selected one still renders in the same
-            // brown — the "selected vs unselected" yellow/brown flip
-            // is the player-facing cue, the player-vs-other distinction
-            // lives on the per-land fill (see `land_graphic::update`).
-            // Keeping `player_kingdoms` read here so the multi-kingdom
-            // set is built once per frame; future code can branch on
-            // `player_kingdoms.contains(&ui_with_kingdom.0)` to give
-            // own-but-not-selected kingdoms their own colour.
-            let _ = &player_kingdoms;
             CASTLE_BROWN
         };
         draw(&mut gizmos, pos, color);
     }
-    // Silence the unused-variable warning on `player_kingdom_first`
-    // — see the comment on the multi-kingdom set above for why it
-    // stays in scope.
-    let _ = player_kingdom_first;
 
-    // Refresh each land label. The name was baked in at startup; the
-    // yield line only changes on construct/destroy, but a per-frame walk
-    // is cheap and keeps the code branch-free. Non-player lands get the
-    // name only — the yield is the player's own bookkeeping.
-    //
-    // Multi-kingdom: the `is_own` predicate is the FULL HashSet, not
-    // just the first kingdom — a land held by any of the player's
-    // kingdoms counts as own.
     for (label, mut text) in &mut labels {
         let Ok(name) = land_names.get(label.0) else {
             continue;

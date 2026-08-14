@@ -1,28 +1,21 @@
 # Architecture
 
-How `kings-game` is put together. An agent should read this before a change that
-touches structure (new entity kind, new schedule, new data section, refactoring a
-layer), and **update this file when the structure it describes changes**. If a
-section stops matching the code, fix the section in the same change.
+How `kings-game` is put together. Read before a structural change (new entity
+kind, new schedule, new data section, refactor across a layer); update this
+file in the same change when the structure it describes shifts.
 
-`docs/decision.md` holds *why* the structure is the way it is; this file holds
+`docs/decision.md` holds *why* the structure is the way it is; this holds
 *what* it is.
 
 ## One-paragraph summary
 
-A Bevy `App` runs three schedules — `Startup`, `FixedUpdate` (the tick), and
-`Update` (render + input) — plus one custom `OnMonth`. The world is Bevy ECS
-(not hecs, despite the README): every land, character, house, kingdom, courtier, building, army, marching and road is an
-entity, and a read-only building-definition roster plus the calendar, date and map border
-and chronicle log are `Resource`s. Session state (rng, player id, map selection)
-lives in a single `Game` resource wrapping `Ctx`. All of the *what exists* comes
-from mod folders of RON data, loaded in two passes — definitions merge by id,
-then state overlays the mutable fields — and is consumed once by `populate` to
-spawn entities, after which the ECS is the whole world. Marchings are run-time
-entities only (spawned by the `MarchingOrder` command, despawned by the daily
-marching tick) — they never appear in mod data; each one is a single road hop,
-so an army only ever moves along the road network. Roads are definition-only
-and never change in play.
+A Bevy `App` runs three schedules (`Startup`, `FixedUpdate` tick, `Update`
+render + input) plus two custom labels (`OnDay`, `OnMonth`) fired from the
+tick. The world is a single Bevy ECS world; every domain object is an entity
+and chunky non-entity state (calendar, building roster, border, chronicle log,
+session) is a `Resource`. Everything that exists comes from mod RON files
+loaded in two passes (definitions merge, then state overlays), then handed
+to `populate` which spawns entities — after which the ECS owns the world.
 
 ## Layers
 
@@ -31,651 +24,177 @@ and never change in play.
             │  mods::load  (two-pass: defs merge, then state overlay + reconcile)
             ▼
         Content  (one struct per kind, merged definitions + state)
-            │  ecs::populate  (once, in main, before App::run)
+            │  ecs::populate  (once, before App::run)
             ▼
   ┌───────────────────────── Bevy App world ─────────────────────────┐
   │  Entities (Bevy ECS)              Resources                       │
-  │   House, Character, Land,          Registry (id→Entity)           │
-  │   Kingdom, Building + relations   BuildingDefs (kind roster)      │
-  │            + one-field components  Calendar, Date, Border,        │
-  │                                    Chronicles, Game(Ctx): rng,   │
-  │                                     player id, selection         │
+  │   marker per kind + one-field    Registry (id → Entity)           │
+  │   components + Bevy relationships   BuildingDefs (kind roster)     │
+  │                                      Calendar, Date, Border,       │
+  │                                      Chronicles, Game(Ctx)         │
   │                                                                   │
   │  Schedules:  Startup →  FixedUpdate(tick) →  Update(render/input) │
-  │              + OnMonth (run from the tick on month rollover)      │
+  │              + OnDay + OnMonth (run from the tick)                │
   └───────────────────────────────────────────────────────────────────┘
 ```
 
-Data flows **down**: files → `Content` → entities + resources, then never flows
-back (there is no save-write path yet). The sim reads entities/resources and
-mutates entity components in place; the UI reads entities/resources through
-Bevy `Query` system params.
+Data flows down — files → `Content` → entities + resources — then never
+flows back (no save-write path yet).
 
-## Data pipeline (the load half)
+## Data pipeline
 
-Lives in `mods/`, `content.rs`, `state.rs`, `resources/`.
+Entry point `mods::load(dir)`. Walks `mods/` in sorted folder order, two
+passes:
 
-- **`mods::load(dir)`** (`src/mods/mod.rs`) is the only entry point. It walks
-  `mods/` folder by folder in **sorted name order** (later folders override
-  earlier), and **two passes** per the content/state contract:
-  1. Every `*.ron` that is *not* `*.state.ron` is a **definition** file
-     (`content::parse_file` → `ContentFile`), merged by `Content::merge`.
-  2. Every `*.state.ron` is a **state** file (`state::parse_file` →
-     `StateFile`), overlaid by `Content::merge_state` onto the now-complete
-     definitions.
-  Between the passes `content::validate` runs (fatal on dangling refs); after,
-  `state::reconcile` runs (repairs rather than refuses, returns notes printed
-  to stderr — this is the "old save vs new content" resilience).
+1. **Definitions** — every `*.ron` that isn't `*.state.ron` merges into
+   `Content` (id-replace; later folders override earlier).
+2. **State** — every `*.state.ron` overlays the mutable half of the same
+   structs field by field (`merge_state`).
 
-- **Filename is documentation, not schema.** Every `*.ron` is the same
-  optional-everything `ContentFile`; the base game's split into
-  `lands.ron`/`buildings.ron`/… is for humans. `*.state.ron` is the one
-  exception. RON is parsed with `IMPLICIT_SOME` so modders write
-  `border: (...)` not `border: Some((...))`.
+`validate` runs between passes (fatal on dangling refs — content is
+authored); `reconcile` runs after (repairs, drops notes — state is a save).
+Definition refs are fatal; state refs are repaired. Don't mix the two.
 
-- **Definition vs state split (the save contract).**
-  - *Definitions* = read-only, only ever grows: map geometry, the building
-    catalogue (one entry per kind), houses, who characters are (name/house). Authored by hand, so a dangling
-    reference is a **fatal** mod bug.
-  - *State* = the mutable half, what a save holds: dates of birth, treasuries, levies,
-    yields, what's built, who rules what. An overlay keyed by id; unknown ids are
-    silently dropped (no separate map to diff against anymore).
-  - Each kind's struct holds **both** halves in one non-`Option` struct
-    (`Character`, `Land` in `content.rs`); `merge_state` copies only the state
-    fields across so definition data is never clobbered. `Kingdom` is state-only.
+Every `*.ron` parses to the same optional-everywhere `ContentFile` —
+filename is human organisation, not schema. `IMPLICIT_SOME` so modders
+write `border: (...)` not `border: Some(...)`.
 
-- **`Content`** (`content.rs`) is the merged result: `IndexMap`s (id-keyed for
-  O(1) lookup, insertion-ordered for deterministic iteration) for lands, houses,
-  characters, kingdoms, building instances, roads; a `BuildingDefs` roster (the
-  catalogue of building kinds); a `Border`; a `Calendar`. It exists
-  only between `load` and `populate`; afterwards the ECS owns everything.
-
-- **`resources/`** are the data shapes that become `Resource`s (not entities):
-  `Border`, `Calendar` (+`validate`, carries the starting `Date` too),
-  `Date` (the walking clock, seeded from `Calendar::start`),
-  `BuildingDefs`/`BuildingDef` (read-only roster of building kinds), and
-  `Chronicles` (the append-only chronicle log).
+The two halves share one struct per kind so `populate` reads everything
+off one place. `Kingdom` is state-only.
 
 ## The ECS world
 
-Lives in `ecs/`. `src/ecs.rs` is the module root (with the canonical map of
-"which components each entity kind carries") and re-exports the per-kind modules
-flat. `decision.md` is the authoritative *why* for the component/relationship
-shape; this is the *what*.
-
-- **Entity kinds** are marker-tag components: `House`, `Character`, `Land`,
-  `Kingdom`, `Army`, `Marching`, `Road`, `War`, `CasusBelli`, `Siege`. Each kind's data is **one field per component** so a system queries
-  only what it touches (payout needs gold + yield, not the date of birth or sex), in its own file:
-  `house.rs`, `character.rs`, `land.rs`, `kingdom.rs`, `army.rs`, `marching.rs`,
-  `road.rs`, `war.rs`, `casus_belli.rs`, `siege.rs` (all under `ecs/`). Marching is a run-time entity only — the player spawns
-  them via the `MarchingOrder` command and the daily tick reaps them when the
-  army arrives — so they don't appear in `populate` or mod data. One marching
-  is one road: `MarchingOnRoad` names it and `MarchingFromLand` /
-  `MarchingToLand` are that road's two ends, so a move across several lands is
-  a chain of marchings the command traces through the road network. Army carries
-  `ArmyStatus` (`Idle` / `Raising` / `Marching` / `Sieging`), the active
-  `ArmyMarching`, the live `ArmyLevy` and the formation-target `ArmyMaxLevy`
-  (set at raise time, accreted toward by the per-day
-  [`raising_army`](src/game/raising_army.rs) tick); the
-  scheduled-and-active marchings queue is the auto-maintained `ArmyHasMarching`
-  `Vec<Entity>` on the army. See the `Army and Marching are separate entity
-  kinds` decision for the *why*. Road is definition-only — the polyline and
-  the two lands it joins (`RoadBetweenLands`, a plain `Vec<Entity>`, not a
-  Bevy relationship since roads are baked at populate time and never change)
-  live on the road entity and are read by
-  [`road_graphic`](src/map/components/road_graphic.rs) and by the marching
-  command's route search. `RoadDistanceDays` is the road's marching cost in
-  days — authored in mod data (the base mod scales it off polyline length,
-  longest road = 30 days), read through `game::marching::road_days`. The
-  road's one live link is `RoadHasMarchings`, the
-  auto-maintained reverse of `MarchingOnRoad`.
-
-- **`StringId`** (`ecs/ecs.rs`): every entity carries the id its RON data and
-  saves address it by. The Rhai script ABI was string ids; the `Registry`
-  (`id → Entity`, a `Resource`) keeps that O(1) lookup. Standard two-step when
-  mutating: pull the cheap `Copy` `Entity` out of the registry, drop the borrow,
-  then touch the entity.
-
-- **Bevy-native relationships** (`#[relationship]` / `#[relationship_target]`),
-  hook-maintained, no manual reverse insert. Every link is named
-  `<Attached-to><Verb-or-preposition><Target>` so the component name tells
-  you which entity it sits on:
-  - `KingdomLedBy` (on kingdom) ↔ `CharacterLeads` (on leader character,
-    `Vec<Entity>` — many-to-many). The player can rule any number of
-    kingdoms simultaneously (conquest transfer / multi-kingdom model).
-    Read the reverse via `CharacterLeads::kingdoms()` (a slice; iterate
-    via `.iter()`, predicate via `.iter().any(...)`, pick-one via
-    `.first().copied()`).
-  - `KingdomHold` (on kingdom) ↔ `LandHeldBy` (on land, single `Entity`) — a
-    kingdom declares its held land; the land's `LandHeldBy` auto-fills. Read
-    via `LandHeldBy::kingdom()`.
-  - `BuildingOnLand` (on building) ↔ `LandHasBuildings` (on land,
-    `Vec<Entity>`) — a building declares its land; the land's
-    `LandHasBuildings` auto-fills. Iterate via `RelationshipTarget::iter`.
-  - `ArmyOnLand` (on army) ↔ `LandHasArmies` (on land, `Vec<Entity>`) — an
-    army declares its land; the land's `LandHasArmies` auto-fills.
-  - `ArmyBelongsToKingdom` (on army) ↔ `KingdomHasArmies` (on kingdom,
-    `Vec<Entity>`) — set explicitly on raise rather than derived through the
-    land's `LandHeldBy`, so the link survives a future world where kingdoms
-    hold multiple lands.
-  - `MarchingArmy` (on marching) ↔ `ArmyHasMarching` (on army, `Vec<Entity>`) —
-    a marching declares its army; the army's `ArmyHasMarching` auto-fills.
-    The Vec is the army's marching queue (current + scheduled). Insertion
-    order is preserved by the `RelationshipTarget` Vec.
-  - `MarchingFromLand` (on marching) ↔ `LandHasMarchingsFrom` (on land,
-    `Vec<Entity>`) and `MarchingToLand` (on marching) ↔ `LandHasMarchingsTo`
-    (on land, `Vec<Entity>`) — the marching's source and destination, always
-    the two ends of its road. The land-side targets are not queried by
-    gameplay code (the marching tick walks `ArmyHasMarching` instead); they
-    exist to satisfy Bevy's `RelationshipTarget` correctness check.
-  - `MarchingOnRoad` (on marching) ↔ `RoadHasMarchings` (on road,
-    `Vec<Entity>`) — the road the marching travels, one road per marching.
-    The only relationship on a road; the road's own definition data
-    (`RoadPoints` / `RoadBetweenLands`) stays a plain non-relationship, but
-    marchings come and go at run time so the reverse is worth hook-
-    maintaining. Read by `road_graphic` to colour a road by its traffic.
-  - `CourtierOfCharacter` (courtier→character) ↔ `CharacterHasCourtiers`, and
-    `CourtierOfKingdom` (courtier→kingdom) ↔ `KingdomHasCourtiers` — each appointment
-    links one character to one kingdom; `CourtierType::Courtier` is the generic role.
-  - `WarAttackerKingdom` (on war) ↔ `KingdomHasWarsAttacking` (on kingdom,
-    `Vec<Entity>`) and `WarDefenderKingdom` (on war) ↔ `KingdomHasWarsDefending`
-    (on kingdom, `Vec<Entity>`) — the two belligerents. A kingdom can be
-    attacking in several wars at once.
-  - `WarWithCasusBelli` (on war) ↔ `CasusBelliOnWar` (on CB, `Vec<Entity>`)
-    — every war names one casus belli (the *why*); one CB can back multiple
-    wars.
-  - `CasusBelliKingdom` (on CB) ↔ `KingdomHasCasusBelli` (on kingdom,
-    `Vec<Entity>`) — the kingdom the CB targets. A `Conquest` CB aims to
-    seize that kingdom; other CB shapes (reparations, religious claims, …)
-    would target something else but reuse the same single-`Entity` link.
-  - `SiegeAttackerArmy` (on siege) ↔ `ArmyHasSiege` (on army, single
-    `Entity` — one army can only besiege one land at a time) and
-    `SiegeDefenderLand` (on siege) ↔ `LandHasSiegesUnderAttack` (on land,
-    `Vec<Entity>` — multiple armies can besiege the same land at once).
-  - `ArmyControlsLand` (on army) ↔ `LandControlledByArmy` (on land, single
-    `Entity`) — set by the siege tick when a siege resolves at 100%; the
-    conquering army claims the land. The land's `LandHeldBy` (kingdom link)
-    is *not* touched yet — conquest transfer is the next change.
-  - Plain (non-relationship) entity links: `CharacterOfHouse`
-    (character→house), `BuildingOf`
-    (building→definition id, a string looked up against the `BuildingDefs`
-    resource — not an entity link, since definitions are a roster, not
-    entities), `BuildingStatus` (`Active` / `Inactive` / `Building` — only
-    `Active` counts toward yield), and on `Building` instances a
-    `BuildingConstructionDate` set to start date + def's `construction_time`
-    (removed once the per-day tick flips the status), `BuildingLevy`
-    (the available levy pool, `0 ≤ x ≤ def.levy` — drained incrementally
-    by the formation tick on `RaiseArmy`'s behalf while an army is being
-    raised, filled back by `DismissArmy` + the monthly `replenish_levy`),
-    and `BuildingIsRaised` (`true` while this building's pool is
-    committed to an army — set on raise, cleared on dismiss; the monthly
-    replenishment skips flagged buildings so the formation tick and the
-    refill don't fight).
-    The kingdom's seat is implicit: its single held land.
-
-- **`populate(world, content)`** (`ecs/ecs.rs`) builds the world **once** from
-  merged+reconciled content, called from `main` before `App::run`. Spawn order is
-  **leaves-first** (houses → characters → lands → buildings → kingdoms) so every
-  relationship resolves to an entity that already exists. `reconcile` has
-  already pruned dangling refs, so the `filter_map`s here guard logic, not bad
-  data. The building *definition* roster leaves as the `BuildingDefs` resource;
-  each building *instance* becomes an entity related to its land via
-  `BuildingOnLand`.
-
-- **Read order is Bevy archetype order**, which within one archetype is spawn
-  order. Each kind is a single archetype, so a `Query` over `(&StringId, &Land)`
-  yields lands in content order — deterministic, no sort needed.
+- **One marker tag per entity kind** (`House`, `Character`, `Land`,
+  `Kingdom`, `Building`, `Army`, `Marching`, `Road`, `War`, `Siege`,
+  `Courtier`); data is one field per component so a system queries only
+  what it touches.
+- **Bevy-native relationships** (`#[relationship]` / `#[relationship_target]`)
+  for every link. Naming convention: `<On-entity><Verb-or-preposition><Target>`
+  so the component name tells you which entity it sits on. Set the
+  single-`Entity` side; never hand-edit the reverse — Bevy's hook keeps it
+  in sync.
+- **Reverse Vecs are queues/collections where insertion order matters**
+  (e.g. the army's marching queue). Otherwise the relationship is single
+  `Entity` with a public accessor.
+- **Plain (non-relationship) components** for static links (e.g. a
+  building's def id, a road's polyline baked at populate time). Use a
+  relationship only when the link is dynamic.
+- **`StringId` on every entity**, `Registry` (`id → Entity`) on the
+  world. The two-step lookup is the contract with data, saves, and
+  scripts — pull the `Copy` `Entity` out, drop the borrow, then mutate.
+- **`populate(world, content)`** runs once in `main` before `App::run`.
+  Spawn order is **leaves-first** so every relationship resolves to an
+  existing entity. `reconcile` has already pruned dangling refs;
+  `filter_map`s here guard logic, not bad data.
+- **Read order = archetype order = spawn order = content order.** Each
+  kind is a single archetype, so `Query` yields deterministic order
+  without sorting.
 
 ## Session state & resources
 
-- **`Ctx`** (`ctx.rs`) holds only what isn't an entity: `seed`, the `SimRng`
-  behind an `Arc<Mutex<>>`, `player_character_id`, and `selected_land_id` (set
-  on `Startup` to the player's own capital via `CharacterLeads`→`KingdomHold::land()`).
-  The chronicle log
-  is not here — it is the separate `Chronicles` resource, written exclusively
-  by the [`chronicles`](src/chronicles.rs) module's observers. Gold/levy are
-  **not** here — every character has their own components and the player is
-  only distinguished by the id.
-- **`Game`** (`app.rs`) is the `Resource` wrapping `Ctx`, plus `paused` and
-  `speed_idx` (index into `Calendar::speeds`, because the rates are mod data).
-  `Game::running()` gates the tick.
-- The static `Resource`s (`Border`, `Calendar`, `Date`, `BuildingDefs`) and the
-  `Chronicles` log are seeded in `main`; `Registry` is seeded by `populate`. The
-  command palette's open/active-command/step/cursor state is the `CommandMenu`
-  resource (`ui/command_menu.rs`), seeded in `main`; the roster of commands it
-  offers is the `CommandRegistry` resource (`commands/core.rs`), also seeded in
-  `main`.
-- **`ctx::step`** is an exclusive `&mut World` free function: selection movement
-  by direction heuristic over land holdings (no adjacency graph — see the
-  `ponytail:` note; revisit if picks feel wrong).
+- **`Ctx`** — only what isn't an entity: seed, `SimRng` behind an
+  `Arc<Mutex<>>`, `player_character_id`, `selected_land_id`.
+- **`Game`** — `Resource` wrapping `Ctx`, plus `paused`, `speed_idx`,
+  `zoomed`. `Game::running()` gates the tick.
+- **`Registry`**, **`Border`**, **`Calendar`**, **`Date`**, **`BuildingDefs`**,
+  **`Chronicles`** — seeded in `main`; the latter is read-only for
+  game-logic code (events observed in `chronicles.rs` write it).
+- **`CommandMenu`**, **`CommandRegistry`/`CommandContext`** — UI state
+  for the palette and the roster of registered commands; seeded in `main`.
 
 ## The simulation loop
 
-Lives in `game/` and `schedules.rs`.
-
-- **Schedules** (`schedules.rs`): Bevy's `Startup`/`Update`/`FixedUpdate`, plus
-  two custom labels — `OnDay` (per-day building completions, the marching
-  tick, the army-formation tick, and the siege tick) and `OnMonth` (monthly
-  payout + building-levy replenishment) — both run from `advance`
-  after the date mutates.
-- **The tick — `advance`** (`game/advance_date.rs`) runs in `FixedUpdate`,
-  gated by `Game::running()`. It's an **exclusive `fn(&mut World)`** because
-  it needs `run_schedule(...)`, which requires `&mut World`. It bumps
-  `tick_count`, advances `day`/`month`/`year` against the `Calendar`, then
-  runs `OnDay`; on the day the date rolls back to 1 it also runs `OnMonth`.
-  `FixedUpdate`'s rate is set by `input` from
-  `speed(&calendar.speeds, speed_idx)` — simulated days per real second.
-- **The economy is Rust, not a script:**
-  - `recompute_yields` (`game/yields.rs`) — runs in `Startup` (so the
-    opening screen shows what a realm renders). After that the construct
-    and destroy commands trigger a custom [`OnBuildingUpdated`]
-    (`src/events.rs`) event (`kind: BuildingUpdateKind::{Constructed,
-    Destroyed, Raised, Dismissed}` — lifecycle variants from
-    construct/destroy, state variants from the raise / dismiss army
-    commands, one event per affected ACTIVE building) straight after their
-    structural change; its `On<OnBuildingUpdated>` observer walks
-    `land → LandHeldBy → kingdom → KingdomLedBy → leader`, runs the shared
-    [`sum_land_yield`] helper over
-    `kingdom → KingdomHold → land → LandHasBuildings → BuildingOf →
-    BuildingDefs`, and writes that one character's [`CharacterGoldYield`]
-    and [`CharacterLevy`]. The event fires *after* the relationship hook
-    has settled `LandHasBuildings` (construct → hook adds; destroy → hook
-    pulls), so `sum_land_yield` always sees authoritative data.
-  - `ui::resource::update` runs in `PostUpdate` (one of Bevy's built-in
-    schedules, strictly after `Update` finishes), so the bar's read against
-    `CharacterGoldYield` happens on the same frame as the event-driven
-    write rather than the next. Other UI systems (`map::update_input/draw`,
-    `information::update`, `buildings::update`, `chronicle::update`,
-    `status::update`, etc.) stay in
-    `Update` — the bar is the one that has to react to ECS writes from
-    `Update`'s event-driven recompute.
-  - `payout` (`game/payout.rs`) — runs in `OnMonth`. Pays every leader
-    (entities carrying `CharacterLeads`) their `CharacterGoldYield` into
-    `CharacterGold`.
-    Signed both places: debt and losses are real, no floor.
-- **No Rhai right now.** The README's *Scripts* section describes a Rhai hook
-  surface (`on_startup`/`on_day`/`on_month`); it was pulled out during the ECS
-  refactoring and `mods/mod.rs` currently ignores `*.rhai` files. Treat the
-  README's script tables as the *intended* surface, not the current one.
+- **Schedules** — Bevy's `Startup` / `Update` / `FixedUpdate`, plus two
+  custom labels (`OnDay`, `OnMonth`) run from `advance` after the date
+  mutates.
+- **`advance`** is an exclusive `fn(&mut World)` in `FixedUpdate`, gated
+  by `Game::running()`. Bumps `day`/`month`/`year`, then runs `OnDay`; on
+  month rollover also runs `OnMonth`. `FixedUpdate` rate is set by `input`
+  from `Calendar::speeds[speed_idx]`.
+- **The economy is Rust, not a script.** `OnBuildingUpdated` event fires
+  on construct/destroy/raise/dismiss; an observer walks the realm's
+  holdings and recomputes the leader's yield + levy. `payout` runs in
+  `OnMonth` and pays every leader their yield into gold. Debt is real
+  (signed).
+- **No Rhai right now.** The README's script tables describe the
+  intended surface; `mods/mod.rs` ignores `*.rhai` files.
 
 ## Player commands
 
-Lives in `commands/`. The first mutation path driven by player input (prior
-input only navigated the selection and set sim speed). A [`Command`] trait type
-is *what to do* — and it is **self-describing**: each command owns its rules
-(validation), its UI (a fixed run of selection steps that read the world), and
-its effect (`execute`). The *who* (a character id) is passed to both
-`step_items` and `execute`, so the same path serves the player now and AI /
-networked peers later. `execute` is the one `&mut World` touch per command, in
-the style of `ctx::step`.
+One trait, one registry, one palette. Each command is a struct
+implementing `Command`/`BaseCommand` that owns its rules (validation),
+its UI (a fixed run of selection steps reading the world), and its
+effect (`execute`). The palette drives any registered command's steps
+the same way — the menu is command-agnostic.
 
-- **Layout:** `commands.rs` (root + re-exports) + `commands/core.rs` (the
-  `Command` trait, `MenuItem`/`Choice`, the `CommandRegistry` resource, and the
-  shared id/chronicle/ruled-lands helpers) + one submodule per command
-  (`construct_building.rs`, `destroy_building.rs`). The input path that *drives*
-  a command's steps is the palette in `ui/command_menu.rs` (see UI) — there is no
-  key handler in `commands/`.
-- **Extending** = a new struct implementing `Command` (its steps + rules +
-  effect) + one `register` line in `CommandRegistry::default`. No palette edits:
-  the menu is command-agnostic, driving any registered command's steps the same
-  way. The registry is a `Resource`, so a plugin/mod could push more before
-  `App::run`.
-- **Self-describing steps.** A command declares `step_count`; `step_items(step,
-  choices, actor, &World)` returns the selectable rows for that step, where later
-  steps see the earlier picks in `choices` (e.g. *Destroy Building* lists the
-  buildings standing on the land picked at step 0). The menu recomputes the list
-  in its exclusive `input` (the only path with `&World`) and stores it on the
-  `CommandMenu` resource for the non-exclusive `update` to render.
-- **One issuer now (the player); queue deferred.** The command palette builds
-  the choices from the player's picks and calls the command's `execute`
-  immediately in an exclusive `Update` system. A `CommandQueue` drained per tick
-  is the obvious next step if a second issuer arrives (AI, replay, multiplayer);
-  not built speculatively.
-- **`ConstructBuilding`** validates (def exists in `BuildingDefs`; actor's
-  kingdom — via `CharacterLeads` — equals the land's `LandHeldBy`, i.e. they
-  rule it; gold ≥ `construction_price`, no debt), then spawns the same bundle
-  `populate` uses
-  (`StringId`/`Building`/`BuildingOf`/`BuildingOnLand` + `BuildingStatus::Building`
-  + `BuildingConstructionDate(start + def.construction_time)`), registers the
-  id in `Registry`, deducts gold, and fires `OnBuildingUpdated {
-  kind: ConstructionStarted }` on success. The new building contributes
-  no yield yet; the per-day `construction` system (`game/construction.rs`)
-  flips it to `Active` once the date passes the finish date and fires
-  `OnBuildingUpdated { kind: Constructed }` so the chronicle observer
-  writes a second line ("now in operation") and the realm's yields
-  refresh through the same observer.
-  so the realm's yields refresh through the same observer.
-- **`DestroyBuilding`** (the inverse) validates the actor rules the land and
-  the building is `BuildingOnLand` it, then despawns the instance +
-  deregisters its id. Despawning auto-removes it from the land's
-  `LandHasBuildings` (the relationship hook); `recompute_yields` drops its
-  yield next tick.
-- **`RaiseArmy`** validates the actor rules the land, then spawns an army
-  bundle
-  (`StringId`/`Army`/`ArmyName`/`ArmyLevy(0)`/`ArmyMaxLevy(sum)`/`ArmyOnLand`/`ArmyBelongsToKingdom`/`ArmyStatus::Raising`)
-  and registers the runtime id. `ArmyName` defaults to `<house> Army`
-  (derived from the leader's `CharacterOfHouse → HouseName`; `"Army"` if
-  the leader has no house). `ArmyMaxLevy` is the sum of every ACTIVE
-  building's *available* `BuildingLevy` on the land at raise time — the
-  formation target the per-day
-  [`raising_army::on_day`](src/game/raising_army.rs) tick accretes
-  `ArmyLevy` toward (up to 20 per raised building per day), then flips
-  the army to `Idle`. The buildings' pools themselves are not drained
-  at raise time; the buildings are flagged with `BuildingIsRaised = true`
-  so the monthly [`replenish_levy`](src/game/replenish_levy.rs) skips
-  them while the formation drains them incrementally. The second raise
-  on the same land is rejected until the first army is dismissed (which
-  resets the flag and distributes the levy back). One step (pick a ruled
-  land).
-- **`DismissArmy`** validates the army belongs to the actor's kingdom
-  (via `ArmyBelongsToKingdom`), then *distributes* the army's `ArmyLevy`
-  back into the kingdom's home land's buildings' `BuildingLevy` pools
-  (capped at each def's `levy`) — the kingdom's `KingdomHold`, not the
-  army's current land, so a dismissed army that marched away still sends
-  its levy home. Flags every ACTIVE building on that land as
-  `BuildingIsRaised = false`, despawns + deregisters. Despawning
-  auto-pulls the army out of both `LandHasArmies` and `KingdomHasArmies`.
-  One step (pick an army under the actor's kingdom). The palette returns the
-  first matching army, so with multiple armies on the land the player can
-  re-press **M** to dismiss the next one. Also walks the army's
-  `ArmyHasMarching` collection and despawns any queued marchings first —
-  otherwise the marchings would be left holding a `MarchingArmy` pointing
-  at the despawned army.
-- **`MarchingOrder`** queues marching orders to move one of the actor's
-  armies to another land. Validates the army belongs to the actor's
-  kingdom (via `ArmyBelongsToKingdom`) and the target is a different
-  land from the army's current land, then **traces the road network** from
-  the land the army stands on to the target — breadth-first over every
-  road's `RoadBetweenLands`, so the fewest-roads route wins — and spawns
-  **one `Marching` entity per road** on that route, in travel order. Each
-  carries `MarchingStatus::Scheduled`, empty `MarchingBeginDate` /
-  `MarchingArrivedDate`, that road in `MarchingOnRoad`, and the road's two
-  ends as `MarchingFromLand` / `MarchingToLand`. A target with no road
-  route is rejected with an error popup (the validation side uses
-  [`commands::core::error`]). The four relationships
-  auto-maintain `ArmyHasMarching` (on the army, the queue),
-  `LandHasMarchingsFrom` / `LandHasMarchingsTo` (on the lands) and
-  `RoadHasMarchings` (on the road); the
-  `ArmyMarching` "current marching" component is *not* inserted here —
-  the daily marching tick does that when activating each marching, which
-  is what walks the army hop by hop (each hop costing its road's
-  `RoadDistanceDays`; the chronicle line quotes the route's summed total). Two
-  steps (pick an army, pick a target land).
-- **`DeclareWar`** declares war on another kingdom under a casus belli.
-  Validates the actor rules a kingdom, the defender is a different
-  kingdom, and the picked CB id resolves (`"conquest"` is the only one
-  today; new CB shapes are additive in `resolve_cb`). Spawns a `War`
-  entity linking `WarAttackerKingdom(actor's kingdom)` to
-  `WarDefenderKingdom(defender)` with the picked `WarCasusBelliType`
-  and a `WarDemands` list auto-seeded from the CB shape (`Conquest` →
-  one `Take(defender_kingdom)` demand; new shapes are additive arms in
-  `demands_for`). Multi-kingdom: the attacker kingdom is the actor's
-  *first* kingdom (a future "pick which of your kingdoms declares war"
-  step would let the player choose when they have several). Two steps
-  (pick a target kingdom, pick a CB type).
-- **`EnforceDemands`** resolves one demand on a war the player is
-  attacking in. Two steps (pick a war, pick a demand). The only demand
-  shape today is `Take`: requires the target kingdom's held land to be
-  controlled by one of the player's armies
-  (`LandControlledByArmy` → `ArmyBelongsToKingdom` is in the player's
-  `CharacterLeads`), then sets `KingdomLedBy(player)` on the target
-  kingdom. Under the multi-kingdom model Bevy's hook adds the entry
-  to the player's `CharacterLeads` `Vec` instead of replacing; the
-  player keeps every kingdom they already led and gains the conquered
-  one. On a successful enforcement the war is despawned + deregistered
-  (Bevy's relationship hooks prune the war from both kingdoms'
-  `KingdomHasWarsAttacking` / `KingdomHasWarsDefending` collections
-  as part of the despawn), and `OnDemandEnforced` + `OnWarEnded` fire
-  so the chronicle observer records the resolution. The `Take` event
-  also drives two cleanup observers:
-  [`building_releasing`](src/game/building_releasing.rs) re-activates
-  the conquered land's buildings (the siege tick flipped them
-  `Inactive` when the siege was won), and
-  [`court_releasing`](src/game/court_releasing.rs) despawns every
-  courtier serving the conquered kingdom (the new regime starts with
-  an empty court).
-- **`LaySiege`** lays siege to a land with one of the player's armies.
-  One step (pick an army); the army's current land is the target, and
-  `step_items` filters the list to armies on *foreign* lands (your own
-  capital isn't a siege option). Spawns a `Siege` entity with
-  `SiegeProgress(0)` and `SiegeNextEventDate(today + 10)`, then flips
-  the army's `ArmyStatus` to `Sieging`. From there the per-day
-  [`siege::tick`](src/game/siege.rs) advances progress on each scheduled
-  event; at 100% the siege is won (buildings flip to `Inactive` and
-  their `BuildingLevy` pools drain to `0`, `ArmyControlsLand` lands on
-  the army, the army returns to `Idle`). The buildings stay `Inactive`
-  until the player enforces the `Take` demand — see
-  [`building_releasing`](src/game/building_releasing.rs) for the flip-
-  back to `Active`. Foreign-land check re-runs in `execute` as defense-
-  in-depth — the step_items filter is the player-facing UX, the execute
-  check catches any caller that bypasses the palette.
-- **Runtime building id** is a v4 UUID drawn from the seeded `SimRng` (not OS
-  entropy), keeping the one-entropy-source invariant; format-only, no `uuid`
-  crate.
+- **Layout** — `commands.rs` (root) + `commands/core.rs` (trait,
+  registry, shared helpers) + one submodule per command. No key
+  handler in `commands/`; the palette drives the flow.
+- **Extending** = new struct implementing the trait + one `register`
+  line. No palette edits.
+- **Self-describing steps** — `step_count` + `step_items(step, choices,
+  actor, &World)` returns the rows for that step; later steps see
+  earlier picks in `choices`. The palette's exclusive `input`
+  recomputes the list (the one path with `&World`) and stores it on
+  the resource for the non-exclusive `update` to render.
+- **One issuer now (the player); queue deferred.** `execute` runs
+  immediately in the palette's exclusive `Update`. A `CommandQueue`
+  drained per tick is the next step if a second issuer arrives
+  (AI/replay/multiplayer).
 
 ## Input
 
-`app::input` (`Update`) handles global keys: `q`/`esc` → `AppExit` (but `esc`
-is yielded to the command palette while it is open), `space` → toggle
-`Game::paused`, the digit keys jump `speed_idx` through `Calendar::speeds` and
-update the `FixedUpdate` timestep. `ui::map::update_input` (exclusive) handles
-arrow keys → `ctx::step` → move the selection, but yields the arrows to the
-palette while it is open. `ui::command_menu::input` (exclusive) opens the
-spotlight-style command palette on `c` and navigates it (arrows + enter +
-Esc); the final step's pick hands the accumulated choices to the picked command's `execute`.
-
-`ui::error::input` (Update) handles `esc` to close the
-[`ui::error`] popup and flip [`InputLayer`] back to `Root`. Gated to
+`app::input` (Update) — global keys (`q`/`esc` exit, `space` pause,
+digit speed, `Z` zoom); yields to the palette while it's open.
+`ui::map::update_input` (exclusive) — arrow keys move the selection,
+yields to the palette. `ui::command_menu::input` (exclusive) — `c`
+opens the palette, drives the active command's steps. `ui::error::input`
+(Update) — `esc` closes the error popup, gated to the popup layer.
 
 ## Chronicle generation
 
-Lives in `src/chronicles.rs`. The chronicle is the *story* of the realm —
-past tense, third person, names lands and armies but never entity ids or
-game-mechanic words ("active", "conquest", "Take enforced"). It is the
-*only* module that writes to the `Chronicles` resource; commands and ticks
-only `world.trigger(...)`.
-
-Each chronicle-worthy moment maps to one event; the module registers one
-observer per event (or one observer that dispatches on payload `kind` for
-events with multiple chronicle variants). The observers read display
-names off the world via Bevy `Query` / `Res` system params and push a
-single formatted line to `Chronicles.0`. `PlayerCtx` is a
-`#[derive(SystemParam)]` newtype that resolves the player character
-once per observer batch — it's how the chronicle names the player
-without re-walking the registry inside each line.
-
-Events the module observes (all in `src/events.rs`):
-
-- `OnBuildingUpdated { kind: ConstructionStarted }` — "You began raising a
-  Castle at Riverrun."
-- `OnBuildingUpdated { kind: Constructed }` — "The Castle at Riverrun is
-  now in operation, its work beginning flowing into the realm's coffers."
-- `OnBuildingUpdated { kind: Destroyed }` — "You tore down the Castle at
-  Riverrun, its stones scattered to the winds."
-- `OnBuildingUpdated { kind: Raised | Dismissed }` — silently absorbed;
-  the army-level line covers it.
-- `OnArmyRaised` — "You mustered the Lannister Army at Riverrun — 120
-  spears answering the call." When the army is still in `ArmyStatus::Raising`
-  the observer phrases it as "You began raising the Lannister Army at
-  Riverrun — up to 120 spears gathering for the muster." instead, since
-  `ArmyLevy` starts at 0 and fills over the next few days.
-- `OnArmyDismiss` — "You stood down the Lannister Army, its levy
-  returning home to Casterly Rock."
-- `OnMarchingOrdered` — "You ordered the Lannister Army to march from
-  Riverrun toward Riverrun. (5 days by road.)"
-- `OnArmyArrived { continuing: true }` — "The Lannister Army reached X
-  and pressed onward toward Y."
-- `OnArmyArrived { continuing: false }` — "The Lannister Army arrived at
-  X, having marched from Y."
-- `OnSiegeLaid` — "You laid siege to Riverrun, your Lannister Army
-  sealing every road."
-- `OnSiegeWon` — "After days of siege, your Lannister Army broke
-  Riverrun's walls and took the land."
-- `OnWarDeclared { casus_belli: Conquest }` — "Kingdom of A declared war
-  on Kingdom of B, demanding its lands."
-- `OnDemandEnforced { demand_type: Take }` — "You claimed the Kingdom of
-  Y, taking the crown for your own."
-- `OnWarEnded` — "The war over Y ended."
-
-The player-facing text for a finished-construction line varies per
-building kind — a granary says "stores filling the realm's coffers",
-a barracks says "soldiers swelling the levy" — via the per-def
-`building_benefit` table inside the module. New defs fall back to a
-generic phrase; per-def `benefit` is the obvious next field if more
-flavor is wanted.
-
-Why split: keeping chronicle generation in one observer module means
-game-logic code (`commands/*`, `game/*`) only fires events — never
-formats strings, never reaches into `Chronicles`. The chronicle text
-lives in one place; future mods can edit a single file to rewrite the
-voice.
-`InputLayer::ErrorPopup` so it stays dormant while the palette or root
-owns input — the popup is a modal on top of the palette and the root.
+One observer module, one observer per event. The chronicle is the
+*story* — past tense, third person, names lands and armies, never
+ids or game-mechanic words. Commands and ticks only `world.trigger(...)`;
+the module reads display names off the world and writes one line to
+`Chronicles`. Future mod-voicing is a one-file change.
 
 ## UI
 
-Lives in `ui/`. All Bevy UI (flex `Node` tree) + `Gizmos` line drawing; no
-asset-loaded sprites.
+Bevy flex tree + `Gizmos` line drawing; no asset sprites.
 
-- **Layout** (`ui/startup.rs`): a column flex tree — `resource` bar on top, a row
-  holding the map (left, full remaining width) and the right-hand column
-  (`information` over `courts` over `buildings` over `chronicle`, the latter
-  pinned to 30% height),
-  `status` bar on
-  the bottom. `RIGHT_BAR = 0.3` is shared with the camera so the map lands beside
-  the column, not under it.
-- **Map** (`ui/map.rs`) and **Camera** (`ui/camera.rs`): the map module owns
-  only the arrow-key selection step; the world-border rectangle + sea
-  wash lives in [`border_graphic`](crate::map::components::border_graphic);
-  the per-land polygon outline + scanline fill lives in
-  [`land_graphic`](crate::map::components::land_graphic); the per-kingdom
-  castle and the per-land name + yield `Text2d` label live in
-  [`holding_icon`](crate::map::components::holding_icon) (both anchor to
-  the same land-holding point, so they share a module). The label shows
-  the name alone on foreign lands and `name\ngold/m levy/m` on lands the
-  player's kingdom holds — the yield is the player's bookkeeping, not
-  foreign intel. The camera
-  module owns the `Camera2d` entity and its `update_camera` system:
-  `startup` spawns the camera framed on the whole `Border` with an
-  `AutoMin` projection so the island never distorts and never pans,
-  attaching `CameraView` (current rendered view) + `CameraTween`
-  (in-flight `from`/`to`/`t`). `border_graphic::update` draws the world
-  border; `land_graphic::update` draws each land's outline (gizmos draw
-  lines only, so the fill is a **scanline** routine handling the map's
-  concave shapes); `holding_icon::update` positions the per-kingdom
-  castle gizmo (yellow when selected, brown otherwise — the colour flip
-  replaces the old flag-on-selected cue) and refreshes each land label.
-  The waving pennant on the selection is gone; the castle itself turning
-  yellow is the selection cue. `update_camera` (PostUpdate,
-  runs *before* `update_draw`) computes the destination from
-  `Game::zoomed` + `selected_land_id` each frame — unzoomed → whole `Border`,
-  zoomed → selected land's polygon bbox + `ZOOM_MARGIN`, centred on the bbox
-  — and if the destination moved since last frame, restarts the tween with
-  `from` = current rendered view (so a re-target mid-transition stays smooth).
-  The tween advances `t` over `TRANSITION_DURATION` seconds with a smoothstep
-  ease, then writes the lerped `min_width`/`min_height`/`translation` into the
-  camera's `Projection::Orthographic` and `Transform`. `Z` toggles
-  `Game::zoomed` in `app::input`; arrow keys move the selection in
-  `map::update_input`, and the camera follows because `update_camera`
-  re-reads `selected_land_id` each frame and re-tweens when it changes.
-  Pan/zoom hooks still use the same camera: pan = `Transform::translation`,
-  zoom = `OrthographicProjection::scale` (currently constant at
-  `CAMERA_SCALE`, 30% zoom-in over a 1:1 view).
-- **Panels** each own a marker `Component` (`LegendInfo`, `LegendBuildings`,
-  `Chronicle`, `ResourceBar`, `Status`) and an `update` system
-  that reads the world through `Query`/`Res` and writes into a `Single<&mut Text>`.
-  The exception is the column *container* `LegendBuildings`: its `update`
-  holds a `Single<Entity, With<…>>` and rebuilds child rows only when a
-  `Local` cache key (selection + building roster) changes.
-  - `wars` — the player's active wars, one per line as `"<WarName> (<WarBeginDate>)"`.
-    Marker `UIWithWars` on the body text; `update` walks the body's
-    `ChildOf` each frame to flip the outer container's `Display` between
-    `Flex` (player has wars) and `None` (player has none) so an empty
-    panel collapses out of the column layout. List source: the player's
-    kingdom's `KingdomHasWarsAttacking`.
-  - `armies` — the player's armies, one per line. Format reads from live
-    entity data: `"<ArmyName> (<ArmyLevy>) at <ArmyOnLand>"` when idle,
-    `"<ArmyName> (<ArmyLevy>) at <ArmyOnLand> marching to <final_dest> at <days> days"`
-    when marching — where `<final_dest>` is the LAST marching in the army's
-    `ArmyHasMarching` queue (the player's queued destination, not the
-    next hop) and `<days>` is the sum of the days left on the OnRoute hop
-    plus each subsequent Scheduled hop's `RoadDistanceDays`. Same
-    `UIWith*` + parent-walk show/hide pattern as `wars`; list source is
-    `KingdomHasArmies`.
-  - `information` — the selected land, in one panel: a title (`INFORMATION`)
-    + a `LegendInfo` text block holding the land name and the ruler
-    (name, house, age). Its `update` clears the text on no selection.
-  - `buildings` — the selected land, in a sibling panel: a title
-    (`BUILDINGS`) + a `LegendBuildings` 3-column table — name (left, fills) /
-    gold (right) / levy (right), one row per building, then a thin rule and a
-    `total` row in the same layout. Its `update` clears the table on no
-    selection.
-  - `courts` — courtiers of the kingdom holding the selected land, showing character name and role.
-  - `chronicle` — last 10 lines of the `Chronicles` resource.
-  - `resource` — the player's name, house, gold, yield/mo, levy.
-  - `status` — `[PAUSED]`/`[RUNNING]`, the `Date`, current speed, a `C commands`
-    hint.
-  - `error` — the error popup modal. Spawned hidden at startup
-    (`Display::None`); the [`OnErrorOccured`](src/events.rs) observer
-    shows it, writes the validation message into the body, force-closes
-    any open command palette, and flips [`InputLayer`] to
-    `ErrorPopup`. Dismissed with `esc` (handled by `input`, gated to
-    the error-popup layer) which flips the layer back to `Root`.
-    Sits at `GlobalZIndex(200)` — above the command palette's `100` —
-    so an error that fires while the palette is open lands on top of
-    it rather than behind. The observer calls
-    [`close_command`](crate::ui::command_menu::close_command) so the
-    palette's UI is torn down when an error interrupts it, leaving the
-    player on a clean Root state once the popup is dismissed.
-- **Command palette** (`ui/command_menu.rs`): a spotlight-style modal — a
-  centered window over a dimmed backdrop, lifted above the panels with
-  `GlobalZIndex`. A `CommandMenu` resource holds `open`/active-command/step/
-  cursor plus the cached on-screen list (with a parallel `matches` bit vec
-  driving the search overlay), the search query, and the title; `c` opens it,
-  arrows move the cursor, `enter` drills into the picked command's own steps,
-  `esc` closes. It is the only way to trigger commands, so every command is
-  reached by walking its steps through the palette. It is **command-agnostic**:
-  it drives *any* registered command's steps the same way.
-  The exclusive `input` recomputes the current step's list via the command's
-  `step_items` (the one path with `&World`) and stores it on the resource; the
-  non-exclusive `update` just renders that stored list, rebuilding rows only
-  when `(command, step, cursor, query)` changes (the buildings panel's cache
-  idea). The final step's pick hands the accumulated choices to the command's
-  `execute`. While open it owns `esc` and the arrows, so `app::input` and
-  `ui::map::update_input` read its `open` flag and yield them; `app::input`
-  also yields `space` so the search bar can take it for multi-word queries.
-  A search bar at the top of the window (a styled Text node carrying the
-  `MenuSearch` marker) takes typed characters from `Messages<KeyboardInput>`
-  and `Backspace`; `refresh` reorders the items so matches sit at the top and
-  re-snaps the cursor to the first match if the current row got filtered out.
-  Non-matches stay in the list, dimmed via a `grayed` style. The query clears
-  when the cursor moves to a different panel (top-level → first step, or any
-  step → the next), so each panel starts with a fresh filter; it also clears
-  on open and close.
+- **Layout** — `ui/startup.rs` builds a column flex: `resource` bar
+  top, row of map (left, full remaining width) + right column
+  (`information` / `courts` / `buildings` / `chronicle`), `status` bar
+  bottom. `RIGHT_BAR = 0.3` is shared with the camera so the map lands
+  beside the column, not under it.
+- **Panels** — each owns a marker `Component` and an `update` system
+  that reads through `Query`/`Res` and writes a `Single<&mut Text>`.
+  An empty panel collapses out via `Display::None`.
+- **Map** — `ui/map.rs` owns arrow-key selection; the per-component
+  graphics (`border_graphic`, `land_graphic`, `holding_icon`,
+  `road_graphic`) own the paint. `ui/camera.rs` owns the `Camera2d`
+  and tweens between whole-map and zoomed-on-selection views.
+- **Command palette** — spotlight modal over a dimmed backdrop,
+  `GlobalZIndex` above the panels. `CommandMenu` resource holds
+  open/active-command/step/cursor + the cached list + search query.
+  Command-agnostic — drives any registered command's steps.
 
-## Key invariants (things that will bite you if broken)
+## Key invariants
 
-- **Two-pass load, in order.** State can only overlay entries the definitions
-  established; don't merge state before all definitions are in.
-- **Leaves-first spawn order** in `populate`. A relationship must resolve to an
-  entity that already exists.
-- **Every game entity carries a `StringId`**, and `Registry` must be kept in sync
-  with spawns. The id is the contract with data, saves, and (someday) scripts.
-- **Read order = archetype order = spawn order = content order.** Anything that
-  needs stable iteration order relies on each kind being a single archetype.
-- **Relationships are hook-maintained.** Set the single-`Entity` side
-  (`KingdomLedBy`/`KingdomHold`/`BuildingOnLand`/`ArmyOnLand`/
-  `ArmyBelongsToKingdom`/`MarchingArmy`/`MarchingFromLand`/`MarchingToLand`/
-  `MarchingOnRoad`);
-  never hand-edit the reverse (`CharacterLeads`/`LandHeldBy`/`LandHasBuildings`/
-  `LandHasArmies`/`KingdomHasArmies`/`ArmyHasMarching`/`LandHasMarchingsFrom`/
-  `LandHasMarchingsTo`/`RoadHasMarchings`).
+- **Two-pass load, in order.** State can only overlay entries the
+  definitions established.
+- **Leaves-first spawn order** in `populate`. A relationship must
+  resolve to an entity that already exists.
+- **Every game entity carries a `StringId`**, and `Registry` is kept
+  in sync with spawns.
+- **Read order = archetype order = spawn order = content order.**
+- **Relationships are hook-maintained.** Set the source side; never
+  hand-edit the reverse.
 - **Definition refs are fatal; state refs are repaired.** Don't move
-  `validate`'s checks into `reconcile` or vice versa — they encode different
-  policies (broken mod vs old save).
-- **Determinism.** Sorted load order and the seeded `SimRng` (every draw routed
-  through one counter — `rng.rs`) keep saves and replays exact. Don't introduce
-  unsorted reads or non-seeded randomness in the sim path.
+  `validate`'s checks into `reconcile` or vice versa.
+- **Determinism.** Sorted load order and the seeded `SimRng` (every
+  draw routed through one counter) keep saves and replays exact.
 
 ## File map
 
@@ -683,59 +202,26 @@ asset-loaded sprites.
 |---|---|
 | `src/main.rs` | arg parse, load mods, build `App`, register systems/schedules, `run` |
 | `src/app.rs` | `Game` resource, `Ctx` wrapper, `speed`, `input` |
-| `src/commands.rs` | module root + re-exports (`Command`, `CommandRegistry`, `Choice`, `MenuItem`) |
-| `src/commands/core.rs` | the `Command` trait, `CommandRegistry`, `MenuItem`/`Choice`, shared helpers (`next_id`, `ruled_lands`) |
-| `src/chronicles.rs` | chronicle generation — one observer per game event (`OnBuildingUpdated`, `OnArmyRaised`/`OnArmyDismiss`, `OnMarchingOrdered`, `OnArmyArrived`, `OnSiegeLaid`/`OnSiegeWon`, `OnWarDeclared`/`OnDemandEnforced`/`OnWarEnded`), each writing a narratively-flavored line to the `Chronicles` resource. The only writer of chronicle text; commands and ticks only `trigger(...)`. |
-| `src/commands/construct_building.rs` | the `ConstructBuilding` command (validate + spawn as BUILDING + pay) |
-| `src/commands/destroy_building.rs` | the `DestroyBuilding` command (validate + despawn + deregister) |
-| `src/commands/raise_army.rs` | the `RaiseArmy` command (validate + spawn the army bundle in `ArmyStatus::Raising` + flag the contributing buildings as `BuildingIsRaised` without draining their pools — the formation tick drains them incrementally) |
-| `src/commands/dismiss_army.rs` | the `DismissArmy` command (validate + distribute `ArmyLevy` back into `BuildingLevy` + despawn + deregister + reap queued marchings) |
-| `src/commands/marching.rs` | the `MarchingOrder` command (validate + trace the road route + spawn one `Marching` entity per road, each `MarchingStatus::Scheduled` with empty dates) |
-| `src/commands/declare_war.rs` | the `DeclareWar` command (validate + spawn a `War` entity with `WarCasusBelliType` + auto-seeded `WarDemands`; no resolution tick) |
-| `src/commands/lay_siege.rs` | the `LaySiege` command (validate foreign-land + spawn a `Siege` entity + flip the army to `Sieging`) |
-| `src/commands/enforce_demands.rs` | the `EnforceDemands` command (pick a war, pick a demand; `Take` requires the target's land to be controlled by the player's army, then sets `KingdomLedBy(player)` on the target) |
-| `src/ecs/marching.rs` | the `Marching` entity kind — `Marching` marker + `MarchingArmy`/`MarchingFromLand`/`MarchingToLand`/`MarchingOnRoad` relationships + `MarchingBeginDate`/`MarchingArrivedDate` + `MarchingStatus` enum |
-| `src/ecs/war.rs` | the `War` entity kind — `War` marker + `WarAttackerKingdom`/`WarDefenderKingdom` (to kingdoms) + `WarCasusBelliType` enum (`Conquest = 1`) + `WarDemands(Vec<WarDemand>)` + `WarName` (e.g. `"Conquest over Kingdom of Riverrun"`) + `WarBeginDate` (declare-time snapshot) |
-| `src/ecs/siege.rs` | the `Siege` entity kind — `Siege` marker + `SiegeAttackerArmy`/`SiegeDefenderLand` (to the two ends) + `SiegeProgress` (0–100) + `SiegeNextEventDate` |
-| `src/ecs/road.rs` | the `Road` entity kind — `Road` marker + `RoadPoints(Vec<(f64,f64)>)` + `RoadBetweenLands(Vec<Entity>)` + `RoadDistanceDays(u32)` (definition-only; no Bevy relationship) + `RoadHasMarchings` (the reverse of `MarchingOnRoad`) |
-| `src/map/components/road_graphic.rs` | per-road dashed-line visual — startup spawns one `RoadGraphic` marker per road (back-reffed by `UIWithRoad`) and a per-frame `update` draws the polyline through the `RoadGizmoConfigGroup` gizmo group, whose config carries the `GizmoLineStyle::Dashed` style; the line colour reports the road's `RoadHasMarchings` (green = an army is on it, gray = a march is queued on it, default otherwise) |
-| `src/game/marching.rs` | the per-day marching tick (`OnDay` — activate scheduled marchings on the matching source land, move arrived armies one road onward, chain into the next marching or return to Idle) + `road_days` (the one place a road's `RoadDistanceDays` is resolved) |
-| `src/game/raising_army.rs` | the per-day army-formation tick (`OnDay` — every `ArmyStatus::Raising` army accretes up to 20 levy per ACTIVE `BuildingIsRaised` building on its land per day into `ArmyLevy`, then flips to `Idle` once `ArmyLevy == ArmyMaxLevy`) |
-| `src/game/replenish_levy.rs` | the monthly `BuildingLevy` top-up (`OnMonth` — every ACTIVE, non-raised building's pool += `def.levy_rate`, capped at `def.levy`) |
-| `src/map/components/holding_icon.rs` | the castle-icon visual (three crenellated white-line towers with a centre keep, side walls, and a central gate) + the per-land name/yield `Text2d` label (anchored to the same land-holding point as the castle). Reusable gizmo primitive in `pub fn draw(gizmos, at, color)`. `startup` (Startup) spawns one `HoldingIcon` per `Kingdom` with a `UIWithKingdom` back-ref plus five `LandLabel` `Text2d` entities (main label + four shadow siblings forming a 1px black outline) per `Land`. `update` (PostUpdate) reads `KingdomHold` → `LandHolding` to position each castle (yellow when that land is selected, brown otherwise), and refreshes each label — `name\ngold/m levy/m` on lands the player's kingdom holds, the name only on foreign lands |
-| `src/map/components/land_graphic.rs` | per-land polygon outline + scanline fill. `startup` (Startup) spawns one `LandGraphic` per `Land` with a `UIWithLand` back-ref. `update` (PostUpdate) reads `LandBorders` + `StringId` to draw the outline (yellow when selected, brown otherwise) + scanline fill (green-tinted when player-owned). The name/yield label moved to `holding_icon` |
-| `src/ui/wars.rs` | the WARS panel (right column, top) — lists the player's wars via `KingdomHasWarsAttacking`; `Display::None` on the outer container hides it when the player has no wars. Marker `UIWithWars` on the body text; container visibility toggled by walking the body's `ChildOf`. |
-| `src/ui/army.rs` | the ARMIES panel (right column, just below WARS) — lists the player's armies via `KingdomHasArmies`; format depends on `ArmyStatus` (`"at <land>"` idle, `"marching to <final_dest> at <days> days"` marching — `final_dest` is the last marching in `ArmyHasMarching`, `days` sums days-left-on-OnRoute plus each scheduled hop's `RoadDistanceDays`). Same `UIWith*` + parent-walk show/hide pattern as `wars`. |
-| `src/map/components/border_graphic.rs` | world-border rectangle + sea wash. `startup` (Startup) spawns the single `BorderGraphic` entity; `update` (PostUpdate) reads `Border` and draws the rect + the scanline fill inside it |
-| `src/map/components/common.rs` | shared back-ref components for icons that follow an entity (`UIWithArmy`, `UIWithKingdom`, `UIWithLand`) + the shared `pub(crate) fn fill` scanline helper reused by `land_graphic` and `border_graphic` |
-| `src/game/construction.rs` | `tick` — flips `BUILDING` buildings to `ACTIVE` once the date passes their finish date |
-| `src/ctx.rs` | `Ctx` (session state: rng, player id, selection), `startup`, selection `step` |
+| `src/ctx.rs` | `Ctx` (session state), `startup`, selection `step` |
 | `src/content.rs` | `Content`, per-kind structs, `parse_file`, `merge`, `validate` |
 | `src/state.rs` | `StateFile`, `merge_state`, `reconcile` |
 | `src/mods/mod.rs` | `load(dir)` — the two-pass orchestrator |
-| `src/resources/*` | `Border`, `Calendar`(+validate, carries `start`), `Date` (the walking clock), `BuildingDefs`/`BuildingDef` (kind roster), `Chronicles` (log) |
+| `src/resources/` | `Border`, `Calendar`(+validate, `start`), `Date`, `BuildingDefs`, `Chronicles` |
 | `src/ecs/ecs.rs` | `StringId`, `Registry`, `populate` |
-| `src/ecs/{house,character,land,building,kingdom,courtier,army,war,siege}.rs` | components + relationships per kind |
-| `src/game/siege.rs` | the per-day siege tick (`OnDay` — advance `SiegeProgress` by 30 every 10 days; at 100% insert `ArmyControlsLand` on the army, flip every building on the land to `Inactive` + drain `BuildingLevy` to `0`, return the army to `Idle`, despawn the siege) |
-| `src/game/building_releasing.rs` | observer for `OnDemandEnforced` on `Take` — flips every standing building on the target kingdom's held land back to `Active`, provided the controlling army (if any) belongs to a kingdom led by the player (otherwise the land is contested and the buildings stay `Inactive`) |
-| `src/game/court_releasing.rs` | observer for `OnDemandEnforced` on `Take` — despawns every courtier entity serving the target kingdom (the new regime starts with an empty court; Bevy's relationship hooks prune the courtiers out of `KingdomHasCourtiers` and `CharacterHasCourtiers`) |
-| `src/ecs.rs` | module root, re-exports, the component map |
+| `src/ecs/*.rs` | marker + components + relationships per entity kind |
+| `src/commands/` | the `Command` trait + `CommandRegistry` + one submodule per command |
+| `src/chronicles.rs` | chronicle generation — one observer per game event |
+| `src/game/` | per-day / per-month ticks (advance, marching, raising, siege, construction, payout, replenish_levy, yields) |
 | `src/schedules.rs` | `OnDay` + `OnMonth` labels |
-| `src/game/advance_date.rs` | the tick (exclusive `&mut World`) |
-| `src/game/yields.rs` | `recompute_yields` (graph walk) |
-| `src/events.rs` | `OnBuildingUpdated` + `OnArmyRaised` + `OnArmyDismiss` + `OnErrorOccured` ECS events (observers / triggers — see `ui::error` for the popup consumer of `OnErrorOccured`) |
-| `src/game/payout.rs` | `payout` (monthly gold to leaders) |
+| `src/events.rs` | the event surface observers and triggers fire |
 | `src/rng.rs` | `SimRng` — seeded, draw-counted for exact replay |
-| `src/ui/*` | flex layout, map/camera gizmos, the four text panels |
-| `src/ui/error.rs` | the error popup (observer on `OnErrorOccured` shows + force-closes the palette; `input` listens for `esc` to dismiss); one helper, [`crate::commands::core::error`], that commands reach for in place of `note` when a player input is rejected |
-| `src/ui/camera.rs::update_camera` | reads `Game::zoomed` + selection, tweens the camera each PostUpdate |
-| `src/ui/command_menu.rs` | the command palette modal (open/navigate/dispatch + render) |
+| `src/ui/` | flex layout, map/camera gizmos, panels, command palette, error popup |
+| `src/map/components/` | per-entity graphics (border, land, road, holding) |
 
 ## Related docs
 
-- `docs/decision.md` — *why* the structure is this way (the ECS/world merge, the
-  Bevy relationships, the one-field-per-component split, the definition+state
-  one-struct decision). Read before restructuring.
-- `README.md` — player/modder-facing. Note: it still says "hecs simulates it" and
-  documents Rhai scripts that are currently disabled; treat it as the target
+- `docs/decision.md` — *why* the structure is the way it is. Read
+  before restructuring.
+- `README.md` — player/modder-facing. Note: it still mentions hecs and
+  Rhai scripts that are currently disabled; treat it as the target
   experience, not a map of the current code.

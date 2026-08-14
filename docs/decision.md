@@ -3,652 +3,419 @@
 Standing decisions for this project. Check here before designing anything;
 append a new section when a decision is made.
 
-## Single ECS world (no nested `Ctx.world`)
+## Single ECS world, no nested `Ctx.world`
 
-The simulation entities live directly in Bevy's App world. `Ctx` holds only
-session state (rng, `player_character_id`, `selected_land_id`); the chronicle
-log lives in its own `Chronicles` resource; `Game` wraps `Ctx` as a `Resource`.
+The sim entities live in Bevy's App world. `Ctx` holds only session state
+(rng, player id, selection); `Chronicles` is its own resource; `Game` wraps
+`Ctx` as a `Resource`.
 
-- **Why:** Bevy 0.19's `World::query()` needs `&mut World`, so `Query` is only
-  friction-free as a *system param*. Keeping a nested `Ctx.world` forced the
+- **Why:** Bevy 0.19's `World::query()` needs `&mut World`, so `Query` is
+  friction-free only as a system param. A nested `Ctx.world` forced the
   hand-rolled `EntityIndex` + `&self`-reader machinery that `World::query`'s
-  `&mut` requirement existed to avoid. Merging lets reads use `Query` directly.
-- **Read shape:** UI systems take system-param `Query`/`Res` and read inline.
-  Sim logic (`recompute`, `payout`, `step`, selection stepping) lives as
-  `&mut World` free functions run from *exclusive* systems (`fn(&mut World)`),
-  because it mixes component mutation with resource reads — the one case
-  `&mut World` (phased access) handles cleanly. `resource_scope` bridges a
-  resource borrow and the world where needed (`monthly_payout`).
-- **Ordering:** read order is Bevy archetype order, which within one archetype is
-  spawn order; each kind (houses/characters/lands/kingdoms) is a single
-  archetype, so `Query` yields content order.
-- **`Registry` stays:** the Rhai ABI is string ids, so `id → Entity` lookup is
-  still needed; `Registry` is a resource on the App world.
-- **Deleted:** `EntityIndex`, the read-model snapshot structs
-  (`LandData`/`BuildingData`/… — the UI reads directly now), and the O(n)
-  kingdom scans (replaced by the auto-maintained `CharacterLeads` component for
-  O(1) character→kingdom lookup).
+  `&mut` requirement existed to avoid. Merging lets reads use `Query`
+  directly and lets UI systems take system-param `Query`/`Res` inline.
+- **Sim logic** (`recompute`, `payout`, `step`, selection stepping) lives
+  as `&mut World` free functions run from *exclusive* systems because it
+  mixes component mutation with resource reads — the one case `&mut
+  World` (phased access) handles cleanly.
+- **`Registry` stays** — the script ABI is string ids, so `id → Entity`
+  lookup is needed; `Registry` is a resource on the App world.
+- **Deleted:** `EntityIndex`, the read-model snapshot structs the UI used
+  to need, and the O(n) kingdom scans (replaced by the auto-maintained
+  leader collection).
 
-## Character↔kingdom leader link is Bevy-native (`KingdomLedBy`/`CharacterLeads`)
+## Character↔kingdom leader link is Bevy-native
 
-The kingdom→leader link is a Bevy `#[relationship]` component `KingdomLedBy`
-(on the kingdom, single `Entity`, source of truth) paired with the
-auto-maintained `#[relationship_target]` `CharacterLeads` (on the leader
-character). Inserting `KingdomLedBy` on a kingdom has Bevy's hook keep
-`CharacterLeads` on the leader in sync — no manual reverse insert, no drift.
+The kingdom→leader link is a Bevy `#[relationship]` (on the kingdom, single
+`Entity`) paired with an auto-maintained `#[relationship_target]`
+(collection on the leader). Inserting the relationship on a kingdom has
+Bevy's hook keep the leader's collection in sync — no manual reverse
+insert, no drift.
 
-- **One-to-one** (the target holds a single `Entity`): a character leads at
-  most one kingdom; if a second kingdom claims the same leader, Bevy drops the
-  older `KingdomLedBy`.
-- **Naming:** `<Attached-to><Verb-or-preposition><Target>`, so the name tells
-  you which entity the component sits on. `KingdomLedBy` puts the verb after
-  the kingdom (mirroring Bevy's `LikedBy`); `CharacterLeads` puts the verb after
-  the character. The manual `KingdomLedBy` reverse component is gone.
+- **Naming convention:** `<Attached-to><Verb-or-preposition><Target>` so
+  the name tells you which entity the component sits on. The leader's
+  collection has a public accessor (`character_leads.kingdoms()`); the
+  underlying field is private (Bevy's correctness check requires it).
+- **Multi-kingdom:** the leader's collection is `Vec<Entity>` — a
+  character can rule several kingdoms (conquest transfer). Every call
+  site that wanted "the actor's kingdom" had to become "any of the
+  actor's kingdoms". `RelationshipTarget::iter` gives the walk for free.
 
-## Kingdom↔lands link is Bevy-native (`KingdomHold`/`LandHeldBy`)
+## Kingdom↔land link is Bevy-native
 
-The kingdom→holdings link is a Bevy `#[relationship]` component `KingdomHold`
-(on the kingdom, single `Entity`, source of truth) paired with the
-auto-maintained `#[relationship_target]` `LandHeldBy` (single `Entity`) on the
-held land. A kingdom declares its held land; Bevy's hook keeps the land's
-`LandHeldBy` in sync — no manual reverse insert, no drift.
-
-- **Naming:** same `<Attached-to><Verb-or-preposition><Target>` rule as the
-  leader link — `KingdomHold` (kingdom, `pub Entity`) / `LandHeldBy`
-  (land, single `Entity`). Read via `LandHeldBy::kingdom()`. The target
-  field is private (Bevy's `RelationshipTarget` correctness check requires
-  it) with a public accessor — same pattern as `CharacterLeads::kingdom()`.
+Same shape as the leader link: a `#[relationship]` on the kingdom (single
+`Entity`) auto-maintains a `#[relationship_target]` on the held land. The
+target field is private with a public accessor (`land_held_by.kingdom()`).
 
 ## ECS components split to one field each
 
-`House`/`Character`/`Land` are marker tags; their data is one field per
-component: `HouseName`; `CharacterName`, `CharacterDateOfBirth`, `CharacterGold`,
-`CharacterLevy`, `CharacterGoldYield`; `LandName`, `LandBorders`,
-`LandHolding`. The old multi-field `ecs::CharacterState` is dissolved into
-the four character components above.
-
-- **Why:** smallest-form components let a system query only the field it
-  touches (a payout needs gold + yield, not age), and keep each mutable value
-  in its own component so Bevy tracks them independently. The marker tags
-  (`House`/`Character`/`Land`) still answer "what kind of entity is this".
-- **`state`/`content` merged:** superseded by the decision below — `Character`
-  and `Land` now each hold definition *and* state fields in one struct, and
-  `populate` reads them directly. See "Definition + state: one struct per kind".
+Markers (`House`/`Character`/`Land`) are bare tags; data is one field per
+component. A system queries only the field it touches (payout needs gold
++ yield, not age), and Bevy tracks each mutable value independently.
 
 ## Definition + state: one struct per kind
 
-`CharacterState`/`LandState` are gone. Each entity kind now has a single struct
-in `content.rs` that holds *both* its definition fields (name, `house_id`,
-geometry) and its state fields (age, treasury, levy, yield). `Kingdom`
-(state-only) moved into `content.rs` alongside them.
+`state`/`content` are merged into one struct per kind. Mods load in two
+passes: definitions merge first (`merge`, id-replace), then state overlays
+(`merge_state`, field-by-field). Two-pass so state can only fill entries
+the definitions established.
 
-- **Load is two-pass** (`mods::load`): every definition `*.ron` merges first
-  (`Content::merge`, id-replace), then every `*.state.ron` overlays
-  (`Content::merge_state`, field-by-field). Two-pass so state can only fill
-  entries the definitions established — content is the source of truth for what
-  exists.
-- **Overlay never clobbers definition data.** `merge_state` copies only the
-  state fields onto the matching content entry; `name`/`house_id`/geometry are
-  untouched, so a state entry may carry only its state fields. Because the two
-  field sets are disjoint, a single non-`Option` struct suffices — no `Option`
-  overlay gymnastics, no parallel `CharacterState`.
-- **`State` (the parallel map) is gone.** `Content` carries `kingdoms` too;
-`reconcile(&mut Content)` repairs building-instance refs and kingdom refs in place.
-`populate(world, content)` takes the one struct and reads every field off it.
-- **Dropped:** the old "dropped state for unknown …" chronicle notes. With state
-  folded into content there is no separate state map to diff against; an unknown
-  id is simply never overlaid. Revisit when save files exist.
+- **Overlay never clobbers definition data.** `merge_state` copies only
+  the state fields onto the matching content entry, so a state entry may
+  carry only its state fields. Because the two field sets are disjoint,
+  a single non-`Option` struct suffices — no `Option` overlay gymnastics,
+  no parallel `State` map.
+- **`State` (the parallel map) is gone.** `Content` carries kingdoms
+  too. `reconcile(&mut Content)` repairs refs in place. `populate` reads
+  the one struct.
+- **Dropped:** the old "dropped state for unknown …" notes. With state
+  folded into content there is no separate state map to diff against.
 
-## Buildings are ECS entities (definitions stay a roster)
+## Buildings are ECS entities; definitions stay a roster
 
-Each *built building* is its own entity, not a string id on the land. The
-read-only *definition* per building kind stays a resource roster
-(`BuildingDefs`/`BuildingDef`, renamed from `Buildings`/`Building` and moved to
-`building_definitions.ron`); a building *instance* entity carries
-`BuildingOf(def_id)` to reach its stats and a `BuildingOnLand` relationship to
-its land.
+Each built building is its own entity, not a string id on the land. The
+*definition* per kind stays a resource roster (read-only, shared across
+instances); an instance entity carries `BuildingOf(def_id)` to reach its
+stats and a `BuildingOnLand` relationship to its land.
 
-- **Why entities, not the old `Built(Vec<String>)`:** the task asked for
-  buildings to be addressable ECS entities with a relationship to the land, so
-  construction/destruction, per-instance state (health, level, …), and scripting
-  by instance id all have somewhere to live. Keeping `Built` alongside would be
-  duplicated state — the architecture's single-source-of-truth rule rules that
-  out, so `Built` is removed and the land's `LandHasBuildings` target (the
-  auto-maintained reverse of `BuildingOnLand`) replaces it.
-- **Definition roster stays a resource.** Stats (profit, upkeep, levy,
-  `construction_price`) are shared and read-only across every instance of a
-  kind; copying them onto each entity would duplicate definition data and break
-  the definition/state split. So a building entity holds the *def id* and looks
-  the stats up, exactly as `Built`'s ids once did — just from the entity side.
-- **Direction mirrors `LandHeldBy`/`KingdomHold`:** the building is the child
-  declaring its land (`BuildingOnLand`, single `Entity`, source of truth); the
-  land's `LandHasBuildings` auto-fills. Same active/passive mirror as the
-  land↔kingdom link.
-- **Instances are state-only,** like `Kingdom`: a `buildings:` section in
-  `*.state.ron` is an id-keyed overlay (`merge_state` id-replaces, since a save
-  holds the full set of what's built), and `reconcile` drops any instance whose
-  `def_id` or `land_id` no longer resolves — the same repair-not-refuse policy.
-- **Spawn order** gains a buildings step after lands and before kingdoms, so
-  `BuildingOnLand` resolves to an entity that already exists.
+- **Why entities:** the task asked for buildings to be addressable ECS
+  entities with a relationship to the land, so construction/destruction,
+  per-instance state, and per-instance scripting have somewhere to live.
+  The single-source-of-truth rule rules out a parallel `Built` list.
+- **Stats stay on the def.** Copying profit/upkeep/levy onto each entity
+  duplicates definition data and breaks the definition/state split.
 
-## Player commands are self-describing (`Command` trait + `CommandRegistry`)
+## Player commands are self-describing
 
-Each player command is a struct implementing a `Command` trait that owns its
-rules (validation), its UI (a fixed run of selection steps reading the world),
-and its effect (`execute`). The command palette drives *any* registered
-command's steps the same way; the roster of commands it offers is the
-`CommandRegistry` resource.
+Each player command is a struct implementing a `Command` trait that owns
+its rules (validation), its UI (a fixed run of selection steps reading the
+world), and its effect (`execute`). The palette drives any registered
+command's steps the same way; the roster is a `CommandRegistry` resource.
 
-- **Why a trait + registry, not the earlier `Command` enum + `apply` dispatch:**
-  the enum/dispatch model hardwired the palette to one command's flow
-  (`Commands`→`Lands`→`Buildings`); adding a second command (e.g. *Destroy
-  Building*) would have forked the `Stage` enum and the palette's
-  navigate/render into per-command branches. A self-describing trait lets each
-  command define its own steps, and the palette stays generic — the menu code is
-  unchanged by new commands. This overturns the prior "no trait, no registry"
-  note in `commands.rs`: those now earn their keep, because the palette is
-  generic over commands and the registry is the natural seam for a plugin/mod to
-  register more before `App::run`.
-- **`step_items` takes `&World`, not `&mut World`:** it is a read, and keeping
-  it immutable lets the menu recompute the list from a shared borrow. The
-  helpers (`ruled_lands`, `buildings_on_land`) therefore walk the relationship
-  targets (`KingdomHold`, `LandHasBuildings`) via `World::get` rather than
-  `World::query`
-  (which needs `&mut World`).
-- **`Arc<dyn Command>` in the registry:** so the palette can hand a command to
-  `execute` (which needs `&mut World`) without holding the registry's borrow —
-  clone the `Arc`, drop the borrow, then mutate. Commands are immutable
-  definitions, so shared ownership via `Arc` is natural.
+- **Why a trait + registry:** the earlier enum-dispatch model hardwired
+  the palette to one command's flow. A self-describing trait lets each
+  command define its own steps and the palette stays generic — the menu
+  code is unchanged by new commands.
+- **`step_items` takes `&World`, not `&mut World`** — it's a read. The
+  helpers walk relationship targets via `world::get` rather than
+  `world::query` (which needs `&mut World`).
+- **`Arc<dyn Command>`** in the registry so the palette can move a
+  command to `execute` (which needs `&mut World`) without holding the
+  registry's borrow.
 - **List computed in the exclusive `input`, rendered by the non-exclusive
-  `update`:** `step_items` needs `&World`, which only an exclusive system gets.
-  So `input` recomputes the current list into the `CommandMenu` resource;
-  `update` reads that stored list (it can't take `&World`). `input`→`update` is
-  chained so the just-opened list shows the same frame.
+  `update`:** `step_items` needs `&World`, which only an exclusive system
+  gets. `input` recomputes the current list into the resource; `update`
+  reads it.
 
-## Camera mode is a boolean (`Game::zoomed`) with a tween between views
+## Camera is a boolean with a tween
 
-The camera has two views — the whole map and "zoomed in on the selected land" —
-and toggles between them with `Z`. It is a plain `bool` on `Game`, not a state
-machine: `true` means "frame on the selection's bbox with `ZOOM_MARGIN`",
-`false` means "frame on `Border`". `ui::camera::update_camera` reads the flag and
-the current `selected_land_id` every PostUpdate frame and rewrites the
-camera's `Projection::Orthographic { scaling_mode, scale, viewport_origin }`
-and `Transform::translation` in place.
+Two views (whole map vs zoomed-on-selection) toggled by `Z`. Plain `bool`
+on `Game`, not a state machine. `update_camera` reads the flag and the
+current selection every PostUpdate frame and rewrites the camera's
+projection + transform in place.
 
-- **Why a flag, not an enum / state machine:** two states with one transition
-  (toggle) and one extra input (selection id, already on `Ctx`); anything more
-  is over-engineering. The flag lives on `Game` because it's session state,
-  not UI state — same neighbourhood as `paused`/`speed_idx`.
 - **One frame, one write, every frame.** Recomputing a polygon's bbox is
-  trivial, so `update_camera` redoes the math each PostUpdate rather than
-  diffing `(mode, selected_land_id)`. The selection-following behaviour comes
-  for free: when arrow keys move the selection in `update_input`, the next
-  `update_camera` reads the new id and re-centres. Caching would be premature
-  optimisation.
-- **Fit via `AutoMin`, not by hand.** The same `ScalingMode::AutoMin` the
-  default view uses — set `min_width = land_w * ZOOM_MARGIN / (1 - RIGHT_BAR)`,
-  `min_height = land_h * ZOOM_MARGIN`, translation = bbox centre. Keeps the
-  aspect-ratio guarantees the default relies on and the same 30%-zoom-in
-  (`CAMERA_SCALE = 0.7`) so the transition doesn't pop. The hand-rolled
-  alternative (`scale` → `1.0`, manual world↔screen math) would duplicate the
-  AutoMin logic.
-- **Z is yielded to the command palette while it's open**, same as `Esc`. The
-  palette owns all input while up; `app::input` reads `menu.open` and skips the
-  toggle. Listed alongside `C commands` / `days/s` in the status bar.
-- **Smoothstep tween between destinations.** Two extra components on the
-  camera entity: `CameraView` (last applied view, doubles as "where are we
-  now") and `CameraTween { from, to, t }`. Each frame, `update_camera`:
-  (1) computes the destination from `(zoomed, selection)`; (2) if the
-  destination moved, copies the current `CameraView` into `from`, sets
-  `to = target`, resets `t = 0`; (3) advances `t` by `dt / TRANSITION_DURATION`
-  (clamped to 1) and applies a smoothstep ease; (4) writes the lerped
-  `min_w`/`min_h`/`translation` into the camera. Mid-transition re-targets
-  start the new tween from the current rendered view, so the camera never
-  jumps. `TRANSITION_DURATION = 0.2s` — snappy on toggle, no strobing on pan.
-- **Why a tween, not exponential smoothing:** a tween settles exactly to the
-  destination (`t = 1` ⇒ `view = to`), which keeps the on-screen state clean
-  for any later code that wants to read it. Exponential smoothing approaches
-  asymptotically and would need a snap threshold plus fiddly `dt * rate`
-  constants per field. The tween is also ~25 lines; the smoothing version is
-  not noticeably shorter.
+  trivial; diffing `(mode, selection)` would be premature optimisation.
+  Selection-following comes for free.
+- **Fit via `AutoMin`**, not by hand — same projection the default view
+  uses. Keeps the aspect-ratio guarantees and the 30%-zoom-in so the
+  transition doesn't pop.
+- **Smoothstep tween** between destinations. Two extra components on the
+  camera entity (`CameraView` = current rendered view, `CameraTween {
+  from, to, t }`). Each frame: (1) compute destination; (2) if it moved,
+  restart the tween from the current rendered view; (3) advance `t` with
+  a smoothstep ease; (4) write the lerped projection + transform. A tween
+  settles exactly to the destination (`t = 1` ⇒ `view = to`), which keeps
+  on-screen state clean for any later code that reads it. Exponential
+  smoothing approaches asymptotically and would need a snap threshold.
 
 ## Building status is a serialized enum
 
-`BuildingStatus` is both the ECS component and the RON state type, with
-`Active`, `Inactive`, and `Building` variants. Variant names replace numeric
-status codes so invalid values cannot enter the world.
+`BuildingStatus` is both the ECS component and the RON state type with
+`Active` / `Inactive` / `Building` variants. Variant names replace
+numeric codes so invalid values cannot enter the world.
 
 ## Courtiers are state-only appointment entities
 
-A courtier is an addressable state entity linking one character and one kingdom
-through Bevy relationships (`CourtierOfCharacter` / `CourtierOfKingdom` and their
-auto-maintained reverse collections). `CourtierType` is an enum serialized by
-variant name; `Courtier` is the generic role, leaving later roles additive without changing
-the entity shape. The court panel follows the selected land's kingdom.
+A courtier is an addressable state entity linking one character and one
+kingdom through Bevy relationships (`CourtierOfCharacter` /
+`CourtierOfKingdom` and their auto-maintained reverse collections).
+`CourtierType` is an enum serialized by variant name; `Courtier` is the
+generic role, leaving later roles additive without changing the entity
+shape. The court panel follows the selected land's kingdom.
 
 ## A kingdom holds exactly one land
 
-`Kingdom::land_ids: Vec<String>` is gone; the field is `land_id: String`. One
-kingdom rules exactly one land, by id. The Bevy relationship was also flipped
-from `KingdomHolds(Vec<Entity>)` (the auto-maintained reverse of each land's
-`LandHeldBy`) to `KingdomHold(Entity)` — single-entity on both sides.
+`Kingdom::land_id: String`, not `Vec<String>`. One kingdom rules
+exactly one land; the game models war as the way to gain a new land.
 
-- **Why data first:** the gameplay we're actually modelling — one ruler over
-  one territory at a time, with war being the way a ruler gains a new land —
-  is a 1:1 model. The Vec carried no gameplay the 1:1 doesn't (a kingdom
-  couldn't *act* across its lands any differently), and the multi-land
-  reconcile was paying complexity for an empty abstraction.
-- **Why flip the Bevy shape too:** once the data side is 1:1, the runtime Vec
-  is paying the same empty-abstraction tax (`RelationshipTarget::iter` over
-  one entity, callers guarding `.get(...).ok()` on a Vec that always has 1
-  element). The relationship target is private (Bevy's correctness check
-  requires it) with a public `KingdomHold::land()` accessor — the same
-  pattern `CharacterLeads::kingdom()` uses.
-- **Data invariants tightened.** With one land per kingdom, the held land
-  is by definition the seat — `seat_land_id` was dropped from the schema and
-  the `KingdomSeat` component was removed; the held land is read through
-  `KingdomHold::land()`.
+- **Why data first:** the gameplay is 1:1 — a kingdom can't act across
+  its lands any differently. The Vec carried no gameplay the 1:1
+  doesn't, and the multi-land reconcile was paying complexity for an
+  empty abstraction.
+- **Why flip the Bevy shape too:** once the data side is 1:1, the
+  runtime Vec is paying the same tax (`RelationshipTarget::iter` over
+  one entity, callers guarding `.get(...).ok()` on a Vec of 1). The
+  target is private with a public accessor — same pattern as the
+  leader collection.
 
-## War is an entity; the casus belli and the demands sit on the war
+## War is an entity; the casus belli and the demands sit on it
 
-A war is its own entity (not a marker on the kingdom) and the casus
-belli + the demands the war is fought over sit on the war as plain
-components — `WarCasusBelliType` (the *shape* of the fight) and
-`WarDemands` (the list of `(WarDemandType, target kingdom)` pairs).
-There is no separate `CasusBelli` entity kind.
+A war is its own entity (not a marker on the kingdom). The casus belli
+and the demands the war is fought over sit on the war as plain
+components (`WarCasusBelliType`, `WarDemands`). There is no separate
+`CasusBelli` entity kind.
 
-- **Why war is an entity:** the war sits between two kingdoms and a list
-  of demands, all of which are dynamic (player picks at declare time).
-  An entity is the natural shape for a link in a graph, and the
-  relationship-colocation rule keeps the source (`WarAttackerKingdom` /
-  `WarDefenderKingdom`) on the war and the reverses
-  (`KingdomHasWarsAttacking`, `KingdomHasWarsDefending`) on the kingdoms
-  — no manual reverse inserts, no drift.
-- **Why no CB entity, just `WarCasusBelliType` on the war:** the earlier
-  `CasusBelli` entity (a separate `CasusBelli` kind with its own
-  relationship graph and a `CasusBelliKingdom` link) was over-engineered
-  for the gameplay we actually have. A war is the *only* consumer of a
-  CB; CBs don't outlive the war that uses them in any current path, and
-  the player's "hoard a CB, press it later" use case isn't on the
-  roadmap. Folding the CB type onto the war drops an entity kind, a
-  relationship, and a reverse target — the war entity already exists,
-  no new shape needed. If hoarding lands later, splitting CB back out
-  is a mechanical change (the `WarCasusBelliType` enum migrates to a
-  new component on the new CB entity, `WarDemands` adds a
-  `WarWithCasusBelli` relationship).
-- **Why `WarDemands` is a `Vec<WarDemand>`, not a single demand:** a
-  war can carry multiple demands (`Conquest` today seeds one
-  `Take(defender_kingdom)` demand; a future `Conquest + Reparations`
-  CB could seed two). The list lives on the war; the
-  `EnforceDemands` command picks one to resolve at a time.
+- **Why a war entity:** the war sits between two kingdoms and a list of
+  demands, all dynamic. An entity is the natural shape for a link in a
+  graph, and the relationship-colocation rule keeps the source on the
+  war and the reverses on the kingdoms.
+- **Why no CB entity, just `WarCasusBelliType`:** the earlier `CasusBelli`
+  entity was over-engineered for the gameplay we have. A war is the only
+  consumer of a CB; CBs don't outlive the war that uses them in any
+  current path, and "hoard a CB, press later" isn't on the roadmap.
+  Folding the CB onto the war drops an entity kind, a relationship, and
+  a reverse target. If hoarding lands later, splitting CB back out is
+  mechanical.
+- **Why `WarDemands` is a `Vec<WarDemand>`:** a war can carry multiple
+  demands (a future `Conquest + Reparations` CB could seed two). The
+  list lives on the war; `EnforceDemands` picks one to resolve at a time.
 - **No automatic resolution.** The war has no status / no tick / no
-  end condition — `EnforceDemands` is the explicit resolution step
-  the player triggers when they've satisfied a demand's gate (e.g.
-  the target's land is controlled by their army for `Take`).
-- **CB enum is the only place new CB shapes land.** `resolve_cb` in
-  `commands/declare_war.rs` is the one switchboard between a CB id
-  string and `WarCasusBelliType`; `demands_for` is the one place the
-  CB shape's initial demand list lives. Adding a CB shape is a variant
-  on `WarCasusBelliType` + a `resolve_cb` arm + a `demands_for` arm +
-  a menu row — no other code changes, no new entity shape.
+  end condition — `EnforceDemands` is the explicit resolution step.
+- **CB enum is the only place new CB shapes land.** `resolve_cb` is the
+  one switchboard between a CB id and `WarCasusBelliType`; `demands_for`
+  is the one place the CB shape's initial demand list lives. Adding a
+  CB shape is a variant + a `resolve_cb` arm + a `demands_for` arm + a
+  menu row.
 
 ## Conquest transfer is "add the player as the kingdom's leader" (multi-kingdom)
 
 The `EnforceDemands` command's `Take` demand is a single
-`KingdomLedBy(player)` insert on the target kingdom. Bevy's
-relationship hook adds the entry to the player's `CharacterLeads`
-`Vec<Entity>` (the multi-kingdom model) — the player now leads the
-conquered kingdom *and* every kingdom they already led. The
-defender's previous leader (if any) has the entry pruned from their
-`CharacterLeads`.
+`KingdomLedBy(player)` insert on the target kingdom. Bevy's hook adds
+the entry to the player's `Vec<Entity>` collection (the multi-kingdom
+model) — the player keeps every kingdom they already led and gains the
+conquered one. The defender's previous leader has the entry pruned.
 
-- **Why multi-kingdom:** a character that takes a kingdom should keep
-  whatever they had before. The one-to-one rule (`CharacterLeads`
-  single-`Entity`) lost the old kingdom on transfer; relaxing
-  `CharacterLeads` to `Vec<Entity>` makes the transfer additive and
-  matches the gameplay — a player conquering multiple kingdoms ends
-  up ruling several.
-- **Why `Vec<Entity>` and not `Entity` with multi-leader rules:** every
-  call site that wanted "the actor's kingdom" had to become "any of
-  the actor's kingdoms" — the `CharacterLeads` shape is the simpler
-  pivot than building a leader-set lookup that callers still have to
-  special-case. `RelationshipTarget::iter` gives the walk for free.
-- **What it costs:** every site that read `CharacterLeads::kingdom()`
-  had to become "walk all kingdoms" (`ruled_lands`, `armies_under`,
-  `player_wars`), "any match" (`rules_land`, the rule checks in
-  every command, `land_graphic`'s own-lands set, `holding_icon`'s
-  kingdom predicate), or "pick one" (`Ctx::startup`, the
-  DeclareWar attacker's pick). All mechanical.
-- **No conquest cleanup on the defender's side (yet):** the
-  defender's `CharacterLeads` loses the kingdom entry (Bevy prunes
-  it), so the defender no longer leads it — good. The defender's
-  *court* appointments are released (the courtier entities despawn
-  when the kingdom is taken over via `Take` — see
-  [`building_releasing`](src/game/building_releasing.rs) and
-  [`court_releasing`](src/game/court_releasing.rs)). The defender's
-  `LandHeldBy` link, treasury, and other state stay intact; the
-  defender is effectively exiled from court, not destroyed.
-  Transferring the court's courtiers to the player is still future
-  work (the current behaviour is "release", not "absorb").
-
+- **Cost:** every site that read `character_leads.kingdom()` had to
+  become "walk all kingdoms" (ruled lands, armies under, player wars),
+  "any match" (rule checks, own-lands sets, kingdom predicates), or
+  "pick one" (`Ctx::startup`, the DeclareWar attacker's pick). All
+  mechanical.
+- **No conquest cleanup on the defender's side (yet):** the defender
+  loses `CharacterLeads` (Bevy prunes it), the defender's court
+  appointments are released (the courtier entities despawn on `Take`).
+  The defender's `LandHeldBy`, treasury, and other state stay intact
+  until the conquest transfer code lands.
 
 ## Relationship components live in the file of their main component
 
-Every ECS relationship component — both `#[relationship]` sources and
-`#[relationship_target]` reverses — is placed in the file of the entity it
-sits on, matching the colocated components for that entity kind.
+Every relationship component — both sources and reverses — is placed in
+the file of the entity it sits on. The relationship's behaviour is
+determined by which entity it attaches to, so its file should match.
 
-- **Why:** the relationship's behaviour is determined by which entity it
-  attaches to, so its file should match. Putting the source on `kingdom.rs`
-  and its reverse on `character.rs` keeps both sides of a link next to the
-  other components for that entity, instead of forcing readers to grep a
-  generic "relationships" module to understand one link.
-- **Existing examples:** `KingdomLedBy` and `KingdomHold` are in `kingdom.rs`
-  (they sit on the kingdom); `CharacterLeads` and `LandHeldBy` are in
-  `character.rs` and `land.rs` respectively (they sit on the leader and the
-  held land); `CourtierOfCharacter` and `CourtierOfKingdom` are in
-  `courtier.rs` (they sit on the courtier); `CharacterHasCourtiers` and
-  `KingdomHasCourtiers` likewise land on `character.rs` and `kingdom.rs`.
-- **Army pair:** `ArmyOnLand` and `ArmyBelongsToKingdom` sit on the army
-  entity so they live in `ecs::army`; their reverses `LandHasArmies` and
-  `KingdomHasArmies` sit on the land and kingdom respectively, so they live
-  in `ecs::land` and `ecs::kingdom`.
 - **Rule for new relationships:** when adding a `#[relationship]` or
-  `#[relationship_target]`, decide the entity it attaches to first, then put
-  the component in that entity's file. If a future generic relationships
-  module appears, move them back — but the split by entity kind is the
-  default and stays until something forces otherwise.
+  `#[relationship_target]`, decide the entity it attaches to first,
+  then put the component in that entity's file. If a future generic
+  relationships module appears, move them back — the split by entity
+  kind is the default.
 
 ## `BuildingDef::levy_rate` is the per-month replenishment of an army
 
-Military building definitions carry a `levy_rate: u32` (defaulted to 0 on
-civil kinds). It is the per-month levy contribution a building makes to
+Military building definitions carry `levy_rate: u32` (defaulted to 0 on
+civil kinds). It's the per-month levy contribution a building makes to
 armies raised on its land.
 
-- **Why a separate field:** the static `levy` on a building is the
-  immediate contribution to the realm's standing pool (`CharacterLevy`),
-  summed at construction / destruction time. `levy_rate` is the *flow* into
-  the army's `ArmyLevy` over time. The two are independent: a building
-  still contributes its `levy` to the realm even when no army has been
-  raised; once an army exists on the land, `levy_rate` adds to the army
-  each month.
-- **Not yet consumed.** This commit declares the field; the per-month
-  replenishment loop that reads it (likely a new `OnMonth` observer or a
-  step in `game::payout`) is the next change. Until then the field is just
-  declared and the base mod sets it per the formula below.
-- **Rule of thumb for the catalogue:** `levy_rate = max(1, round(levy *
-  0.025))`. At the base game's levy magnitudes (10–50) the formula floors
-  at 1 for every military kind, so the base mod starts every military
-  building at `levy_rate: 1`. A mod can override per kind (a special drill
-  ground at `levy_rate: 5`, for example) without changing the field's
-  default of `0` on civil kinds.
+- **Why a separate field:** the static `levy` is the immediate
+  contribution to the realm's standing pool, summed at
+  construct/destroy. `levy_rate` is the *flow* into the army's levy
+  over time. The two are independent.
+- **Rule of thumb:** `levy_rate = max(1, round(levy * 0.025))`. A mod
+  can override per kind.
 
 ## Army and Marching are separate entity kinds
 
-A marching is a separate entity from the army it moves, not a component on
-the army. The marching carries the scheduling data (`MarchingFromLand` /
-`MarchingToLand`, `MarchingOnRoad`, `MarchingBeginDate` /
-`MarchingArrivedDate`, `MarchingStatus`); the army carries the operational
-state (`ArmyStatus:` `Idle` / `Marching`, plus `ArmyMarching` pointing at the
-current marching).
-They are linked by a Bevy relationship: `MarchingArmy` (on the marching)
-↔ `ArmyHasMarching` (a `Vec<Entity>` on the army, the queue, insertion-
-order-preserving).
+A marching is a separate entity from the army it moves, not a component
+on the army. The marching carries the scheduling data (the two
+endpoints, the road, the dates, the status); the army carries the
+operational state (`ArmyStatus` + `ArmyMarching` pointing at the
+current marching). They are linked by a Bevy relationship —
+`MarchingArmy` (on the marching) ↔ `ArmyHasMarching` (a `Vec<Entity>`
+on the army, the queue, insertion-order-preserving).
 
-- **Why a separate entity:** the same army can carry multiple marchings at
-  once (a queue of marches the player lined up: A→B→C→D — and since a
-  marching is one road, even a single ordered move is usually a chain).
-  Putting the
-  scheduling data on the army would have turned `Army` into a `Vec` of
-  marchings, or pushed the queue somewhere else; the marching entity kind
-  keeps the data shape small (one marching per road) and lets the
-  daily tick walk a single archetype (`Marching`). See the `One marching
-  per road` decision.
-- **Why a relationship, not a plain `Entity` field:** Bevy's hook-
-  maintained `Vec<Entity>` collection on the army is the queue, free of
+- **Why a separate entity:** the same army can carry multiple marchings
+  at once (a queue of marches; even a single ordered move is usually a
+  chain because one marching covers one road). Putting the data on the
+  army would have turned `Army` into a `Vec` of marchings. The marching
+  entity keeps the data shape small and lets the daily tick walk a
+  single archetype.
+- **Why a relationship, not a plain `Entity` field:** Bevy's
+  hook-maintained `Vec` collection on the army is the queue, free of
   hand-maintained reverse inserts. Insertion order is preserved by the
-  `RelationshipTarget` Vec, which is how the "first scheduled marching on
-  the matching source land wins" rule lands.
-- **Current vs scheduled marching.** `ArmyMarching` (single `Entity` on
-  the army) is set only by the daily tick when it activates a scheduled
-  marching, and removed when the queue runs dry. The `ArmyHasMarching` Vec
-  includes both the currently-executing marching and the scheduled ones
-  waiting for the army to be on the matching source land. The two pieces
-  are not redundant: the Vec is the queue, the single `Entity` is the
-  pointer the marching tick follows day-to-day.
-- **Run-time only.** Marchings never appear in mod data — `populate` does
-  not spawn any. They are spawned by the `MarchingOrder` command and
-  despawned by the daily tick as each road is finished (the last one when
-  the army reaches the target land and the queue is empty). `DismissArmy`
-  also walks the queue and despawns every
-  marching before despawning the army (otherwise the marchings would be
-  left holding a `MarchingArmy` pointing at a despawned entity).
+  `RelationshipTarget` Vec, which is how "first scheduled marching on
+  the matching source land wins" lands.
+- **Current vs scheduled marching.** `ArmyMarching` (single `Entity`
+  on the army) is set only by the daily tick when it activates a
+  scheduled marching, and removed when the queue runs dry. The Vec
+  includes both the current marching and the scheduled ones waiting.
+- **Run-time only.** Marchings never appear in mod data — spawned by
+  the marching command, despawned by the daily tick as each road is
+  finished. `DismissArmy` walks the queue and despawns every marching
+  before despawning the army.
 
 ## One marching per road; armies travel the road network
 
-A marching entity covers exactly one road. `MarchingOnRoad` names it and
-`MarchingFromLand` / `MarchingToLand` are always that road's two
-`RoadBetweenLands` ends. An order to a land further off is not one long
-marching — the `MarchingOrder` command traces the road graph from the land
-the army stands on to the target and spawns one marching per road on the
-route, queued in travel order in the army's `ArmyHasMarching`.
+A marching entity covers exactly one road. `MarchingOnRoad` names it
+and `MarchingFromLand` / `MarchingToLand` are always that road's two
+ends. An order to a land further off is not one long marching — the
+marching command traces the road graph and spawns one marching per
+road on the route, queued in travel order.
 
-- **Why per-road:** the road is where a marching *happens*. Anything that
-  wants to reason about a moving army — where it is between two lands, who
-  else is on that road, an ambush, a blocked or upgraded road — needs the
-  road, and a marching that spanned several roads would have no single
-  answer. It also keeps the entity shape honest: one marching, one leg,
-  one begin/arrived pair.
-- **Route tracing, not free movement.** Armies only move along roads. The
-  command breadth-firsts the graph (built by walking every `Road`'s
-  `RoadBetweenLands`, which never changes after populate), so the
-  **fewest-roads** route wins — not the fewest *days*; with per-road costs
-  those can differ, and hop count is the cheaper, more predictable rule
-  until the map is big enough for the difference to bite. A target with no
-  chain of roads to it is
-  rejected outright rather than silently walked cross-country. Each land's
-  adjacency is in road-spawn order, so the search is deterministic like the
-  rest of the sim.
-- **Why the chain works with no new tick logic.** The daily tick already
-  activates the first scheduled marching whose `MarchingFromLand` matches
-  the army's current land, and on arrival looks for the next one from the
-  new land. A route is exactly that: hop *n*'s target land is hop *n+1*'s
-  source. Travel time falls out as the sum of the route's road costs
-  instead of a flat rate per order, which is also the more sensible cost
-  model.
-- **Why `MarchingOnRoad` is a relationship** (with `RoadHasMarchings` on the
-  road) while the road's own `RoadBetweenLands` is a plain `Vec<Entity>`:
-  the road→land link is definition data baked once at populate, but
-  marchings are spawned and despawned constantly, which is exactly the
-  churn Bevy's hook-maintained reverse handles. It also gives "who is
-  marching on this road" for free.
-- **Not done here:** the army panel still reports the *current hop's* target
-  ("marching to <next land>"), not the route's final destination. Showing
-  the end of the queue means walking `ArmyHasMarching` in the UI; deferred
-  until it actually reads wrong to a player.
+- **Why per-road:** the road is where a marching *happens*. Anything
+  reasoning about a moving army (where it is between two lands, who
+  else is on that road, an ambush, a blocked road) needs the road, and
+  a marching that spanned several roads would have no single answer.
+- **Route tracing, not free movement.** Armies only move along roads.
+  The command breadth-firsts the graph (built by walking every
+  `Road`'s ends), so the **fewest-roads** route wins — not the fewest
+  days; with per-road costs those can differ, and hop count is the
+  cheaper, more predictable rule until the map is big enough for the
+  difference to bite. A target with no chain of roads is rejected
+  outright.
+- **Why `MarchingOnRoad` is a relationship** while the road's own
+  `RoadBetweenLands` is a plain `Vec<Entity>`: the road→land link is
+  definition data baked at populate, but marchings are spawned and
+  despawned constantly — exactly the churn Bevy's hook-maintained
+  reverse handles.
 
-## March duration is per-road, authored data (`distance_days`)
+## March duration is per-road, authored data
 
-How long a march takes is a property of the road, not a constant: each road
-in mod data carries `distance_days`, loaded into the `RoadDistanceDays`
-component and read by `game::marching::road_days`. The daily tick sets a
-marching's arrived date to `begin + road_days(its road)`, and the marching
-command sums the same values across a traced route to quote the player a
-total.
+How long a march takes is a property of the road, not a constant. Each
+road in mod data carries `distance_days`, loaded into the
+`RoadDistanceDays` component and read by `game::marching::road_days`.
+The daily tick sets a marching's arrived date to `begin + road_days(its
+road)`; the marching command sums the same values across a traced
+route to quote the player a total.
 
 - **Authored, not computed from `points`.** Length is only a proxy for
-  effort. Deriving the days at load would make the number a function of how
-  the polyline happens to be drawn — nudge a holding and every march in the
-  region silently re-prices. As data, a mod can make a paved highway cheap
-  or a mountain pass dear without redrawing anything, and the base mod
-  documents its own scale in `roads.ron`.
-- **The base mod's scale:** the longest road (road-2-3, ~748 units) is 30
-  days, the rest are `round(30 × len / 748)` floored at 1 — 17/30/11/23/10
-  west to east. Re-derive when geometry moves; the comment at the top of
-  `roads.ron` carries the formula.
-- **Zero is fatal.** `content::validate` rejects `distance_days: 0`, which
-  would let an army begin and arrive the same day (and, with the tick's
-  `today >= arrived` test, teleport the whole route in one day). A missing
-  field defaults to 0 via `#[serde(default)]`, so the same check catches
-  "forgot to author it" — consistent with how `points` and
-  `between_land_ids` are defaulted-then-validated rather than made
-  mandatory at the serde level.
-- **One resolver, and no fallback.** `road_days` is the only place the
-  component is read, so the number the command quotes and the number the
-  tick charges cannot drift. It returns `Option<u32>` and there is no
-  default duration to fall back on: every road has a `distance_days`, so a
-  road without one is a torn world, and inventing a number there would hide
-  the bug behind armies that march a plausible-looking length of time.
-  Callers refuse to move instead — the command rejects the order before
-  spawning anything, and the tick's `activate` returns `false`, leaving the
-  marching `Scheduled` to retry. The one case needing care is a `false`
-  mid-route, after the finished marching has been despawned: the army must
-  `stand_down` there, because leaving it `Marching` with an `ArmyMarching`
-  pointing at a despawned entity would freeze it permanently (the tick
-  would look up a missing arrived date and skip, every day, forever).
+  effort. Deriving the days at load would make the number a function of
+  how the polyline happens to be drawn — nudge a holding and every
+  march in the region silently re-prices. As data, a mod can make a
+  paved highway cheap or a mountain pass dear without redrawing.
+- **Zero is fatal.** `validate` rejects `distance_days: 0`: an army
+  would begin and arrive the same day and (with the tick's `today
+  >= arrived` test) teleport the whole route.
+- **One resolver, no fallback.** `road_days` is the only place the
+  component is read, so the number the command quotes and the number
+  the tick charges cannot drift. It returns `Option<u32>` and there is
+  no default duration to fall back on: a road without one is a torn
+  world, and inventing a number there would hide the bug behind armies
+  that march a plausible-looking length of time. Callers refuse to
+  move instead. The one case needing care is a `false` mid-route,
+  after the finished marching has been despawned: the army must
+  `stand_down` there, because leaving it `Marching` with an
+  `ArmyMarching` pointing at a despawned entity would freeze it
+  permanently.
 
 ## Siege is its own entity kind; conquest pauses the realm economy
 
 A siege is a separate entity, not a marker on the army or the land. It
 carries the scheduling data (`SiegeProgress`, `SiegeNextEventDate`) plus
-the two relationships to the belligerents (`SiegeAttackerArmy`,
-`SiegeDefenderLand`). The army carries its operational state
-(`ArmyStatus::Sieging`); the land is the target.
+two relationships to the belligerents. The army carries its operational
+state (`ArmyStatus::Sieging`); the land is the target.
 
 - **Why an entity, not a component on the army:** an army can stand on
-  a foreign land without laying siege to it — the siege is a *decision*
+  a foreign land without laying siege to it — the siege is a decision
   the player takes, not a state the army is always in. Putting it on
   the army would have meant every foreign-land army carries siege
-  fields it does not need, and the relationship to the target land
-  would live on the wrong archetype. A separate entity also lets the
-  defender kingdom dispatch relief forces or counter-sieges later
-  without changing the army shape.
+  fields it doesn't need.
 - **Why conquest flips every building on the land to `Inactive`:** the
   visible consequence of losing a land is the economy stopping. Until
-  the conquest-transfer code lands (the war-resolution piece), this is
-  the player's only signal that something happened — the realm keeps
-  its `LandHeldBy` (the kingdom link) until war resolution moves it,
-  but its buildings stop contributing until then. Reverting to
-  `Active` would be the relief-force outcome, also still TBD.
-- **`ArmyHasSiege` is single, `LandHasSiegesUnderAttack` is `Vec`.** An
-  army can only stand on one land and can't split itself across two
-  sieges — one army = at most one siege. A land can be under attack
-  from multiple armies at once (different kingdoms, different progress
-  schedules). The relationship-colocation rule places the reverses on
-  the army / land files accordingly.
+  the conquest-transfer code lands, this is the player's only signal
+  that something happened — the realm keeps its `LandHeldBy` until war
+  resolution moves it, but its buildings stop contributing until then.
+- **`ArmyHasSiege` is single, `LandHasSiegesUnderAttack` is `Vec`.**
+  One army = at most one siege; a land can be under attack from
+  multiple armies at once.
 - **`SiegeProgress` is per-siege, not per-attacker.** All armies
   besieging the same land march at their own pace; the per-siege
-  counter is the unit of resolution. A siege ends when *its*
-  `SiegeProgress` hits 100 — independent of whether other sieges on the
-  same land are still running.
+  counter is the unit of resolution.
 - **No resolution of `LandHeldBy` (yet).** When a siege wins, the
   conquering army gets `ArmyControlsLand` but the defending kingdom's
-  `LandHeldBy` stays put. That's the war-resolution piece, also still
-  TBD — adding it (transfer the land to the attacker's kingdom) is the
-  obvious next step, and the relationship hooks (Bevy auto-prunes the
-  old `LandHeldBy`) keep the change mechanical.
+  `LandHeldBy` stays put. The war-resolution piece is the obvious next
+  step.
 
-## Command palette search is a palette-owned overlay (substring match, no scoring)
+## Command palette search is a palette-owned overlay
 
-The command palette has a search bar above the list; typed characters move
-matches to the top and dim the rest in place. The search is owned entirely by
-`ui/command_menu.rs` — each `Command` still returns the same flat `Vec<MenuItem>`
-from `step_items`, and the palette reorders, dims, and clamps around the
-result. Commands don't know about the search.
+The command palette has a search bar above the list; typed characters
+move matches to the top and dim the rest in place. The search is owned
+entirely by `ui::command_menu.rs` — each command still returns the same
+flat `Vec<MenuItem>` from `step_items`, and the palette reorders, dims,
+and clamps around the result. Commands don't know about the search.
 
-- **Why palette-owned:** every command's `step_items` returns a `Vec<MenuItem>`
-  with a `label` and `value`. The palette has the one place where all of them
-  meet, so it can apply one filter once and reach every list. Threading a
-  search context into every command's `step_items` would have meant a new
-  parameter on the trait (and a new branch in every `step_items` arm) for the
-  same one substring test.
-- **Substring match on the label, case-insensitive.** No fuzzy match, no
-  prefix weighting, no per-item scoring. With the base game's eight commands
-  and the few dozen items each step returns, a fancier ranker would be
-  invisible. If a mod grows a roster to where ordering by relevance matters,
-  swap the matcher in `refresh` — the rest of the system (the `matches` bit
-  vec, the reorder, the cursor snap) is agnostic to *how* an item matched.
-- **Cursor navigates matches only when the query is non-empty.** With an
-  empty query every item matches and navigation is the original full-list
-  walk; with a query the cursor wraps around the matches and ignores the
-  dimmed rows beneath. The dimmed rows are still selectable — `pick` honours
-  the cursor regardless — so the player can still reach them if they really
-  want to, but the search-driven UX is "type, then arrow-down through the
-  matches".
-- **Query clears on every panel change (top-level ↔ step ↔ step), and on
-  open/close.** Each panel gets a fresh filter rather than carrying the
-  previous step's text forward — typing `"co"` at the top-level command list
-  and pressing `Enter` lands the player in `Construct Building`'s step 0 with
-  the bar emptied. Reopening the menu (next `c`) starts fresh; `Esc` closes
-  and clears, since the menu isn't carrying any state past its own window.
-- **`Space` is yielded to the palette while it's open.** Multi-word queries
-  are the obvious use case (`"raise army"`); without yielding the keystroke,
-  every space the player typed would also toggle `Game::paused`. The yield
-  lives in `app::input` next to the existing `Esc`/`Z`/`arrow` yields.
+- **Why palette-owned:** every command's `step_items` returns a
+  `Vec<MenuItem>` with a `label` and `value`. The palette is the one
+  place where all of them meet, so it can apply one filter once and
+  reach every list. Threading a search context into every command's
+  `step_items` would have meant a new parameter on the trait (and a
+  new branch in every arm) for the same one substring test.
+- **Substring match on the label, case-insensitive.** No fuzzy match,
+  no prefix weighting, no per-item scoring. With the base game's eight
+  commands and the few dozen items each step returns, a fancier ranker
+  would be invisible. If a mod grows a roster to where ordering by
+  relevance matters, swap the matcher in `refresh` — the rest of the
+  system (the `matches` bit vec, the reorder, the cursor snap) is
+  agnostic to *how* an item matched.
+- **Cursor navigates matches only when the query is non-empty.** With
+  an empty query every item matches; with a query the cursor wraps
+  around the matches and ignores the dimmed rows beneath. The dimmed
+  rows are still selectable.
+- **Query clears on every panel change** (top-level ↔ step) and on
+  open/close. Each panel gets a fresh filter.
+- **`Space` is yielded to the palette while it's open.** Multi-word
+  queries are the obvious use case; without yielding the keystroke,
+  every space would also toggle `Game::paused`.
 - **Why the keyboard reading uses a stored `MessageCursor`, not
-  `MessageReader`.** The palette's `input` is exclusive (it needs `&World`
-  for `step_items` and `&mut World` for `execute`), so it can't take a
-  `MessageReader` system param. A `MessageCursor<KeyboardInput>` lives on
-  the `CommandMenu` resource, gets cloned out before the exclusive borrow
-  on `Messages<KeyboardInput>`, then written back — one usize copy per
-  frame, no missed events.
+  `MessageReader`.** The palette's `input` is exclusive (it needs
+  `&World` for `step_items` and `&mut World` for `execute`), so it
+  can't take a `MessageReader` system param. A `MessageCursor<...>` on
+  the `CommandMenu` resource is cloned out before the exclusive borrow
+  on `Messages<KeyboardInput>`, then written back.
 
 ## Chronicle generation lives in its own observer module
 
-The chronicle text is split out from game-logic code into one module,
-`src/chronicles.rs`, that owns one observer per chronicle-worthy
-event. Commands and ticks only `world.trigger(...)`; the observers
-read display names off the world and write one past-tense line per
-event.
+The chronicle text is split out from game-logic code into one module
+that owns one observer per chronicle-worthy event. Commands and ticks
+only `world.trigger(...)`; the observers read display names off the
+world and write one past-tense line per event.
 
-- **Why:** keeps game-logic code (commands / ticks) free of string
-  formatting and free of `Chronicles` access. Chronicle text lives in
-  exactly one place, so a future "rewrite the voice" pass is a
-  one-file change. The flavor (past tense, third person, lands named,
-  ids hidden) is enforced by the module boundary — nothing else can
-  push a line.
-- **Event surface.** The module observes everything that can produce a
-  chronicle line: `OnBuildingUpdated` (with a `kind` dispatch for
-  `ConstructionStarted` / `Constructed` / `Destroyed`; `Raised` /
-  `Dismissed` are absorbed because the army-level line covers them),
+- **Why:** keeps game-logic code free of string formatting and
+  `Chronicles` access. Chronicle text lives in exactly one place, so
+  a future "rewrite the voice" pass is a one-file change. The flavor
+  (past tense, third person, lands named, ids hidden) is enforced by
+  the module boundary — nothing else can push a line.
+- **Event surface.** The module observes everything that can produce
+  a chronicle line: `OnBuildingUpdated` (with a `kind` dispatch),
   `OnArmyRaised` / `OnArmyDismiss`, `OnMarchingOrdered` /
-  `OnArmyArrived` (with a `continuing: bool` payload so the arrival
-  line can mention the next hop), `OnSiegeLaid` / `OnSiegeWon`,
-  `OnWarDeclared` (with the casus belli, so future CB shapes can pick
-  their verb), `OnDemandEnforced` (with the demand type), and
-  `OnWarEnded`. New events are additive: a new CB shape extends
-  `WarCasusBelliType` and the `on_war_declared` match arm.
-- **`OnBuildingUpdated::ConstructionStarted` vs `OnBuildingUpdated::Constructed`.**
-  Two distinct events for two distinct moments. The construct command
-  fires `ConstructionStarted` (a new building is queued); the daily
-  tick fires `Constructed` the day the building finishes and flips to
-  `Active`. The chronicle reader sees "began raising a X" then
-  "is now in operation" — the construction lifecycle, told as two
-  sentences. Reusing the existing `OnBuildingUpdated` event (vs a new
-  event type) keeps building lifecycle in one place; the kind enum is
-  the variant axis.
-- **Subject for player-driven events.** The observer module resolves the
-  player character once per observer batch via a `PlayerCtx`
-  `SystemParam` and formats the actor as "You" for player-driven
-  events. Kingdom-driven events (war, demand) name the kingdom by its
-  held land.
-- **Mechanic words are banned.** "active", "conquest", "Take
-  enforced", "in field" — these are code words. The chronicle reads
-  "now in operation", "demanding its lands", "taking the crown",
-  "home". Per-def `building_benefit` table inside the module carries
-  the flavor phrases for the finished-construction line; new defs fall
-  back to a generic phrase.
+  `OnArmyArrived` (with `continuing: bool`), `OnSiegeLaid` /
+  `OnSiegeWon`, `OnWarDeclared` (with the casus belli), `OnDemandEnforced`
+  (with the demand type), and `OnWarEnded`. New events are additive.
+- **Mechanic words are banned.** "active", "conquest", "Take enforced",
+  "in field" — these are code words. The chronicle reads "now in
+  operation", "demanding its lands", "taking the crown", "home".
+- **Subject for player-driven events.** The observer module resolves
+  the player character once per observer batch via a `PlayerCtx`
+  `SystemParam` and formats the actor as "You".
 
-## Army formation is a per-day accrual (`ArmyStatus::Raising` + `ArmyMaxLevy`)
+## Army formation is a per-day accrual
 
 Raising an army is no longer instantaneous. The army starts in
 `ArmyStatus::Raising` with `ArmyLevy = 0` and `ArmyMaxLevy = sum of
 available BuildingLevy pools on the raise land at raise time`; the
-per-day `game::raising_army::on_day` tick accretes up to 20 levy per
-ACTIVE `BuildingIsRaised` building on the army's land per day into
-`ArmyLevy`, then flips the army to `Idle` once `ArmyLevy >= ArmyMaxLevy`.
-Buildings' pools are not drained at raise time — the formation tick
-drains them incrementally.
+per-day formation tick accretes up to 20 levy per ACTIVE
+`BuildingIsRaised` building on the army's land per day into `ArmyLevy`,
+then flips the army to `Idle` once `ArmyLevy >= ArmyMaxLevy`. Buildings'
+pools are not drained at raise time — the formation tick drains them
+incrementally.
 
 - **Why a separate `Raising` state.** The user-visible behavior is
   "the army is forming" — the player needs a state to tell them the
@@ -656,64 +423,36 @@ drains them incrementally.
   commands need to know not to treat it as a normal army. Folding it
   into `Idle` would have meant every reader branching on `ArmyLevy <
   ArmyMaxLevy`, which is exactly what a state is for; folding it into
-  `Marching` would have stolen `ArmyMarching`'s slot. A variant on the
-  existing enum is the cheapest shape — the four `match` arms in the
-  army panel, the marching tick, the dismiss picker and the army
-  icon all already had one.
+  `Marching` would have stolen `ArmyMarching`'s slot.
 - **Why `ArmyMaxLevy` is its own component, not derived.** `ArmyLevy <
   ArmyMaxLevy` could be computed from a single `ArmyLevy(u64, u64)`,
   but the player-facing read is "0/120 → 20/120 → 60/120 → 120/120",
   which the per-day tick updates one field of. Splitting them keeps
-  each `get_mut` to the single field that actually changed, which
-  matters more for the marching tick's borrowed-query dance than for
-  the formation tick's tiny per-army walk, but the split is also the
-  honest shape: `ArmyMaxLevy` is set once and never moves;
-  `ArmyLevy` ticks up each day.
+  each `get_mut` to the single field that actually changed.
 - **Why a per-day 20 cap per building.** It's the smallest cap that
   makes formation timing observable to the player — a single
   `levy: 30` barracks needs two days to fill, a `levy: 200` across
-  ten buildings needs one. Constant caps (e.g. "the army fills in
-  exactly N days regardless of building count") would lose the
-  "more buildings = faster muster" signal. Per-building caps scale
-  the formation time with the realm's economy, which is the right
-  coupling.
+  ten buildings needs one. Constant caps would lose the "more
+  buildings = faster muster" signal.
 - **Why not drain the pools at raise time.** The pool value is the
   realm's static levy budget; spending it at the moment of raise
-  would have made the per-day formation invisible (no pool to drain
-  on day 2). Draining as the army forms keeps the building rows in
-  the `buildings` panel showing `30/30 → 10/30 → 0/30` over the
-  formation days — the same partial-pool yellow readout that already
-  reads the pool state — so the player can watch the army fill in
-  two places at once. The flag (`BuildingIsRaised = true`) prevents
-  the monthly `replenish_levy` from competing with the formation
-  drain.
-- **No per-building `Raised` events.** The original `RaiseArmy` fired
-  one `OnBuildingUpdated { kind: Raised }` per drained building. With
-  the formation tick draining incrementally, there's no single moment
-  to fire at — the buildings' pools go to 0 *over time*, not at raise
-  time. The chronicle ignored `Raised`/`Dismissed` events anyway
-  (the army-level line covers them), and `game::yields` ignores them
-  too (it reads `BuildingStatus`, not `BuildingLevy`), so dropping
-  the events is a no-op for every consumer.
+  would have made the per-day formation invisible. Draining as the
+  army forms keeps the building rows in the `buildings` panel showing
+  `30/30 → 10/30 → 0/30` over the formation days. The flag
+  (`BuildingIsRaised = true`) prevents the monthly `replenish_levy`
+  from competing with the formation drain.
 - **Building selection is "ACTIVE + `BuildingIsRaised = true`", not
   "every ACTIVE building on the land".** A building constructed
   mid-formation isn't flagged by the original raise, so it doesn't
-  contribute to the muster; the dismiss path's
-  `distribute_levy_back` then pours the army's levy back into every
-  ACTIVE building on the land, which means the new building accepts
-  some of the returning pool. The asymmetry is fine: raising is a
+  contribute to the muster. The asymmetry is fine: raising is a
   one-shot moment the formation can record (flag the buildings);
   dismissing is a final accounting (pour into the whole land).
 - **Marching is gated to `Idle`.** The marching tick matches on
   `ArmyStatus::Idle` to find scheduled marchings to flip `OnRoute`;
   a `Raising` army whose land already has a scheduled marching sits
-  in the queue untouched until the formation finishes. The queued
-  hop won't activate early.
+  in the queue untouched.
 - **Chronicle text reads "raising" while `ArmyLevy == 0`.** The
-  `on_army_raised` observer branches on the army's status: a
-  raising army says "You began raising the Lannister Army at X — up
-  to N spears gathering for the muster.", a filled army says the
-  original "N spears answering the call." line. The phrasing change
-  is contained in one observer; the rest of the chronicle module is
-  untouched.
-
+  `on_army_raised` observer branches on the army's status: a raising
+  army says "You began raising the Lannister Army at X — up to N
+  spears gathering for the muster.", a filled army says the original
+  "N spears answering the call." line.

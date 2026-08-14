@@ -12,12 +12,26 @@ use super::kingdom::KingdomLedBy;
 use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;
 use bevy::prelude::Component;
+use serde::Deserialize;
 
 /// A person. Their house is [`CharacterOfHouse`]; name in [`CharacterName`],
 /// date of birth in [`CharacterDateOfBirth`], treasury in [`CharacterGold`],
-/// troops in [`CharacterLevy`], monthly yield in [`CharacterGoldYield`].
+/// troops in [`CharacterLevy`], monthly yield in [`CharacterGoldYield`],
+/// sex in [`CharacterSex`].
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Character;
+
+/// A character's sex. Authored in mod data as `"m"` / `"f"`. Default
+/// (in a state file that omits it) is `Male` — irrelevant to current
+/// gameplay, kept on the entity so future systems have it.
+#[derive(Component, Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+pub enum CharacterSex {
+    #[default]
+    #[serde(rename = "m")]
+    Male,
+    #[serde(rename = "f")]
+    Female,
+}
 
 /// A character's name.
 #[derive(Component, Debug, Clone)]

@@ -105,7 +105,7 @@ shape; this is the *what*.
 
 - **Entity kinds** are marker-tag components: `House`, `Character`, `Land`,
   `Kingdom`, `Army`, `Marching`, `Road`, `War`, `CasusBelli`, `Siege`. Each kind's data is **one field per component** so a system queries
-  only what it touches (payout needs gold + yield, not the date of birth), in its own file:
+  only what it touches (payout needs gold + yield, not the date of birth or sex), in its own file:
   `house.rs`, `character.rs`, `land.rs`, `kingdom.rs`, `army.rs`, `marching.rs`,
   `road.rs`, `war.rs`, `casus_belli.rs`, `siege.rs` (all under `ecs/`). Marching is a run-time entity only — the player spawns
   them via the `MarchingOrder` command and the daily tick reaps them when the

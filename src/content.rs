@@ -13,7 +13,7 @@
 //! `crate::ui::input::map_selection` (root layer) plus the
 //! `map::components` siblings.
 
-use crate::ecs::{BuildingStatus, CourtierType};
+use crate::ecs::{BuildingStatus, CharacterSex, CourtierType};
 use crate::resources::border::Border;
 use crate::resources::buildings::{BuildingDef, BuildingDefs};
 use crate::resources::calendar::Calendar;
@@ -195,6 +195,10 @@ pub struct Character {
     /// save carrying a stale one self-corrects on load.
     #[serde(default)]
     pub gold_yield: i64,
+    /// Definition: character's sex, authored as `"m"` / `"f"` in
+    /// `characters.ron`. State files omit it (it never changes in play).
+    #[serde(default)]
+    pub sex: CharacterSex,
 }
 
 /// One built building instance: which definition it is an instance of, which

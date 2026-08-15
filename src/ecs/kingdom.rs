@@ -40,3 +40,9 @@ pub struct KingdomHasWarsAttacking(Vec<Entity>);
 #[derive(Component, Debug, Default)]
 #[relationship_target(relationship = WarDefenderKingdom)]
 pub struct KingdomHasWarsDefending(Vec<Entity>);
+
+/// Marks a kingdom with no current ruler. Sits alongside the absence of
+/// [`KingdomLedBy`] — the absence already encodes it, but the marker lets
+/// systems and UI query the condition cleanly without scanning every kingdom.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct KingdomLeaderless;

@@ -1,5 +1,6 @@
 //! ECS events shared across the game.
 
+use crate::resources::date::Date;
 use bevy::prelude::*;
 
 /// Fired when something about a building changes. Lifecycle variants come from
@@ -95,4 +96,45 @@ pub struct OnWarEnded {
 #[derive(Event)]
 pub struct OnErrorOccured {
     pub message: String,
+}
+
+/// Fired by the death-check system when a character's death roll resolves
+/// `dead`. Sole publisher: `game::aging::on_day`. The inheriting observer
+/// (`game::inheriting::on_character_died`) is the primary consumer.
+#[derive(Event)]
+pub struct OnCharacterDied {
+    pub character: Entity,
+    pub on_date: Date,
+}
+
+/// Fired by the inheriting system when it reassigns a kingdom's leader.
+/// `to = None` and `relation = SuccessionRelation::Leaderless` mean the realm
+/// has no heir under the current rules.
+#[derive(Event)]
+pub struct OnKingdomSuccession {
+    pub kingdom: Entity,
+    pub from: Entity,
+    pub to: Option<Entity>,
+    pub relation: SuccessionRelation,
+}
+
+/// How the inheriting system resolved the succession — used only for the
+/// chronicle label; the heir picker's branch is what determines it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SuccessionRelation {
+    EldestSon,
+    MaleSibling,
+    ElderOfHouse,
+    Leaderless,
+}
+
+impl SuccessionRelation {
+    pub fn label(self) -> &'static str {
+        match self {
+            SuccessionRelation::EldestSon => "eldest son",
+            SuccessionRelation::MaleSibling => "male sibling",
+            SuccessionRelation::ElderOfHouse => "elder of the house",
+            SuccessionRelation::Leaderless => "leaderless",
+        }
+    }
 }

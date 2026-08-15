@@ -9,3 +9,4 @@ pub mod replenishing_levy;
 pub mod besieging;
 pub mod building_releasing;
 pub mod court_releasing;
+pub mod inheriting;

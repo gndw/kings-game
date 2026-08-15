@@ -11,7 +11,7 @@ use super::building::{Building, BuildingIsRaised, BuildingLevy, BuildingOf, Buil
 use super::character::{
     Character, CharacterDateOfBirth, CharacterDateOfDeath, CharacterGold, CharacterGoldYield,
     CharacterHasFather, CharacterHasHusband, CharacterHasMother, CharacterIsAlive, CharacterLevy,
-    CharacterName, CharacterOfHouse,
+    CharacterName, CharacterNextDeathEventDate, CharacterOfHouse,
 };
 use super::courtier::{Courtier, CourtierOfCharacter, CourtierOfKingdom};
 use super::house::{House, HouseName};
@@ -71,6 +71,7 @@ pub fn populate(world: &mut World, content: Content) {
                 CharacterDateOfBirth(c.dob),
                 CharacterIsAlive(c.is_alive),
                 CharacterDateOfDeath(c.death_date),
+                CharacterNextDeathEventDate(c.next_death_event_date),
                 CharacterGold(c.gold),
                 CharacterLevy(c.levy),
                 CharacterGoldYield(c.gold_yield),

@@ -17,7 +17,8 @@ use crate::ecs::war::{WarCasusBelliType, WarDemandType};
 use crate::ecs::{Registry, StringId};
 use crate::events::{
     BuildingUpdateKind, OnArmyArrived, OnArmyDismiss, OnArmyRaised, OnBuildingUpdated,
-    OnDemandEnforced, OnMarchingOrdered, OnSiegeLaid, OnSiegeWon, OnWarDeclared, OnWarEnded,
+    OnCharacterDied, OnDemandEnforced, OnKingdomSuccession, OnMarchingOrdered, OnSiegeLaid,
+    OnSiegeWon, OnWarDeclared, OnWarEnded,
 };
 use crate::resources::buildings::BuildingDefs;
 use crate::resources::chronicle::Chronicles;
@@ -280,6 +281,69 @@ pub fn on_war_ended(
     let defender = trigger.event().defender;
     let target = kingdom_label(defender, &kingdom_hold, &land_names, &string_ids);
     chronicles.0.push(format!("The war over {target} ended."));
+}
+
+pub fn on_character_died(
+    trigger: On<OnCharacterDied>,
+    mut chronicles: ResMut<Chronicles>,
+    character_names: Query<&CharacterName>,
+    character_house: Query<&CharacterOfHouse>,
+    house_names: Query<&HouseName>,
+) {
+    let event = trigger.event();
+    let Ok(name) = character_names.get(event.character) else {
+        return;
+    };
+    let suffix = character_house
+        .get(event.character)
+        .ok()
+        .and_then(|coh| house_names.get(coh.0).ok())
+        .map(|hn| format!(" of {}", hn.0));
+    let year = event.on_date.year;
+    match suffix {
+        Some(s) => chronicles.0.push(format!("{}{s} died of age in {year}.", name.0)),
+        None => chronicles.0.push(format!("{} died of age in {year}.", name.0)),
+    }
+}
+
+pub fn on_kingdom_succession(
+    trigger: On<OnKingdomSuccession>,
+    mut chronicles: ResMut<Chronicles>,
+    character_names: Query<&CharacterName>,
+    kingdom_hold: Query<&KingdomHold>,
+    land_names: Query<&LandName>,
+    string_ids: Query<&StringId>,
+) {
+    use crate::events::SuccessionRelation;
+    let event = trigger.event();
+    let realm = kingdom_label(event.kingdom, &kingdom_hold, &land_names, &string_ids);
+    let line = match event.to {
+        Some(new_e) => {
+            let new_name = character_names
+                .get(new_e)
+                .map(|n| n.0.clone())
+                .unwrap_or_else(|_| "an unknown heir".to_string());
+            match event.relation {
+                SuccessionRelation::EldestSon => format!(
+                    "The realm of {realm} passed from the late ruler to their child {new_name}."
+                ),
+                SuccessionRelation::MaleSibling => format!(
+                    "The realm of {realm} passed from the late ruler to their brother {new_name}."
+                ),
+                SuccessionRelation::ElderOfHouse => format!(
+                    "With no close kin to inherit, the realm of {realm} passed to the elder of the house, {new_name}."
+                ),
+                // Unreachable in practice — inheriting sets `to = None` whenever relation is Leaderless.
+                SuccessionRelation::Leaderless => format!(
+                    "The realm of {realm} found no close kin — the crown passed to {new_name}, the elder of the house."
+                ),
+            }
+        }
+        None => format!(
+            "The realm of {realm} has no heir — it stands leaderless, awaiting a claimant."
+        ),
+    };
+    chronicles.0.push(line);
 }
 
 /// Resolves the player character once per observer batch and exposes label helpers.

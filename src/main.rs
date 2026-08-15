@@ -135,6 +135,9 @@ fn main() -> Result<()> {
         .add_observer(game::building_releasing::on_demand_enforced)
         .add_observer(game::court_releasing::on_demand_enforced)
         .add_observer(chronicles::on_war_ended)
+        .add_observer(chronicles::on_character_died)
+        .add_observer(chronicles::on_kingdom_succession)
+        .add_observer(game::inheriting::on_character_died)
         .add_systems(
             Update,
             (
@@ -180,6 +183,7 @@ fn main() -> Result<()> {
                 game::marching::on_day,
                 game::raising_army::on_day,
                 game::besieging::on_day,
+                game::aging::on_day,
             ),
         )
         .add_systems(

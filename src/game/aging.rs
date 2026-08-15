@@ -12,7 +12,7 @@ use crate::app::Game;
 use crate::ecs::{
     CharacterDateOfBirth, CharacterDateOfDeath, CharacterIsAlive, CharacterNextDeathEventDate,
 };
-use crate::events::OnCharacterDied;
+use crate::observers::OnCharacterDied;
 use crate::helper::age_helper::age;
 use crate::resources::{calendar::Calendar, date::Date};
 use bevy::prelude::*;

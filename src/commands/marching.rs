@@ -20,7 +20,7 @@ use crate::ecs::marching::{
 };
 use crate::ecs::road::{Road, RoadBetweenLands};
 use crate::ecs::{CharacterLeads, CharacterOfHouse, Land, LandHeldBy, LandName, Registry, StringId};
-use crate::events::OnMarchingOrdered;
+use crate::observers::OnMarchingOrdered;
 use crate::ui::command_menu::CommandMenuUiContext;
 use crate::app::Game;
 use crate::resources::calendar::Calendar;

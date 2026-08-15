@@ -8,7 +8,7 @@ use super::super::FONT_SIZE;
 use super::common::UIWithArmy;
 use crate::ecs::army::{ArmyLevy, ArmyName, ArmyOnLand};
 use crate::ecs::land::LandHolding;
-use crate::events::{OnArmyDismiss, OnArmyRaised};
+use crate::observers::{OnArmyDismiss, OnArmyRaised};
 use bevy::color::Srgba;
 use bevy::color::palettes::css;
 use bevy::prelude::*;

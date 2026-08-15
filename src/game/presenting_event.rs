@@ -23,7 +23,7 @@ use crate::commands::core::{alive_characters_excluding, transfer_with_gold_memor
 use crate::content::EventDeckState;
 use crate::ecs::character::{CharacterLeads, CharacterLevy, CharacterOfHouse};
 use crate::ecs::Registry;
-use crate::events::{OnEventPresented, OnEventResolved};
+use crate::observers::{OnEventPresented, OnEventResolved};
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
 

@@ -13,7 +13,7 @@ use crate::ecs::{
     WarDemands, WarName,
 };
 use crate::ecs::kingdom::KingdomLedBy;
-use crate::events::{OnDemandEnforced, OnWarEnded};
+use crate::observers::{OnDemandEnforced, OnWarEnded};
 use crate::app::Game;
 use crate::ui::command_menu::CommandMenuUiContext;
 use crate::resources::calendar::Calendar;

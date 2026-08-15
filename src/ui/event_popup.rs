@@ -11,7 +11,7 @@
 
 use bevy::prelude::*;
 
-use crate::events::{OnEventPresented, OnEventResolved};
+use crate::observers::{OnEventPresented, OnEventResolved};
 use crate::game::event_data::EVENT_DEFS;
 use crate::game::presenting_event::EventDeck;
 use crate::resources::input_layer::InputLayer;

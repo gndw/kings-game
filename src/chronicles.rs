@@ -15,7 +15,7 @@ use crate::ecs::land::LandName;
 use crate::ecs::marching::{MarchingStatus, MarchingToLand};
 use crate::ecs::war::{WarCasusBelliType, WarDemandType};
 use crate::ecs::{Registry, StringId};
-use crate::events::{
+use crate::observers::{
     BuildingUpdateKind, OnArmyArrived, OnArmyDismiss, OnArmyRaised, OnBuildingUpdated,
     OnCharacterDied, OnDemandEnforced, OnEventResolved, OnGoldGifted, OnKingdomSucceeded,
     OnMarchingOrdered, OnSiegeLaid, OnSiegeWon, OnWarDeclared, OnWarEnded,
@@ -313,7 +313,7 @@ pub fn on_kingdom_succeeded(
     land_names: Query<&LandName>,
     string_ids: Query<&StringId>,
 ) {
-    use crate::events::SuccessionRelation;
+    use crate::observers::SuccessionRelation;
     let event = trigger.event();
     let realm = kingdom_label(event.kingdom, &kingdom_hold, &land_names, &string_ids);
     let line = match event.to {

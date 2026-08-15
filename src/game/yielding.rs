@@ -7,7 +7,7 @@ use crate::ecs::{
     KingdomLedBy, LandHasBuildings, LandHeldBy,
 };
 use crate::resources::buildings::BuildingDefs;
-use crate::events::OnBuildingUpdated;
+use crate::observers::OnBuildingUpdated;
 use bevy::prelude::*;
 
 /// Sum a land's buildings into `(gold, levy)`. Inactive and `Building` contribute nothing.

@@ -19,7 +19,7 @@
 //! [`CharacterHasCourtiers`](crate::ecs::CharacterHasCourtiers).
 //!
 //! Runs as a Bevy observer for
-//! [`OnDemandEnforced`](crate::events::OnDemandEnforced). Only `Take`
+//! [`OnDemandEnforced`](crate::observers::OnDemandEnforced). Only `Take`
 //! triggers a release; new variants on
 //! [`WarDemandType`](crate::ecs::WarDemandType) are additive and can
 //! opt in here.
@@ -28,7 +28,7 @@
 //! pairs so we can deregister, then despawn + remove from `Registry`.
 //! Courtier count per kingdom is small (a handful at most).
 use crate::ecs::{KingdomHasCourtiers, Registry, StringId, WarDemandType};
-use crate::events::OnDemandEnforced;
+use crate::observers::OnDemandEnforced;
 use bevy::prelude::*;
 
 /// Observer for [`OnDemandEnforced`] on

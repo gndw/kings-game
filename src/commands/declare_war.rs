@@ -13,7 +13,7 @@ use crate::ecs::{
     WarDemandType, WarDemands, WarName,
 };
 use crate::app::Game;
-use crate::events::OnWarDeclared;
+use crate::observers::OnWarDeclared;
 use crate::resources::date::Date;
 use crate::ui::command_menu::CommandMenuUiContext;
 use bevy::ecs::world::World;

@@ -14,13 +14,13 @@
 //! owner actually owns a working realm.
 //!
 //! Runs as a Bevy observer for
-//! [`OnDemandEnforced`](crate::events::OnDemandEnforced). Only `Take`
+//! [`OnDemandEnforced`](crate::observers::OnDemandEnforced). Only `Take`
 //! triggers a release; new variants on
 //! [`WarDemandType`](crate::ecs::WarDemandType) are additive and can opt
 //! in here.
 //!
 //! ponytail: one observer, one enemy check + one status flip per building.
-//! No [`OnBuildingUpdated`](crate::events::OnBuildingUpdated) fired —
+//! No [`OnBuildingUpdated`](crate::observers::OnBuildingUpdated) fired —
 //! the yields observer keys off status, and firing it would require
 //! threading the new land through `on_building_updated` per building.
 //! The existing siege tick doesn't fire it either when flipping to
@@ -29,7 +29,7 @@ use crate::ecs::{
     ArmyBelongsToKingdom, Building, BuildingStatus, KingdomHold, KingdomLedBy,
     LandControlledByArmy, LandHasBuildings, WarDemandType,
 };
-use crate::events::OnDemandEnforced;
+use crate::observers::OnDemandEnforced;
 use bevy::ecs::entity::Entity;
 use bevy::prelude::*;
 

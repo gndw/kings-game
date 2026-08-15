@@ -6,7 +6,7 @@ use crate::ecs::marching::{
     MarchingToLand,
 };
 use crate::ecs::road::RoadDistanceDays;
-use crate::events::OnArmyArrived;
+use crate::observers::OnArmyArrived;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;

@@ -18,7 +18,7 @@ use crate::ecs::{
     CharacterLeads, CharacterOfHouse, HouseName, LandHasArmies, LandHeldBy, LandHasBuildings,
     Registry, StringId,
 };
-use crate::events::OnArmyRaised;
+use crate::observers::OnArmyRaised;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
 use bevy::prelude::*;

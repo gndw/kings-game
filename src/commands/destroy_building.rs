@@ -8,7 +8,7 @@ use crate::ecs::{
     BuildingConstructionDate, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand,
     BuildingStatus, CharacterLeads, LandHasBuildings, LandHeldBy, Registry, StringId,
 };
-use crate::events::{BuildingUpdateKind, OnBuildingUpdated};
+use crate::observers::{BuildingUpdateKind, OnBuildingUpdated};
 use crate::resources::buildings::BuildingDefs;
 use crate::app::Game;
 use crate::commands::construct_building::{building_effect_summary, format_gold, format_levy};

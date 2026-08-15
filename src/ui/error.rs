@@ -4,7 +4,7 @@
 //! the popup shell, the observer that shows it, and the input handler that
 //! dismisses it on `Esc`.
 
-use crate::events::OnErrorOccurred;
+use crate::observers::OnErrorOccurred;
 use crate::resources::input_layer::InputLayer;
 use bevy::prelude::*;
 

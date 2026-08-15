@@ -14,7 +14,7 @@ use crate::ecs::{
     CharacterName, CharacterOfHouse, HouseName, KingdomHasArmies, LandHeldBy, LandName, Registry,
     Siege, SiegeAttackerArmy, SiegeDefenderLand, SiegeNextEventDate, SiegeProgress, StringId,
 };
-use crate::events::OnSiegeLaid;
+use crate::observers::OnSiegeLaid;
 use crate::ui::command_menu::CommandMenuUiContext;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;

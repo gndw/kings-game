@@ -13,7 +13,7 @@ use crate::app::Game;
 use crate::ecs::army::{ArmyBelongsToKingdom, ArmyHasMarching, ArmyLevy, ArmyName, ArmyOnLand};
 use crate::ecs::kingdom::KingdomHold;
 use crate::ecs::{CharacterLeads, KingdomHasArmies, LandName, Registry, StringId};
-use crate::events::{BuildingUpdateKind, OnArmyDismiss, OnBuildingUpdated};
+use crate::observers::{BuildingUpdateKind, OnArmyDismiss, OnBuildingUpdated};
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;

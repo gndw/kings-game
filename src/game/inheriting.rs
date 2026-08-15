@@ -36,7 +36,7 @@ use crate::ecs::{
     CharacterHasFatheredChildren, CharacterHasMother, CharacterIsAlive, CharacterLeads,
     CharacterOfHouse, KingdomLedBy, KingdomLeaderless, StringId,
 };
-use crate::events::{OnCharacterDied, OnKingdomSucceeded, SuccessionRelation};
+use crate::observers::{OnCharacterDied, OnKingdomSucceeded, SuccessionRelation};
 use crate::resources::date::Date;
 use bevy::prelude::*;
 

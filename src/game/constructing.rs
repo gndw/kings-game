@@ -14,7 +14,7 @@
 use crate::ecs::{BuildingConstructionDate, BuildingOf, BuildingOnLand, BuildingStatus};
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
-use crate::events::{BuildingUpdateKind, OnBuildingUpdated};
+use crate::observers::{BuildingUpdateKind, OnBuildingUpdated};
 use bevy::ecs::world::World;
 
 /// Walk every `BUILDING` building whose date has been reached, flip it to

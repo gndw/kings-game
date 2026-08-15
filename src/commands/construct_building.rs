@@ -12,7 +12,7 @@ use crate::ecs::{
     BuildingStatus, CharacterGold, CharacterLeads, LandHeldBy, Registry, StringId,
 };
 use crate::resources::calendar::Calendar;
-use crate::events::{BuildingUpdateKind, OnBuildingUpdated};
+use crate::observers::{BuildingUpdateKind, OnBuildingUpdated};
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
 use bevy::prelude::*;

@@ -5,7 +5,7 @@ use crate::ecs::army::{ArmyControlsLand, ArmyStatus};
 use crate::ecs::building::{Building, BuildingLevy, BuildingStatus};
 use crate::ecs::land::LandHasBuildings;
 use crate::ecs::siege::{Siege, SiegeAttackerArmy, SiegeDefenderLand, SiegeNextEventDate, SiegeProgress};
-use crate::events::OnSiegeWon;
+use crate::observers::OnSiegeWon;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;

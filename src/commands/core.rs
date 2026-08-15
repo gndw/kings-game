@@ -29,7 +29,7 @@ use crate::ecs::siege::SiegeProgress;
 use crate::resources::buildings::BuildingDefs;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
-use crate::events::{OnErrorOccurred, OnGoldGifted};
+use crate::observers::{OnErrorOccurred, OnGoldGifted};
 use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue};
 use bevy::prelude::RelationshipTarget;
 use bevy::prelude::Resource;

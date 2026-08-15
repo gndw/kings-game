@@ -16,11 +16,25 @@
 //!      remove [`KingdomLedBy`].
 //!
 //! Each succession (with or without an heir) fires [`OnKingdomSucceeded`].
+//!
+//! When the dead leader has a heir, their `CharacterGold` transfers to the
+//! heir of their first successor kingdom (the "primary heir" — i.e. the first
+//! kingdom in `CharacterLeads::kingdoms()` order that resolves to a heir).
+//! If no kingdom yields an heir, the gold is cleared from the dead character
+//! and otherwise evaporates. Multi-kingdom leaders where every kingdom goes
+//! to a different heir still funnel the dead's treasury into the primary
+//! heir; the others inherit empty pots.
+//!
+//! If the dead character is the player's character, `Ctx::player_character_id`
+//! is reassigned to the primary heir's `StringId`, or set to `None` if no
+//! heir exists. The game keeps running either way; UI panels and commands
+//! already short-circuit on a missing registry hit.
 
+use crate::app::Game;
 use crate::ecs::{
-    Character, CharacterDateOfBirth, CharacterHasFather, CharacterHasFatheredChildren,
+    Character, CharacterDateOfBirth, CharacterGold, CharacterHasFather, CharacterHasFatheredChildren,
     CharacterHasMother, CharacterIsAlive, CharacterLeads, CharacterOfHouse, CharacterSex,
-    KingdomLedBy, KingdomLeaderless,
+    KingdomLedBy, KingdomLeaderless, StringId,
 };
 use crate::events::{OnCharacterDied, OnKingdomSucceeded, SuccessionRelation};
 use crate::resources::date::Date;
@@ -29,6 +43,7 @@ use bevy::prelude::*;
 pub fn on_character_died(
     trigger: On<OnCharacterDied>,
     mut commands: Commands,
+    mut game: ResMut<Game>,
     character_leads: Query<&CharacterLeads, With<Character>>,
     characters: Query<
         (
@@ -40,6 +55,8 @@ pub fn on_character_died(
         ),
         With<Character>,
     >,
+    mut character_golds: Query<&mut CharacterGold, With<Character>>,
+    string_ids: Query<(Entity, &StringId), With<Character>>,
     fathered: Query<&CharacterHasFatheredChildren>,
     fathers: Query<&CharacterHasFather>,
     mothers: Query<&CharacterHasMother>,
@@ -51,10 +68,31 @@ pub fn on_character_died(
         .map(|cl| cl.kingdoms().to_vec())
         .unwrap_or_default();
 
+    // The "primary heir" — the heir of the first kingdom that resolves to one.
+    // Used for gold transfer and (if the dead was the player) player swap.
+    let primary_heir: Option<Entity> = kingdoms
+        .iter()
+        .find_map(|&_k| pick_heir(dead, &characters, &fathered, &fathers, &mothers))
+        .map(|(e, _)| e);
+
+    let mut gold_settled = false;
     for kingdom in kingdoms {
         let pick = pick_heir(dead, &characters, &fathered, &fathers, &mothers);
         match pick {
             Some((new_leader, relation)) => {
+                // Gold transfer: once, to the primary heir only.
+                if Some(new_leader) == primary_heir && !gold_settled {
+                    if let Ok(dead_gold) = character_golds.get(dead) {
+                        let dead_amount = dead_gold.0;
+                        if let Ok(mut heir_gold) = character_golds.get_mut(new_leader) {
+                            heir_gold.0 += dead_amount;
+                        }
+                    }
+                    if let Ok(mut dead_gold) = character_golds.get_mut(dead) {
+                        dead_gold.0 = 0;
+                    }
+                    gold_settled = true;
+                }
                 commands.entity(kingdom).insert(KingdomLedBy(new_leader));
                 commands.trigger(OnKingdomSucceeded {
                     kingdom,
@@ -76,6 +114,31 @@ pub fn on_character_died(
                 });
             }
         }
+    }
+
+    // All kingdoms went leaderless — clear the dead's gold for hygiene.
+    if primary_heir.is_none() {
+        if let Ok(mut dead_gold) = character_golds.get_mut(dead) {
+            dead_gold.0 = 0;
+        }
+    }
+
+    // Player swap: if the dead was the player, hand the seat to the primary
+    // heir, or vacate it if none exists.
+    let dead_string_id = string_ids
+        .iter()
+        .find_map(|(e, string_id)| (e == dead).then(|| string_id.0.clone()));
+    let was_player = matches!(
+        (&game.ctx.player_character_id, dead_string_id),
+        (Some(player_id), Some(dead_id)) if player_id == &dead_id
+    );
+    if was_player {
+        game.ctx.player_character_id = primary_heir.and_then(|h| {
+            string_ids
+                .get(h)
+                .ok()
+                .map(|(_, string_id)| string_id.0.clone())
+        });
     }
 }
 

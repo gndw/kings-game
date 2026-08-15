@@ -72,7 +72,7 @@ impl EnforceDemands {
     }
 
     fn spawn_war_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
-        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
         let calendar = world.resource::<Calendar>();
         let date = world.resource::<Date>();
         let rows = player_war_rows(world, &actor, calendar, date);
@@ -97,7 +97,7 @@ impl EnforceDemands {
         parent: Entity,
         war_id: &str,
     ) -> (Vec<Entity>, bool) {
-        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
         let demands = demand_rows(world, &actor, war_id);
         let mut entities = Vec::new();
         for row_data in demands {
@@ -114,7 +114,7 @@ impl EnforceDemands {
     }
 
     fn execute(&self, world: &mut World) -> (Vec<Entity>, bool) {
-        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
         let picks: Vec<(String, String)> = world.resource::<CommandMenuUiContext>().choices.clone();
         let war_id = picks.iter().find(|(k, _)| k == "war_id").map(|(_, v)| v.clone())
             .expect("execute reached without a war_id pick");

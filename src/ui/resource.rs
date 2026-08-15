@@ -39,7 +39,7 @@ pub fn update(
 ) {
     // A map that doesn't contain the player leaves the bar blank rather than
     // showing zeroes that look like a broke ruler.
-    let Some(player_e) = registry.get(&game.ctx.player_character_id) else {
+    let Some(player_e) = game.ctx.player_character_id.as_deref().and_then(|id| registry.get(id)) else {
         bar.0 = String::new();
         return;
     };

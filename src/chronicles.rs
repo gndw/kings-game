@@ -358,7 +358,7 @@ pub struct PlayerCtx<'w, 's> {
 
 impl<'w, 's> PlayerCtx<'w, 's> {
     fn entity(&self) -> Option<bevy::ecs::entity::Entity> {
-        self.registry.get(&self.game.ctx.player_character_id)
+        self.game.ctx.player_character_id.as_deref().and_then(|id| self.registry.get(id))
     }
 
     fn short(&self) -> &'static str {

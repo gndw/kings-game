@@ -192,6 +192,10 @@ pub struct Character {
     /// State: date of death — `None` while alive, set once the character dies.
     #[serde(default)]
     pub death_date: Option<Date>,
+    /// State: when this character is next due for a death roll. Older chars get
+    /// shorter horizons (see [`random_horizon_days`]).
+    #[serde(default)]
+    pub next_death_event_date: Date,
     /// Definition: `"m"` / `"f"`. State files omit it (never changes in play).
     #[serde(default)]
     pub sex: CharacterSex,

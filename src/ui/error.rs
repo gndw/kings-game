@@ -1,10 +1,10 @@
 //! The error popup: a modal that surfaces a single validation rejection from
 //! a command. Commands reach for `commands::core::error` (which fires
-//! `OnErrorOccured`) when their `validate` returns `Err`; this module owns
+//! `OnErrorOccurred`) when their `validate` returns `Err`; this module owns
 //! the popup shell, the observer that shows it, and the input handler that
 //! dismisses it on `Esc`.
 
-use crate::events::OnErrorOccured;
+use crate::events::OnErrorOccurred;
 use crate::resources::input_layer::InputLayer;
 use bevy::prelude::*;
 
@@ -77,9 +77,9 @@ pub fn startup(mut commands: Commands) {
         });
 }
 
-/// Observer for `OnErrorOccured`. Shows the popup, writes the message,
+/// Observer for `OnErrorOccurred`. Shows the popup, writes the message,
 /// force-closes any open command palette, and flips the input layer.
-pub fn on_error_occured(trigger: On<OnErrorOccured>, mut commands: Commands) {
+pub fn on_error_occurred(trigger: On<OnErrorOccurred>, mut commands: Commands) {
     let message = trigger.event().message.clone();
     commands.queue(move |world: &mut World| {
         crate::ui::command_menu::close_command(world);

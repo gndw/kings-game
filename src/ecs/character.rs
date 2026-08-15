@@ -43,6 +43,12 @@ pub struct CharacterIsAlive(pub bool);
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct CharacterDateOfDeath(pub Option<Date>);
 
+/// The next simulated date this character is due for a death-check roll.
+/// Set from content on load; updated by the aging/death system after each
+/// surviving roll.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct CharacterNextDeathEventDate(pub Date);
+
 /// A character's treasury. Signed: a ruler can be in debt.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct CharacterGold(pub i64);

@@ -5,7 +5,7 @@ use super::calendar::Calendar;
 use bevy::prelude::Resource;
 use serde::Deserialize;
 
-#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, Resource, Deserialize)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Resource, Deserialize)]
 pub struct Date {
     pub year: i32,
     pub month: u8,

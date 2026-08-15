@@ -1,15 +1,18 @@
 //! Opinion derivation + display colour.
 //!
 //! `opinion_of` computes the score one character holds toward another (+10
-//! same house, +20 close family, +50 spouse). Range today 0..=80; the return
-//! is `i32` so future negative rules fit without a signature change.
+//! same house, +20 close family, +50 spouse, +memory contribution). Range today
+//! 0..=∞; the return is `i32` so future negative rules fit without a signature
+//! change.
 //!
 //! `opinion_color` maps a score to a display colour: -100 → red, 0 → grey,
 //! +100 → green, linear piecewise between.
 
 use crate::ecs::character::{
-    CharacterHasFather, CharacterHasHusband, CharacterHasMother, CharacterOfHouse,
+    CharacterHasFather, CharacterHasHusband, CharacterHasMother, CharacterOfHouse, MemoryKind,
+    MemoryOfCharacter, MemoryTowardCharacter, MemoryUntilDate,
 };
+use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::system::Query;
 use bevy::prelude::Color;
@@ -22,6 +25,13 @@ pub fn opinion_of(
     fathers: &Query<&CharacterHasFather>,
     mothers: &Query<&CharacterHasMother>,
     husbands: &Query<&CharacterHasHusband>,
+    memories: &Query<(
+        &MemoryOfCharacter,
+        &MemoryTowardCharacter,
+        &MemoryUntilDate,
+        &MemoryKind,
+    )>,
+    today: &Date,
 ) -> i32 {
     let mut v: i32 = 0;
     if let (Ok(o), Ok(t)) = (houses.get(observer), houses.get(target))
@@ -46,6 +56,21 @@ pub fn opinion_of(
     let sibling = (fo.is_some() && fo == ft) || (mo.is_some() && mo == mt);
     if parent_child || sibling {
         v += 20;
+    }
+    // Memory contribution: sum every non-expired memory the observer carries
+    // about deeds by the target. Expired memories are despawned by
+    // `game::remembering::on_day`, so the query already skips them — the
+    // until-date check is belt-and-braces in case a memory slips through.
+    for (of, toward, until, kind) in memories.iter() {
+        if of.0 != observer || toward.0 != target {
+            continue;
+        }
+        if until.0 <= *today {
+            continue;
+        }
+        match kind {
+            MemoryKind::ReceivedGold { amount } => v += *amount as i32,
+        }
     }
     v
 }

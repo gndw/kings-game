@@ -56,6 +56,12 @@ pub fn update(
     opinion_fathers: Query<&CharacterHasFather>,
     opinion_mothers: Query<&CharacterHasMother>,
     opinion_husbands: Query<&CharacterHasHusband>,
+    opinion_memories: Query<(
+        &crate::ecs::character::MemoryOfCharacter,
+        &crate::ecs::character::MemoryTowardCharacter,
+        &crate::ecs::character::MemoryUntilDate,
+        &crate::ecs::character::MemoryKind,
+    )>,
 ) {
     let courts_e = *courts;
     let kingdom = game
@@ -118,6 +124,7 @@ pub fn update(
                     &opinion_fathers,
                     &opinion_mothers,
                     &opinion_husbands,
+                    &opinion_memories, &*date,
                 );
                 spawn_span(p, " [", Color::WHITE);
                 spawn_span(p, format!("{:+}", op), opinion_color(op));

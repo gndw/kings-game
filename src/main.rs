@@ -138,6 +138,7 @@ fn main() -> Result<()> {
         .add_observer(chronicles::on_character_died)
         .add_observer(chronicles::on_kingdom_succeeded)
         .add_observer(game::inheriting::on_character_died)
+        .add_observer(chronicles::on_gold_gifted)
         .add_systems(
             Update,
             (
@@ -184,6 +185,7 @@ fn main() -> Result<()> {
                 game::raising_army::on_day,
                 game::besieging::on_day,
                 game::aging::on_day,
+                game::remembering::on_day,
             ),
         )
         .add_systems(

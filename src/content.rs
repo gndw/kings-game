@@ -2,7 +2,7 @@
 //! kind, loaded two-phase (definitions merge, then state overlays), then passed
 //! whole into `ecs::populate`.
 
-use crate::ecs::{BuildingStatus, CharacterGender, CourtierType};
+use crate::ecs::{BuildingStatus, CharacterGender, CourtierType, MemoryKind};
 use crate::resources::border::Border;
 use crate::resources::buildings::{BuildingDef, BuildingDefs};
 use crate::resources::calendar::Calendar;
@@ -31,6 +31,10 @@ pub struct Content {
     /// Realms. Wholly state — arrives only via the state overlay.
     pub kingdoms: IndexMap<String, Kingdom>,
     pub courtiers: IndexMap<String, Courtier>,
+    /// One entry per memory entity. Lives in state (initial historical
+    /// memories arrive via the state overlay); runtime-created memories
+    /// spawned by commands land here too.
+    pub memories: IndexMap<String, Memory>,
     /// Definition-only: baked at populate time, never edited.
     pub roads: IndexMap<String, Road>,
 }
@@ -49,6 +53,7 @@ impl Default for Content {
             families: IndexMap::new(),
             kingdoms: IndexMap::new(),
             courtiers: IndexMap::new(),
+            memories: IndexMap::new(),
             roads: IndexMap::new(),
         }
     }
@@ -76,6 +81,8 @@ pub struct ContentFile {
     pub families: Vec<Family>,
     #[serde(default)]
     pub roads: Vec<Road>,
+    #[serde(default)]
+    pub memories: Vec<Memory>,
 }
 
 impl Content {
@@ -104,6 +111,9 @@ impl Content {
         }
         for road in file.roads {
             self.roads.insert(road.id.clone(), road);
+        }
+        for memory in file.memories {
+            self.memories.insert(memory.id.clone(), memory);
         }
     }
 }
@@ -253,6 +263,25 @@ pub struct Road {
     pub distance_days: u32,
 }
 
+/// A character carries memories about other characters' deeds. Each memory
+/// entity is a per-recipient record: who gave what, when, until when. The
+/// opinion helper reads active memories to add their contribution to the
+/// score one character holds toward another.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Memory {
+    pub id: String,
+    /// The character who OWNS this memory (the recipient of the deed).
+    pub character_id: String,
+    /// The character the memory is ABOUT (the actor whose deed is remembered).
+    pub toward_character_id: String,
+    #[serde(default)]
+    pub created_date: Date,
+    #[serde(default)]
+    pub until_date: Date,
+    pub kind: MemoryKind,
+}
+
 impl Content {
     pub fn character(&self, id: &str) -> Option<&Character> {
         self.characters.get(id)
@@ -325,6 +354,22 @@ pub fn validate(content: &Content) -> Result<()> {
         // A free road would let an army teleport (begin and arrive the same day).
         if r.distance_days == 0 {
             bail!("road `{}` needs a `distance_days` of at least 1", r.id);
+        }
+    }
+    for (_, m) in &content.memories {
+        if !content.characters.contains_key(&m.character_id) {
+            bail!(
+                "memory `{}` references unknown character_id `{}`",
+                m.id,
+                m.character_id
+            );
+        }
+        if !content.characters.contains_key(&m.toward_character_id) {
+            bail!(
+                "memory `{}` references unknown toward_character_id `{}`",
+                m.id,
+                m.toward_character_id
+            );
         }
     }
     Ok(())

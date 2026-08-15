@@ -8,6 +8,7 @@ use crate::app::Game;
 use crate::commands::construct_building::ConstructBuilding;
 use crate::commands::dismiss_army::DismissArmy;
 use crate::commands::enforce_demands::EnforceDemands;
+use crate::commands::gift_gold::GiftGold;
 use crate::commands::lay_siege::LaySiege;
 use crate::commands::marching::MarchingOrder;
 use crate::commands::raise_army::RaiseArmy;
@@ -71,6 +72,7 @@ pub fn startup(world: &mut World) {
         CommandEntry { id: DeclareWar.get_command_id(), cmd: &DeclareWar },
         CommandEntry { id: LaySiege.get_command_id(), cmd: &LaySiege },
         CommandEntry { id: EnforceDemands.get_command_id(), cmd: &EnforceDemands },
+        CommandEntry { id: GiftGold.get_command_id(), cmd: &GiftGold },
     ];
     world.insert_resource(CommandContext { commands });
 }

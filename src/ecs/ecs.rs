@@ -11,7 +11,8 @@ use super::building::{Building, BuildingIsRaised, BuildingLevy, BuildingOf, Buil
 use super::character::{
     Character, CharacterDateOfBirth, CharacterDateOfDeath, CharacterGold, CharacterGoldYield,
     CharacterHasFather, CharacterHasHusband, CharacterHasMother, CharacterIsAlive, CharacterLevy,
-    CharacterName, CharacterNextDeathEventDate, CharacterOfHouse,
+    CharacterName, CharacterNextDeathEventDate, CharacterOfHouse, Memory, MemoryCreatedDate,
+    MemoryOfCharacter, MemoryTowardCharacter, MemoryUntilDate,
 };
 use super::courtier::{Courtier, CourtierOfCharacter, CourtierOfKingdom};
 use super::house::{House, HouseName};
@@ -203,6 +204,26 @@ pub fn populate(world: &mut World, content: Content) {
                 RoadPoints(r.points),
                 RoadBetweenLands(lands),
                 RoadDistanceDays(r.distance_days),
+            ))
+            .id();
+        world.resource_mut::<Registry>().insert(id, eid);
+    }
+
+    for (id, m) in content.memories {
+        let owner = world.resource::<Registry>().get(&m.character_id);
+        let toward = world.resource::<Registry>().get(&m.toward_character_id);
+        let (Some(owner), Some(toward)) = (owner, toward) else {
+            continue;
+        };
+        let eid = world
+            .spawn((
+                StringId(id.clone()),
+                Memory,
+                MemoryOfCharacter(owner),
+                MemoryTowardCharacter(toward),
+                MemoryCreatedDate(m.created_date),
+                MemoryUntilDate(m.until_date),
+                m.kind,
             ))
             .id();
         world.resource_mut::<Registry>().insert(id, eid);

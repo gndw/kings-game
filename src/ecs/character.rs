@@ -126,3 +126,48 @@ impl CharacterHasWife {
         self.0
     }
 }
+
+/// What kind of memory this is — drives the opinion contribution. New variants
+/// (AttackedBy, DefendedBy, ...) plug into [`opinion_helper`] without
+/// requiring new components on the Memory entity.
+#[derive(Component, Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+pub enum MemoryKind {
+    ReceivedGold { amount: i64 },
+}
+
+/// Marker for a memory entity. One memory = one entity, hanging off its
+/// recipient character via [`MemoryOfCharacter`].
+#[derive(Component, Debug, Clone, Copy)]
+pub struct Memory;
+
+/// Who OWNS this memory — the character who experienced it. Bevy relationship;
+/// auto-maintains [`CharacterHasMemories`] on the recipient.
+#[derive(Component, Debug, Clone, Copy)]
+#[relationship(relationship_target = CharacterHasMemories)]
+pub struct MemoryOfCharacter(pub Entity);
+
+/// The memories a character carries — auto-maintained reverse of
+/// [`MemoryOfCharacter`].
+#[derive(Component, Debug, Default)]
+#[relationship_target(relationship = MemoryOfCharacter)]
+pub struct CharacterHasMemories(Vec<Entity>);
+
+impl CharacterHasMemories {
+    pub fn memories(&self) -> &[Entity] {
+        &self.0
+    }
+}
+
+/// Who the memory is ABOUT — the actor whose deed is remembered (e.g. the
+/// giver of a gift). Not a relationship; we walk from owner to targets.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct MemoryTowardCharacter(pub Entity);
+
+/// When this memory was created.
+#[derive(Component, Debug, Clone, Copy)]
+pub struct MemoryCreatedDate(pub Date);
+
+/// When this memory expires — set at creation to `created + duration_days`,
+/// then despawned by [`crate::game::remembering::on_day`].
+#[derive(Component, Debug, Clone, Copy)]
+pub struct MemoryUntilDate(pub Date);

@@ -90,6 +90,47 @@
         (id: "char-quentyn",  name: "Quentyn",  house_id: "house-martell",   gender: m),
         (id: "char-trystane", name: "Trystane", house_id: "house-martell",   gender: m),
 
+        // Minor houses added for the opening court.
+        // House Ashford.
+        (id: "char-lyra-ashford",   name: "Lyra",   house_id: "house-ashford",   gender: f),
+        (id: "char-ronald-ashford", name: "Ronald", house_id: "house-ashford",   gender: m),
+
+        // House Beesbury.
+        (id: "char-elda-beesbury",  name: "Elda",   house_id: "house-beesbury",  gender: f),
+        (id: "char-lucas-beesbury", name: "Lucas",  house_id: "house-beesbury",  gender: m),
+
+        // House Brax.
+        (id: "char-emma-brax",   name: "Emma", house_id: "house-brax",    gender: f),
+        (id: "char-rolf-brax",   name: "Rolf",  house_id: "house-brax",    gender: m),
+
+        // House Crakehall.
+        (id: "char-lyonel-crakehall", name: "Lyonel", house_id: "house-crakehall", gender: m),
+        (id: "char-sara-crakehall",    name: "Sara",    house_id: "house-crakehall", gender: f),
+
+        // House Estermont.
+        (id: "char-cassana-estermont", name: "Cassana", house_id: "house-estermont", gender: f),
+        (id: "char-balar-estermont",   name: "Balar",   house_id: "house-estermont", gender: m),
+
+        // House Fossoway.
+        (id: "char-elian-fossoway", name: "Elian",   house_id: "house-fossoway", gender: m),
+        (id: "char-lyenna-fossoway", name: "Lyenna", house_id: "house-fossoway", gender: f),
+
+        // House Grandison.
+        (id: "char-brian-grandison", name: "Brian", house_id: "house-grandison", gender: m),
+        (id: "char-joan-grandison",  name: "Joan",  house_id: "house-grandison", gender: f),
+
+        // House Mertyns.
+        (id: "char-rolland-mertyns",   name: "Rolland",   house_id: "house-mertyns", gender: m),
+        (id: "char-melisande-mertyns", name: "Melisande", house_id: "house-mertyns", gender: f),
+
+        // House Staunton.
+        (id: "char-harbert-staunton", name: "Harbert", house_id: "house-staunton", gender: m),
+        (id: "char-jeyne-staunton",  name: "Jeyne",   house_id: "house-staunton", gender: f),
+
+        // House Wylde.
+        (id: "char-ormond-wylde", name: "Ormond", house_id: "house-wylde", gender: m),
+        (id: "char-ysara-wylde",  name: "Ysara",  house_id: "house-wylde", gender: f),
+
         // House Martell — dead ancestors of Doran.
         (id: "char-qorell",   name: "Qorell",   house_id: "house-martell",   gender: m, is_alive: false, death_date: (year: 1049, month: 5, day: 2)),
         (id: "char-meria",    name: "Meria",    house_id: "house-martell",   gender: f, is_alive: false, death_date: (year: 1036, month: 3, day: 1)),

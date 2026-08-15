@@ -7,5 +7,17 @@
         (id: "house-tully",     name: "Tully"),
         (id: "house-tyrell",    name: "Tyrell"),
         (id: "house-martell",   name: "Martell"),
+
+        // Minor houses added for the opening court.
+        (id: "house-ashford",   name: "Ashford"),
+        (id: "house-beesbury",  name: "Beesbury"),
+        (id: "house-brax",      name: "Brax"),
+        (id: "house-crakehall", name: "Crakehall"),
+        (id: "house-estermont", name: "Estermont"),
+        (id: "house-fossoway",  name: "Fossoway"),
+        (id: "house-grandison", name: "Grandison"),
+        (id: "house-mertyns",   name: "Mertyns"),
+        (id: "house-staunton",  name: "Staunton"),
+        (id: "house-wylde",     name: "Wylde"),
     ],
 )

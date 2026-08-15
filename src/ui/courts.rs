@@ -4,8 +4,8 @@ use super::{FONT, TITLE, spawn_span};
 use crate::app::Game;
 use crate::ecs::{
     CharacterDateOfBirth, CharacterHasFather, CharacterHasHusband, CharacterHasMother,
-    CharacterName, CharacterOfHouse, CourtierOfCharacter, CourtierOfKingdom, CourtierType,
-    HouseName, LandHeldBy, Registry,
+    CharacterName, CharacterOfHouse, CharacterSex, CourtierOfCharacter, CourtierOfKingdom,
+    CourtierType, HouseName, LandHeldBy, Registry,
 };
 use crate::helper::age_helper::age;
 use crate::helper::opinion_helper::{opinion_color, opinion_of};
@@ -50,7 +50,7 @@ pub fn update(
     mut commands: Commands,
     held_by: Query<&LandHeldBy>,
     courtiers: Query<(&CourtierOfKingdom, &CourtierOfCharacter, &CourtierType)>,
-    characters: Query<(&CharacterName, &CharacterDateOfBirth)>,
+    characters: Query<(&CharacterName, &CharacterDateOfBirth, &CharacterSex)>,
     character_of_house: Query<&CharacterOfHouse>,
     houses: Query<&HouseName>,
     opinion_fathers: Query<&CharacterHasFather>,
@@ -67,18 +67,29 @@ pub fn update(
         .map(LandHeldBy::kingdom);
     let player_e = game.ctx.player_character_id.as_deref().and_then(|id| registry.get(id));
 
-    let entries: Vec<(Entity, String, String, u32, &'static str)> = courtiers
+    let entries: Vec<(Entity, String, String, u32, &'static str, &'static str)> = courtiers
         .iter()
         .filter(|(k, _, _)| Some(k.0) == kingdom)
         .filter_map(|(_, c, role)| {
-            let (name, dob) = characters.get(c.0).ok()?;
+            let (name, dob, sex) = characters.get(c.0).ok()?;
             let cof = character_of_house.get(c.0).ok()?;
             let house_name = houses.get(cof.0).ok()?.0.clone();
             let char_age = age(&dob.0, &date, &calendar);
             let role_str = match role {
                 CourtierType::Courtier => "Courtier",
             };
-            Some((c.0, name.0.clone(), house_name, char_age, role_str))
+            let sex_marker = match sex {
+                CharacterSex::Male => "m",
+                CharacterSex::Female => "f",
+            };
+            Some((
+                c.0,
+                name.0.clone(),
+                house_name,
+                char_age,
+                sex_marker,
+                role_str,
+            ))
         })
         .collect();
 
@@ -91,11 +102,14 @@ pub fn update(
     }
 
     commands.entity(courts_e).with_children(|p| {
-        for (i, (char_e, name, house, char_age, role)) in entries.into_iter().enumerate() {
+        for (i, (char_e, name, house, char_age, sex_marker, role)) in
+            entries.into_iter().enumerate()
+        {
             if i > 0 {
                 spawn_span(p, "\n", Color::WHITE);
             }
-            spawn_span(p, format!("{} {} ({})", name, house, char_age), Color::WHITE);
+            spawn_span(p, format!("{} {}", name, house), Color::WHITE);
+            spawn_span(p, format!(" [{}] ({})", sex_marker, char_age), Color::WHITE);
             if let Some(player) = player_e {
                 let op = opinion_of(
                     char_e,

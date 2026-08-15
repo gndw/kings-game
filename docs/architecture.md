@@ -96,13 +96,15 @@ off one place. `Kingdom` is state-only.
   `Arc<Mutex<>>`, `player_character_id`, `selected_land_id`.
 - **`Game`** — `Resource` wrapping `Ctx`, plus `paused`, `speed_idx`,
   `zoomed`. `Game::running()` gates the tick.
-- **`Registry`**, **`Border`**, **`Calendar`**, **`Date`**, **`BuildingDefs`**, **`Chronicles`**, **`EventDeck`** — seeded in `main`; the latter is read-only for
+- **`Registry`**, **`Border`**, **`Calendar`**, **`Date`**, **`BuildingDefs`**, **`Chronicles`**, **`EventDeck`**, **`EventDefs`** — seeded in `main`; the latter is read-only for
   game-logic code (events observed in `chronicles.rs` write it).
   `EventDeck` is the runtime state of the event system: the next-due
   date and the in-flight event instance. The
   `Content::event_deck::next_due_date` value (state-loaded via `merge_state`)
   seeds the first popup's trigger day; `presenting_event::on_day` rewrites
-  it after each resolve or forfeit.
+  it after each resolve or forfeit. `EventDefs` is the authored roster
+  (`Vec<EventDef>`) lifted out of `Content::events` so the tick, popup, and
+  chronicle observer can read it after `populate` has consumed `Content`.
 - **`CommandMenu`**, **`CommandRegistry`/`CommandContext`**, **`EventPopupUiContext`** — UI state
   for the palette, the roster of registered commands, and the event
   popup's cursor + spawned choice rows; seeded in `main`.
@@ -121,8 +123,16 @@ off one place. `Kingdom` is state-only.
   holdings and recomputes the leader's yield + levy. `payout` runs in
   `OnMonth` and pays every leader their yield into gold. Debt is real
   (signed).
-- **No Rhai right now.** The README's script tables describe the
-  intended surface; `mods/mod.rs` ignores `*.rhai` files.
+- **Events are Rhai scripts.** Each `event-<id>.rhai` file in a mod folder
+  is compiled once at load into a `ScriptedEvent` (the AST + a cache of
+  which optional functions are present). The tick calls each event's
+  `can_trigger(world)` to filter, draws one weighted, then calls
+  `characters(world)` to resolve the characters the event is about (the
+  script is responsible for any RNG pick via `world.ctx.rng`). The
+  resolver calls `effect(world)` for the chosen choice. The popup and
+  chronicle observer read pure-data functions (`title`, `narration`,
+  `choices`, `decline`) and substitute `{N.name}` placeholders with the
+  Nth character's display name.
 
 ## Player commands
 
@@ -211,7 +221,8 @@ Bevy flex tree + `Gizmos` line drawing; no asset sprites.
   observer in `ui::event_popup` shows the popup and flips the layer;
   `OnEventResolved` (with `Some(idx)` chosen or `None` forfeit) hides
   it. The resolver in `game::presenting_event::on_event_resolved`
-  runs the `ChoiceEffect` and schedules the next event 90–180 days out.
+  calls the chosen event's `effect(world)` and schedules the next
+  event 90–180 days out.
 - **Wiki window** — a `W`-toggled modal panel (`ui::wiki`) split 30/70:
   the left tree owns wiki navigation (`Houses` is currently the only root),
   while the right `WikiBody` shows the selected item (currently a house and
@@ -231,8 +242,15 @@ Bevy flex tree + `Gizmos` line drawing; no asset sprites.
   hand-edit the reverse.
 - **Definition refs are fatal; state refs are repaired.** Don't move
   `validate`'s checks into `reconcile` or vice versa.
+- **Three-pass load, in order.** Definitions first, state overlay second,
+  event scripts third. A script that breaks (`compile` error, missing
+  required function) is logged and skipped — events are pure data, one
+  bad event shouldn't lock out the rest.
 - **Determinism.** Sorted load order and the seeded `SimRng` (every
-  draw routed through one counter) keep saves and replays exact.
+  draw routed through one counter) keep saves and replays exact. The
+  script API routes RNG through `SimRng` too — modders can't bypass
+  the counter via `Math.random` (Rhai has no stdlib math surface by
+  default) or their own state.
 
 ## File map
 
@@ -250,7 +268,8 @@ Bevy flex tree + `Gizmos` line drawing; no asset sprites.
 | `src/commands/` | the `Command` trait + `CommandRegistry` + one submodule per command |
 | `src/chronicles.rs` | chronicle generation — one observer per game event |
 | `src/game/` | per-day / per-month ticks — gerund-named systems (advancing_date, aging, besieging, building_releasing, constructing, court_releasing, inheriting, marching, paying_out, presenting_event, raising_army, replenishing_levy, yielding) |
-| `src/game/event_data.rs` | authored `EventDef` slice + `ChoiceEffect` enum + `EventInstance` |
+| `src/game/presenting_event.rs` | event tick + resolver + `EventDeck` + `EventInstance`; reads the `EventDefs` resource for the authored roster |
+| `src/resources/event_defs.rs` | the `EventDefs(Vec<EventDef>)` resource, lifted out of `Content` in `main` so `presenting_event`, the popup, and the chronicle observer can read it |
 | `src/schedules.rs` | `OnDay` + `OnMonth` labels |
 | `src/events.rs` | the event surface observers and triggers fire |
 | `src/rng.rs` | `SimRng` — seeded, draw-counted for exact replay |

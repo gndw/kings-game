@@ -1,5 +1,5 @@
 //! The event popup: a modal that surfaces one of the events from
-//! [`crate::event::EVENT_DEFS`]. Mirrors the error-popup shape
+//! [`crate::resources::event_scripts::EventScripts`]. Mirrors the error-popup shape
 //! (backdrop + window + title + body + choices list + hint) with a vertical
 //! stack of choice rows in place of the single Esc-to-close body.
 //!
@@ -12,9 +12,11 @@
 use bevy::prelude::*;
 
 use crate::observers::{OnEventPresented, OnEventResolved};
-use crate::event::EVENT_DEFS;
 use crate::game::presenting_event::EventDeck;
+use crate::resources::event_scripts::EventScripts;
 use crate::resources::input_layer::InputLayer;
+use crate::script_ctx::{character_view_from_world, substitute_names};
+use crate::scripted_event::{ChoiceRow, ScriptedEvent};
 
 #[derive(Component)]
 pub struct EventPopupUIRoot;
@@ -37,9 +39,13 @@ pub struct EventPopupHint;
 pub struct EventPopupUiContext {
     pub choice_rows: Vec<Entity>,
     pub cursor: usize,
-    /// Stable name cache so the chronicle observer and the popup body can
-    /// resolve `{name}` without needing a fresh `world.get` each frame.
-    pub pending_attendee_name: Option<String>,
+    /// Choice count for the currently presented event. Cached at
+    /// presentation time so the input system can wrap the cursor without
+    /// re-calling the script every frame.
+    pub choice_count: usize,
+    /// The first character's display name (for `{0.name}` substitution in
+    /// the chronicle observer). `None` for ambient events.
+    pub pending_first_name: Option<String>,
 }
 
 const BACKDROP: Color = Color::srgba(0.0, 0.0, 0.0, 0.55);
@@ -124,9 +130,9 @@ pub fn startup(mut commands: Commands) {
 }
 
 /// On `OnEventPresented`: read the pending event, write the title + narration
-/// (substituting the attendee's name for `{name}` if any), spawn one choice
-/// row per choice, show the modal, force-close any open command palette, and
-/// flip the input layer.
+/// (substituting `{N.name}` placeholders with the Nth character's display
+/// name if any), spawn one choice row per choice, show the modal,
+/// force-close any open command palette, and flip the input layer.
 pub fn on_event_presented(
     trigger: On<OnEventPresented>,
     mut commands: Commands,
@@ -137,28 +143,40 @@ pub fn on_event_presented(
 }
 
 fn show_event_popup(world: &mut World) {
-    // 1. Snapshot pending + the attendee name.
-    let (def_id, title, narration, attendee_name, choices_text) = {
+    // 1. Snapshot pending + the resolved character view maps (for {N.name}
+    //    substitution in the narration).
+    let (title, narration, character_views, choices_text, choice_count) = {
         let deck = world.resource::<EventDeck>();
         let pending = match deck.pending.as_ref() {
             Some(p) => p,
             None => return, // no pending — bail; observer shouldn't have fired
         };
-        let def = &EVENT_DEFS[pending.def_index];
-        let attendee_name = pending
-            .attendee
-            .and_then(|e| world.get::<crate::ecs::character::CharacterName>(e))
-            .map(|n| n.0.clone());
-        let resolved_narration = if let Some(name) = attendee_name.as_deref() {
-            def.narration.replace("{name}", name)
-        } else {
-            def.narration.replace("{name}", "a stranger")
+        let scripts = world.resource::<EventScripts>();
+        let ev: &ScriptedEvent = match scripts.events.get(pending.def_index) {
+            Some(e) => e,
+            None => return,
         };
-        let choices: Vec<&'static str> =
-            def.choices.iter().map(|c| c.text).collect();
-        (def.id, def.title.to_string(), resolved_narration, attendee_name, choices)
+        let title = match ev.call_title(&scripts.engine) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        let raw_narration = match ev.call_narration(&scripts.engine) {
+            Ok(s) => s,
+            Err(_) => return,
+        };
+        // Build the character view maps for `{N.name}` substitution.
+        let character_views: Vec<rhai::Map> = pending
+            .characters
+            .iter()
+            .map(|e| character_view_from_world(world, *e))
+            .collect();
+        let resolved_narration = substitute_names(&raw_narration, &character_views);
+        let choices: Vec<ChoiceRow> =
+            ev.call_choices(&scripts.engine).unwrap_or_default();
+        let count = choices.len();
+        let texts: Vec<String> = choices.into_iter().map(|c| c.text).collect();
+        (title, resolved_narration, character_views, texts, count)
     };
-    let _ = def_id; // currently logged via narrative only; reserved for chronicle branch
 
     // 2. Close the palette if it's open (mirrors `ui::error::on_error_occurred`).
     crate::ui::command_menu::close_command(world);
@@ -228,9 +246,20 @@ fn show_event_popup(world: &mut World) {
     }
 
     // 7. Update the UI context, show the root, flip the layer.
-    world.resource_mut::<EventPopupUiContext>().choice_rows = rows;
-    world.resource_mut::<EventPopupUiContext>().cursor = 0;
-    world.resource_mut::<EventPopupUiContext>().pending_attendee_name = attendee_name;
+    {
+        let mut ctx = world.resource_mut::<EventPopupUiContext>();
+        ctx.choice_rows = rows;
+        ctx.cursor = 0;
+        ctx.choice_count = choice_count;
+        // Cache the first character's name for the chronicle observer —
+        // it uses `{0.name}` substitution with the same fallback.
+        let first_name = character_views
+            .first()
+            .and_then(|m| m.get("name"))
+            .and_then(|v| v.clone().into_string().ok())
+            .unwrap_or_else(|| "a stranger".to_string());
+        ctx.pending_first_name = Some(first_name);
+    }
     if let Some(mut node) = world
         .query_filtered::<&mut Node, With<EventPopupUIRoot>>()
         .iter_mut(world)
@@ -261,8 +290,12 @@ fn hide_event_popup(world: &mut World) {
         node.display = Display::None;
     }
     *world.resource_mut::<InputLayer>() = InputLayer::Root;
-    world.resource_mut::<EventPopupUiContext>().cursor = 0;
-    world.resource_mut::<EventPopupUiContext>().choice_rows.clear();
+    {
+        let mut ctx = world.resource_mut::<EventPopupUiContext>();
+        ctx.cursor = 0;
+        ctx.choice_count = 0;
+        ctx.choice_rows.clear();
+    }
 }
 
 /// Per-frame: colour the active choice row. Text colour and prefix stay
@@ -303,11 +336,10 @@ pub fn input(
     mut commands: Commands,
 ) {
     // No pending event → nothing to do.
-    let Some(pending) = deck.pending.as_ref() else {
+    if deck.pending.is_none() {
         return;
-    };
-    let def = &EVENT_DEFS[pending.def_index];
-    let n = def.choices.len();
+    }
+    let n = ui_ctx.choice_count;
     if n == 0 {
         return;
     }

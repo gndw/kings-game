@@ -36,10 +36,22 @@ pub struct KingdomHasArmies(Vec<Entity>);
 #[relationship_target(relationship = WarAttackerKingdom)]
 pub struct KingdomHasWarsAttacking(Vec<Entity>);
 
+impl KingdomHasWarsAttacking {
+    pub fn wars(&self) -> &[Entity] {
+        &self.0
+    }
+}
+
 /// The wars being fought against this kingdom — auto-maintained reverse of `WarDefenderKingdom`.
 #[derive(Component, Debug, Default)]
 #[relationship_target(relationship = WarDefenderKingdom)]
 pub struct KingdomHasWarsDefending(Vec<Entity>);
+
+impl KingdomHasWarsDefending {
+    pub fn wars(&self) -> &[Entity] {
+        &self.0
+    }
+}
 
 /// Marks a kingdom with no current ruler. Sits alongside the absence of
 /// [`KingdomLedBy`] — the absence already encodes it, but the marker lets

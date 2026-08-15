@@ -1,6 +1,10 @@
 //! Everything the mods define plus the starting state: one struct per entity
 //! kind, loaded two-phase (definitions merge, then state overlays), then passed
 //! whole into `ecs::populate`.
+//!
+//! Events live outside this struct — they're Rhai scripts loaded by `mods::load`
+//! (third pass) and compiled into `ScriptedEvent`s on the `EventScripts` resource.
+//! See `docs/architecture.md` and `src/scripted_event.rs`.
 
 use crate::ecs::{BuildingStatus, CharacterGender, CourtierType, MemoryKind};
 use crate::resources::border::Border;

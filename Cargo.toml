@@ -22,6 +22,9 @@ rand = "0.10.2"
 indexmap = { version = "2", features = ["serde"] }
 ron = "0.12.2"
 serde = { version = "1.0.229", features = ["derive"] }
+# Rhai: the event scripting engine. Sandboxed by default (no stdlib, no I/O);
+# modders ship `event:<id>.rhai` files that get compiled to ASTs at load time.
+rhai = { version = "1", default-features = false, features = ["std", "sync"] }
 
 # Bevy is unusably slow at opt-level 0; its own crates get full optimisation
 # since we never step through them.

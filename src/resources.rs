@@ -6,4 +6,5 @@ pub mod buildings;
 pub mod calendar;
 pub mod chronicle;
 pub mod date;
+pub mod event_scripts;
 pub mod input_layer;

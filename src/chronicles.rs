@@ -20,10 +20,10 @@ use crate::observers::{
     OnCharacterDied, OnDemandEnforced, OnEventResolved, OnGoldGifted, OnKingdomSucceeded,
     OnMarchingOrdered, OnSiegeLaid, OnSiegeWon, OnWarDeclared, OnWarEnded,
 };
-use crate::event::{ChoiceEffect, EVENT_DEFS};
 use crate::helper::age_helper::age;
 use crate::game::presenting_event::EventDeck;
 use crate::resources::buildings::BuildingDefs;
+use crate::resources::event_scripts::EventScripts;
 use crate::resources::calendar::Calendar;
 use crate::resources::chronicle::Chronicles;
 use bevy::ecs::system::SystemParam;
@@ -451,46 +451,62 @@ pub fn on_gold_gifted(
 /// Event-resolution chronicle. Runs before
 /// [`crate::game::presenting_event::on_event_resolved`] (registration order
 /// in `main.rs`) so it still sees `pending = Some` before the resolver
-/// clears it. Writes one line for `None`-effect choices and forfeits;
-/// gold-moving choices are already chronicled by [`on_gold_gifted`] (the
-/// event resolver delegates to `transfer_with_gold_memory`, which fires
-/// `OnGoldGifted`).
+/// clears it.
+///
+/// Source of the per-choice decline line, in priority order:
+///
+/// 1. The choice's `chronicle` field (set by the script's `choices()`
+///    return value).
+/// 2. The event's `decline()` function.
+/// 3. Generic fallback: `"You turned {0.name} away."`.
+///
+/// Templates may use `{N.name}` placeholders; the observer substitutes
+/// them with the Nth character's display name from `pending.characters`.
+/// Missing indices fall back to `"a stranger"` (via `substitute_names`).
+///
+/// Gold-moving choices are already chronicled by [`on_gold_gifted`] (the
+/// resolver calls `transfer_with_gold_memory` from the script, which fires
+/// `OnGoldGifted`). The script is responsible for calling `ctx.log(...)`
+/// if it wants custom gold-chronicle text.
 pub fn on_event_resolved(
     trigger: On<OnEventResolved>,
     deck: Res<EventDeck>,
+    scripts: Res<EventScripts>,
+    world: &World,
     mut chronicles: ResMut<Chronicles>,
-    character_names: Query<&CharacterName>,
 ) {
     let event = trigger.event();
     let Some(pending) = deck.pending.as_ref() else {
         return;
     };
-    let def = &EVENT_DEFS[pending.def_index];
-    let attendee_name = pending
-        .attendee
-        .and_then(|e| character_names.get(e).ok())
-        .map(|n| n.0.clone())
+    let Some(ev) = scripts.events.get(pending.def_index) else {
+        return;
+    };
+    // Build character view maps for `{N.name}` substitution.
+    let character_views: Vec<rhai::Map> = pending
+        .characters
+        .iter()
+        .map(|e| crate::script_ctx::character_view_from_world(world, *e))
+        .collect();
+    let first_name = character_views
+        .first()
+        .and_then(|m| m.get("name"))
+        .and_then(|v| v.clone().into_string().ok())
         .unwrap_or_else(|| "a stranger".to_string());
 
     let line = match event.choice {
-        None => format!("You dismissed {attendee_name} without a word."),
-        Some(idx) => match def.choices.get(idx).map(|c| c.effect) {
-            Some(ChoiceEffect::None) => match def.id {
-                "event:wayfaring_stranger" => format!(
-                    "You turned {attendee_name} away at the gates."
-                ),
-                "event:envoy_house" => {
-                    "The envoy returned to {attendee_name}'s court without an answer."
-                        .replace("{attendee_name}", &attendee_name)
-                }
-                "event:foreign_knight" => format!(
-                    "You turned {attendee_name} away, and they rode off into the dusk."
-                ),
-                _ => format!("You declined {attendee_name}."),
-            },
-            // Gold-moving choices: chronicled by `on_gold_gifted`.
-            _ => return,
-        },
+        None => format!("You dismissed {first_name} without a word."),
+        Some(idx) => {
+            let per_choice = ev
+                .call_choices(&scripts.engine)
+                .ok()
+                .and_then(|rows| rows.into_iter().nth(idx))
+                .and_then(|row| row.chronicle);
+            let template = per_choice
+                .or_else(|| ev.call_decline(&scripts.engine))
+                .unwrap_or_else(|| "You turned {0.name} away.".to_string());
+            crate::script_ctx::substitute_names(&template, &character_views)
+        }
     };
     chronicles.0.push(line);
 }

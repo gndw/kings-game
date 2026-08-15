@@ -48,6 +48,7 @@ fn main() -> Result<()> {
     // `Content` is moved into `populate` below; pull out anything we need
     // before that move so we can read it from this scope.
     let event_deck_state = mods.content.event_deck;
+    let event_scripts = mods.event_scripts;
 
     let ctx = Ctx::new_game(seed, &player);
 
@@ -105,6 +106,7 @@ fn main() -> Result<()> {
         .insert_resource(kings_game::ui::wiki::WikiUiContext::default())
         .insert_resource(kings_game::ui::event_popup::EventPopupUiContext::default())
         .insert_resource(initial_event_deck(&event_deck_state))
+        .insert_resource(event_scripts)
         .insert_resource(Time::<Fixed>::from_hz(hz))
         .add_systems(
             Startup,

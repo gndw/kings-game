@@ -1,33 +1,40 @@
-//! Event system: tick that decides *when* to present an event, the resolver
-//! that runs the chosen effect, and the attendance picker.
+//! Event system: tick that decides *when* to present an event, and the
+//! resolver that calls the script's `effect(world)` for the chosen choice.
+//!
+//! All event authoring lives in `event-<id>.rhai` files. This module only
+//! handles trigger timing, character resolution, and plumbing the chosen
+//! choice into the script call.
 //!
 //! Trigger schedule: every [`crate::schedules::OnDay`]. Gated by an
 //! `EventDeck` resource holding the next-due date and the pending event.
 //!
 //! Flow:
 //! 1. `on_day` (exclusive system) — if today reaches `next_due_date` and no
-//!    event is in flight, draw a weighted event id via `SimRng`, resolve an
-//!    `attendee` entity, freeze the instance on `EventDeck::pending`, pause
-//!    the game, and `world.trigger(OnEventPresented)` for the UI.
-//! 2. `on_event_resolved` (observer) — takes the pending event, runs the
-//!    chosen `ChoiceEffect`, clears the pending state, and schedules the
-//!    next event 90–180 days out.
+//!    event is in flight, call each event's `can_trigger(world)` to filter
+//!    the candidate pool, draw a weighted event id via `SimRng`, call the
+//!    chosen event's `characters(world)` to resolve the event's characters
+//!    (the script does its own RNG pick via `world.ctx.rng`), freeze the
+//!    instance on `EventDeck::pending`, pause the game, and
+//!    `world.trigger(OnEventPresented)` for the UI.
+//! 2. `on_event_resolved` (observer) — calls the chosen event's
+//!    `effect(world)`, clears the pending state, and schedules the next
+//!    event 90–180 days out.
 //! 3. `close_event` — Esc path. Forfeits the choice (no effect), clears the
 //!    pending state, and reschedules.
 
 use bevy::prelude::*;
 use rand::TryRng;
+use rhai::Scope;
+use std::sync::Arc;
 
 use crate::app::Game;
-use crate::commands::core::{alive_characters_excluding, transfer_with_gold_memory};
 use crate::content::EventDeckState;
-use crate::ecs::character::{CharacterLeads, CharacterLevy, CharacterOfHouse};
 use crate::ecs::Registry;
 use crate::observers::{OnEventPresented, OnEventResolved};
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
-
-use crate::event::{ChoiceEffect, EVENT_DEFS, EventDef, EventInstance};
+use crate::resources::event_scripts::EventScripts;
+use crate::script_ctx::{ScriptCtx, attach_ctx, build_world_view};
 
 /// `EventDeck` resource: state for the trigger tick and the resolver.
 #[derive(Resource, Default)]
@@ -38,6 +45,18 @@ pub struct EventDeck {
     /// The in-flight event (`Some` while the popup is up). `None` between
     /// events; the tick fires only when this is `None`.
     pub pending: Option<EventInstance>,
+}
+
+/// The running state of one in-flight event. Stored on `EventDeck::pending`;
+/// the popup renders from it. `characters` is the slice the event script
+/// picked (via its own RNG); empty for ambient events.
+pub struct EventInstance {
+    /// Index into `EventScripts.events` — the chosen event's compiled script.
+    pub def_index: usize,
+    /// The characters this event is about, in order. The script picked them
+    /// via `world.ctx.rng` inside `characters(world)`. Empty for events
+    /// with no characters (ambient / global announcements).
+    pub characters: Vec<Entity>,
 }
 
 /// Build the initial `EventDeck` from the state's `EventDeckState`. Called by
@@ -55,17 +74,12 @@ pub fn deck_from_state(state: &EventDeckState) -> EventDeck {
 const NEXT_EVENT_OFFSET_MIN: u32 = 90;
 const NEXT_EVENT_OFFSET_MAX: u32 = 180;
 
-/// Days of memory an event gold transfer grants. Matches the gift command
-/// formula (`amount * 72`) so a 25-gold event memory lasts the same 5 years
-/// as a 25-gold gift.
-fn event_memory_days(amount: i64) -> u32 {
-    (amount as u32).saturating_mul(72)
-}
-
 /// Tick. Runs on `OnDay`. If today ≥ `next_due_date` and no event is in
-/// flight, draw an event, freeze the attendee, pause the game, and trigger
-/// the presentation event. Exclusive because `world.trigger(...)` requires
-/// it.
+/// flight, filter events by `can_trigger`, draw one weighted, resolve its
+/// characters via the script's `characters` (which picks them itself),
+/// freeze the instance on `EventDeck::pending`, pause the game, and
+/// trigger the presentation event. Exclusive because `world.trigger(...)`
+/// requires it.
 pub fn on_day(world: &mut World) {
     let today = *world.resource::<Date>();
     let calendar = world.resource::<Calendar>().clone();
@@ -77,47 +91,76 @@ pub fn on_day(world: &mut World) {
         return;
     }
 
-    // Draw a weighted event id.
-    let chosen_idx = {
-        let total: u32 = EVENT_DEFS.iter().map(|d| d.weight).sum();
-        let roll: u32 = rng_u32(world, total);
-        let mut acc = 0u32;
-        EVENT_DEFS
-            .iter()
-            .position(|d| {
-                acc += d.weight;
-                roll < acc
-            })
-            .unwrap_or(EVENT_DEFS.len() - 1)
+    let Some(player_e) = player_entity(world) else {
+        // No player → can't run anything. Reschedule +1 day and bail.
+        let mut deck = world.resource_mut::<EventDeck>();
+        deck.next_due_date = today.after_days(1, &calendar);
+        return;
     };
-    let def = &EVENT_DEFS[chosen_idx];
 
-    // Pick an attendee; if the named kind can't be filled (no matching
-    // characters in the current world), reschedule +1 day and bail.
-    let candidates = pick_attendee_candidates(world, def);
-    let needs_attendee = def.choices.iter().any(|c| !matches!(c.effect, ChoiceEffect::None));
-    if candidates.is_empty() && needs_attendee {
+    // Build the world snapshot once for this tick — same data for every
+    // event's can_trigger / characters call. Characters is `[]` and
+    // choice_idx is `0` (modders ignore these fields outside `effect`).
+    let base_world = build_world_view(world, player_e, &[], 0);
+
+    // Filter: keep only events that pass can_trigger. Snapshot the result
+    // (indices + weights) before dropping the resource borrow so the RNG
+    // draw doesn't collide.
+    let (eligible, weights): (Vec<usize>, Vec<u32>) = {
+        let scripts = world.resource::<EventScripts>();
+        let engine = &scripts.engine;
+        let mut eligible = Vec::new();
+        let mut weights = Vec::new();
+        for (i, ev) in scripts.events.iter().enumerate() {
+            if ev.call_can_trigger(engine, base_world.clone()) {
+                let w = ev.call_weight(engine).unwrap_or(0);
+                eligible.push(i);
+                weights.push(w);
+            }
+        }
+        (eligible, weights)
+    };
+
+    if eligible.is_empty() || weights.iter().sum::<u32>() == 0 {
         let mut deck = world.resource_mut::<EventDeck>();
         deck.next_due_date = today.after_days(1, &calendar);
         return;
     }
-    let attendee = if candidates.is_empty() {
-        None
-    } else {
-        Some(pick_one(world, &candidates))
+
+    let total: u32 = weights.iter().sum();
+    let roll: u32 = rng_u32(world, total);
+    let mut acc = 0u32;
+    let chosen_idx = weights
+        .iter()
+        .position(|w| {
+            acc += w;
+            roll < acc
+        })
+        .map(|p| eligible[p])
+        .unwrap_or(*eligible.last().unwrap());
+
+    // Resolve the characters via the script. The script is responsible for
+    // any RNG pick (via `world.ctx.rng`); the runtime uses the returned
+    // entities as-is. Empty array → ambient (no characters).
+    let characters: Vec<Entity> = {
+        let scripts = world.resource::<EventScripts>();
+        let engine = &scripts.engine;
+        let ev = &scripts.events[chosen_idx];
+        ev.call_characters(engine, base_world.clone())
     };
 
     world.resource_mut::<EventDeck>().pending = Some(EventInstance {
         def_index: chosen_idx,
-        attendee,
+        characters,
     });
     world.resource_mut::<Game>().paused = true;
     world.trigger(OnEventPresented);
 }
 
-/// Resolves the chosen effect (or skips for `None`), clears the pending
-/// state, and schedules the next event. Sole `OnEventResolved` observer for
-/// game-logic side effects; the UI hides the popup in its own observer.
+/// Resolves the chosen effect (or skips if no choice was made), clears the
+/// pending state, and schedules the next event. Sole `OnEventResolved`
+/// observer for game-logic side effects; the UI hides the popup in its own
+/// observer.
 ///
 /// Observer callbacks can't be exclusive (`&mut World`) in Bevy 0.19 — they
 /// take `Commands` and queue the closure for the next exclusive opportunity,
@@ -133,45 +176,58 @@ pub fn on_event_resolved(trigger: On<OnEventResolved>, mut commands: Commands) {
 }
 
 fn resolve_choice(world: &mut World, choice: Option<usize>) {
-    let (def_index, attendee_e) = {
+    let (def_index, characters) = {
         let mut deck = world.resource_mut::<EventDeck>();
         let Some(pending) = deck.pending.take() else {
             return;
         };
-        (pending.def_index, pending.attendee)
+        (pending.def_index, pending.characters)
     };
-    let def = &EVENT_DEFS[def_index];
 
-    if let Some(idx) = choice
-        && let Some(c) = def.choices.get(idx)
-    {
-        run_effect(world, c.effect, attendee_e);
+    let Some(player_e) = player_entity(world) else {
+        // No player — skip the effect, schedule next.
+        let today = *world.resource::<Date>();
+        let calendar = world.resource::<Calendar>().clone();
+        schedule_next(world, today, &calendar);
+        return;
+    };
+
+    // Call the event script's `effect(world)`. Pass a `ScriptCtx` so the
+    // script can mutate the world via the registered API.
+    //
+    // The engine lives inside the `EventScripts` resource; we extract a raw
+    // pointer to it (the resource outlives this function), then drop the
+    // resource borrow before constructing `ScriptCtx` (which needs `&mut
+    // World` and would otherwise conflict).
+    let choice_idx = choice.unwrap_or(0);
+    let (engine_ptr, ast): (*const rhai::Engine, Option<Arc<rhai::AST>>) = {
+        let scripts = world.resource::<EventScripts>();
+        match scripts.events.get(def_index) {
+            Some(ev) => (&scripts.engine as *const rhai::Engine, Some(ev.ast.clone())),
+            None => (std::ptr::null(), None),
+        }
+    };
+    let Some(ast) = ast else {
+        let today = *world.resource::<Date>();
+        let calendar = world.resource::<Calendar>().clone();
+        schedule_next(world, today, &calendar);
+        return;
+    };
+    if !engine_ptr.is_null() {
+        // SAFETY: the `EventScripts` resource lives in `world`, which we
+        // hold exclusively for the duration of this function. No other code
+        // path can remove or replace the resource while we hold `&mut World`.
+        let engine: &rhai::Engine = unsafe { &*engine_ptr };
+        let mut scope = Scope::new();
+        let map = build_world_view(world, player_e, &characters, choice_idx);
+        let map = attach_ctx(map, ScriptCtx::new(world));
+        let _ = engine.call_fn::<()>(&mut scope, &ast, "effect", (map,));
     }
 
     let today = *world.resource::<Date>();
     let calendar = world.resource::<Calendar>().clone();
     schedule_next(world, today, &calendar);
     world.resource_mut::<Game>().paused = false;
-}
-
-fn run_effect(world: &mut World, effect: ChoiceEffect, attendee: Option<Entity>) {
-    let player_e = match player_entity(world) {
-        Some(p) => p,
-        None => return,
-    };
-    match effect {
-        ChoiceEffect::None => {}
-        ChoiceEffect::GiveGold { amount } => {
-            let Some(attendee_e) = attendee else { return };
-            let until = today_after_days(world, event_memory_days(amount));
-            transfer_with_gold_memory(world, player_e, attendee_e, amount, until);
-        }
-        ChoiceEffect::ReceiveGold { amount } => {
-            let Some(attendee_e) = attendee else { return };
-            let until = today_after_days(world, event_memory_days(amount));
-            transfer_with_gold_memory(world, attendee_e, player_e, amount, until);
-        }
-    }
 }
 
 fn schedule_next(world: &mut World, today: Date, calendar: &Calendar) {
@@ -182,91 +238,6 @@ fn schedule_next(world: &mut World, today: Date, calendar: &Calendar) {
     );
     let mut deck = world.resource_mut::<EventDeck>();
     deck.next_due_date = today.after_days(offset, calendar);
-}
-
-fn today_after_days(world: &World, days: u32) -> Date {
-    let today = *world.resource::<Date>();
-    let calendar = world.resource::<Calendar>().clone();
-    today.after_days(days, &calendar)
-}
-
-/// Build the candidate list for `def`. Returns the empty `Vec` when no
-/// character in the current world fits. Caller decides what `Option<Entity>`
-/// to use as the resolved attendee — see `on_day`.
-fn pick_attendee_candidates(world: &World, def: &EventDef) -> Vec<Entity> {
-    let Some(actor) = player_entity(world) else {
-        return Vec::new();
-    };
-    match def.id {
-        "event:wayfaring_stranger" => pick_minor_other_house(world, actor),
-        "event:envoy_house" => pick_house_leader_other_house(world, actor),
-        "event:foreign_knight" => pick_levy_bearer_other_house(world, actor),
-        _ => Vec::new(),
-    }
-}
-
-fn pick_minor_other_house(world: &World, actor: Entity) -> Vec<Entity> {
-    let actor_house = world.get::<CharacterOfHouse>(actor).map(|c| c.0);
-    let chars = alive_characters_excluding(world, actor);
-    let minor_other: Vec<Entity> = chars
-        .into_iter()
-        .filter(|(_, e)| {
-            let levy = world.get::<CharacterLevy>(*e).map(|l| l.0).unwrap_or(0);
-            let other_house = world
-                .get::<CharacterOfHouse>(*e)
-                .map(|c| actor_house != Some(c.0))
-                .unwrap_or(true);
-            levy == 0 && other_house
-        })
-        .map(|(_, e)| e)
-        .collect();
-    if !minor_other.is_empty() {
-        return minor_other;
-    }
-    alive_characters_excluding(world, actor)
-        .into_iter()
-        .map(|(_, e)| e)
-        .collect()
-}
-
-fn pick_house_leader_other_house(world: &World, actor: Entity) -> Vec<Entity> {
-    let actor_house = world.get::<CharacterOfHouse>(actor).map(|c| c.0);
-    alive_characters_excluding(world, actor)
-        .into_iter()
-        .filter(|(_, e)| {
-            let leads = world
-                .get::<CharacterLeads>(*e)
-                .map(|cl| !cl.kingdoms().is_empty())
-                .unwrap_or(false);
-            let other_house = world
-                .get::<CharacterOfHouse>(*e)
-                .map(|c| actor_house != Some(c.0))
-                .unwrap_or(true);
-            leads && other_house
-        })
-        .map(|(_, e)| e)
-        .collect()
-}
-
-fn pick_levy_bearer_other_house(world: &World, actor: Entity) -> Vec<Entity> {
-    let actor_house = world.get::<CharacterOfHouse>(actor).map(|c| c.0);
-    alive_characters_excluding(world, actor)
-        .into_iter()
-        .filter(|(_, e)| {
-            let levy = world.get::<CharacterLevy>(*e).map(|l| l.0).unwrap_or(0);
-            let other_house = world
-                .get::<CharacterOfHouse>(*e)
-                .map(|c| actor_house != Some(c.0))
-                .unwrap_or(true);
-            levy > 0 && other_house
-        })
-        .map(|(_, e)| e)
-        .collect()
-}
-
-fn pick_one(world: &mut World, candidates: &[Entity]) -> Entity {
-    let idx: usize = rng_usize(world, candidates.len());
-    candidates[idx]
 }
 
 fn player_entity(world: &World) -> Option<Entity> {
@@ -287,14 +258,3 @@ fn rng_u32_in_range(world: &mut World, min: u32, max: u32) -> u32 {
     let span = max - min + 1;
     min + rng_u32(world, span)
 }
-
-fn rng_usize(world: &mut World, n: usize) -> usize {
-    let mut rng = world.resource::<Game>().ctx.rng.lock().unwrap();
-    rng.try_next_u64().unwrap() as usize % n
-}
-
-// ponytail: at the moment the resolver is one-shot (no in-flight save), no
-// queueing, and no conditional effects. If events grow to "this choice
-// branches into one of three sub-events", lift the matching out of
-// `run_effect` into a per-event handler — three hand-written arms beat a
-// RON-effect vocabulary until that vocab has proven value.

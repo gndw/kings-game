@@ -111,7 +111,7 @@ pub struct OnCharacterDied {
 /// `to = None` and `relation = SuccessionRelation::Leaderless` mean the realm
 /// has no heir under the current rules.
 #[derive(Event)]
-pub struct OnKingdomSuccession {
+pub struct OnKingdomSucceeded {
     pub kingdom: Entity,
     pub from: Entity,
     pub to: Option<Entity>,

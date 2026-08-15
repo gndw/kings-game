@@ -218,7 +218,7 @@ Bevy flex tree + `Gizmos` line drawing; no asset sprites.
 | `src/ecs/*.rs` | marker + components + relationships per entity kind |
 | `src/commands/` | the `Command` trait + `CommandRegistry` + one submodule per command |
 | `src/chronicles.rs` | chronicle generation — one observer per game event |
-| `src/game/` | per-day / per-month ticks — gerund-named systems (aging, advancing_date, besieging, building_releasing, constructing, court_releasing, marching, paying_out, raising_army, replenishing_levy, yielding) |
+| `src/game/` | per-day / per-month ticks — gerund-named systems (advancing_date, aging, besieging, building_releasing, constructing, court_releasing, inheriting, marching, paying_out, raising_army, replenishing_levy, yielding) |
 | `src/schedules.rs` | `OnDay` + `OnMonth` labels |
 | `src/events.rs` | the event surface observers and triggers fire |
 | `src/rng.rs` | `SimRng` — seeded, draw-counted for exact replay |

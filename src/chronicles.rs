@@ -17,7 +17,7 @@ use crate::ecs::war::{WarCasusBelliType, WarDemandType};
 use crate::ecs::{Registry, StringId};
 use crate::events::{
     BuildingUpdateKind, OnArmyArrived, OnArmyDismiss, OnArmyRaised, OnBuildingUpdated,
-    OnCharacterDied, OnDemandEnforced, OnKingdomSuccession, OnMarchingOrdered, OnSiegeLaid,
+    OnCharacterDied, OnDemandEnforced, OnKingdomSucceeded, OnMarchingOrdered, OnSiegeLaid,
     OnSiegeWon, OnWarDeclared, OnWarEnded,
 };
 use crate::resources::buildings::BuildingDefs;
@@ -306,8 +306,8 @@ pub fn on_character_died(
     }
 }
 
-pub fn on_kingdom_succession(
-    trigger: On<OnKingdomSuccession>,
+pub fn on_kingdom_succeeded(
+    trigger: On<OnKingdomSucceeded>,
     mut chronicles: ResMut<Chronicles>,
     character_names: Query<&CharacterName>,
     kingdom_hold: Query<&KingdomHold>,

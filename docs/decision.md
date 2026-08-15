@@ -234,3 +234,13 @@ moves only through visible nodes; arrow right expands the selected node and
 arrow left collapses it. Selection owns the details shown in `WikiBody`, so
 adding another wiki item means adding its tree node and renderer, not a new
 navigation state system. `Houses` is the only root item today.
+
+## Events use `On<PastTense>` names
+
+Every event in `src/events.rs` follows the same shape: `On<Entity><PastTense>`
+(`OnBuildingUpdated`, `OnArmyRaised`, `OnMarchingOrdered`, `OnSiegeWon`,
+`OnDemandEnforced`, `OnWarEnded`). Past tense — the event fires after the
+thing happened, never before. The chronicle module reads this in the doc
+("commands and ticks only `world.trigger(...)`") and one observer per event
+writes one past-tense line. A new event lands as a `On<PastTense>` struct,
+a trigger site, and an observer — three additions, no renames.

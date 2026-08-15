@@ -15,14 +15,14 @@
 //!   4. None of the above → mark the kingdom with [`KingdomLeaderless`] and
 //!      remove [`KingdomLedBy`].
 //!
-//! Each succession (with or without an heir) fires [`OnKingdomSuccession`].
+//! Each succession (with or without an heir) fires [`OnKingdomSucceeded`].
 
 use crate::ecs::{
     Character, CharacterDateOfBirth, CharacterHasFather, CharacterHasFatheredChildren,
     CharacterHasMother, CharacterIsAlive, CharacterLeads, CharacterOfHouse, CharacterSex,
     KingdomLedBy, KingdomLeaderless,
 };
-use crate::events::{OnCharacterDied, OnKingdomSuccession, SuccessionRelation};
+use crate::events::{OnCharacterDied, OnKingdomSucceeded, SuccessionRelation};
 use crate::resources::date::Date;
 use bevy::prelude::*;
 
@@ -56,7 +56,7 @@ pub fn on_character_died(
         match pick {
             Some((new_leader, relation)) => {
                 commands.entity(kingdom).insert(KingdomLedBy(new_leader));
-                commands.trigger(OnKingdomSuccession {
+                commands.trigger(OnKingdomSucceeded {
                     kingdom,
                     from: dead,
                     to: Some(new_leader),
@@ -68,7 +68,7 @@ pub fn on_character_died(
                     .entity(kingdom)
                     .remove::<KingdomLedBy>()
                     .insert(KingdomLeaderless);
-                commands.trigger(OnKingdomSuccession {
+                commands.trigger(OnKingdomSucceeded {
                     kingdom,
                     from: dead,
                     to: None,

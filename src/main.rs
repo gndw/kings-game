@@ -136,7 +136,7 @@ fn main() -> Result<()> {
         .add_observer(game::court_releasing::on_demand_enforced)
         .add_observer(chronicles::on_war_ended)
         .add_observer(chronicles::on_character_died)
-        .add_observer(chronicles::on_kingdom_succession)
+        .add_observer(chronicles::on_kingdom_succeeded)
         .add_observer(game::inheriting::on_character_died)
         .add_systems(
             Update,

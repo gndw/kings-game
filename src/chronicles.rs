@@ -8,7 +8,7 @@
 use crate::app::Game;
 use crate::ecs::army::{ArmyBelongsToKingdom, ArmyHasMarching, ArmyLevy, ArmyMaxLevy, ArmyName, ArmyOnLand, ArmyStatus};
 use crate::ecs::building::BuildingOf;
-use crate::ecs::character::{CharacterName, CharacterOfHouse};
+use crate::ecs::character::{CharacterDateOfBirth, CharacterName, CharacterOfHouse};
 use crate::ecs::house::HouseName;
 use crate::ecs::kingdom::KingdomHold;
 use crate::ecs::land::LandName;
@@ -21,8 +21,10 @@ use crate::events::{
     OnMarchingOrdered, OnSiegeLaid, OnSiegeWon, OnWarDeclared, OnWarEnded,
 };
 use crate::game::event_data::{ChoiceEffect, EVENT_DEFS};
+use crate::helper::age_helper::age;
 use crate::game::presenting_event::EventDeck;
 use crate::resources::buildings::BuildingDefs;
+use crate::resources::calendar::Calendar;
 use crate::resources::chronicle::Chronicles;
 use bevy::ecs::system::SystemParam;
 use bevy::prelude::*;
@@ -288,24 +290,19 @@ pub fn on_war_ended(
 pub fn on_character_died(
     trigger: On<OnCharacterDied>,
     mut chronicles: ResMut<Chronicles>,
-    character_names: Query<&CharacterName>,
-    character_house: Query<&CharacterOfHouse>,
-    house_names: Query<&HouseName>,
+    character_names: Query<(&CharacterName, &CharacterDateOfBirth)>,
+    calendar: Res<Calendar>,
 ) {
     let event = trigger.event();
-    let Ok(name) = character_names.get(event.character) else {
+    let Ok((name, dob)) = character_names.get(event.character) else {
         return;
     };
-    let suffix = character_house
-        .get(event.character)
-        .ok()
-        .and_then(|coh| house_names.get(coh.0).ok())
-        .map(|hn| format!(" of {}", hn.0));
+    let age_at_death = age(&dob.0, &event.on_date, &calendar);
     let year = event.on_date.year;
-    match suffix {
-        Some(s) => chronicles.0.push(format!("{}{s} died of age in {year}.", name.0)),
-        None => chronicles.0.push(format!("{} died of age in {year}.", name.0)),
-    }
+    chronicles.0.push(format!(
+        "{} died at the age of {age_at_death} in year {year}",
+        name.0
+    ));
 }
 
 pub fn on_kingdom_succeeded(

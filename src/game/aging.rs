@@ -18,8 +18,8 @@ use crate::resources::{calendar::Calendar, date::Date};
 use bevy::prelude::*;
 use rand::TryRng;
 
-/// Fixed 50% chance per roll; horizon-shrinkage alone ages characters out.
-const DEATH_ROLL_PROBABILITY_HALF: u64 = u64::MAX / 2;
+/// Fixed 10% chance per roll; horizon-shrinkage alone ages characters out.
+const DEATH_ROLL_PROBABILITY: u64 = u64::MAX / 10;
 
 /// Per-day tick — see [`crate::schedules::OnDay`]. Cheap when nothing is due.
 pub fn on_day(world: &mut World) {
@@ -49,7 +49,7 @@ pub fn on_day(world: &mut World) {
                 continue;
             }
             let roll = rng.try_next_u64().unwrap_or(0);
-            if roll < DEATH_ROLL_PROBABILITY_HALF {
+            if roll < DEATH_ROLL_PROBABILITY {
                 actions.push((e, Action::Die));
             } else {
                 let current_age = age(&dob.0, &today, &calendar);

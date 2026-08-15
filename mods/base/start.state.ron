@@ -62,12 +62,44 @@
         (id: "b-6-5", def_id: "building-castle",        land_id: "land-6", status: Active),
     ],
     courtiers: [
-        (id: "courtier-alerie", kingdom_id: "kingdom-west", character_id: "char-alerie", type: Courtier),
-        (id: "courtier-jaime", kingdom_id: "kingdom-centre", character_id: "char-jaime", type: Courtier),
-        (id: "courtier-lysa", kingdom_id: "kingdom-east", character_id: "char-lysa", type: Courtier),
-        (id: "courtier-edmure", kingdom_id: "kingdom-riverlands", character_id: "char-edmure", type: Courtier),
-        (id: "courtier-mace", kingdom_id: "kingdom-reach", character_id: "char-mace", type: Courtier),
-        (id: "courtier-oberyn", kingdom_id: "kingdom-dorne", character_id: "char-oberyn", type: Courtier),
+        // kingdom-west — Leyton Hightower: wife + children
+        (id: "courtier-alerie",  kingdom_id: "kingdom-west", character_id: "char-alerie",  type: Courtier),
+        (id: "courtier-baelor",  kingdom_id: "kingdom-west", character_id: "char-baelor",  type: Courtier),
+        (id: "courtier-rhea",    kingdom_id: "kingdom-west", character_id: "char-rhea",    type: Courtier),
+        (id: "courtier-denyse",  kingdom_id: "kingdom-west", character_id: "char-denyse",  type: Courtier),
+        (id: "courtier-gunthor", kingdom_id: "kingdom-west", character_id: "char-gunthor", type: Courtier),
+
+        // kingdom-centre — Tywin Lannister: wife + children
+        (id: "courtier-jaime",   kingdom_id: "kingdom-centre", character_id: "char-jaime",   type: Courtier),
+        (id: "courtier-joanna",  kingdom_id: "kingdom-centre", character_id: "char-joanna",  type: Courtier),
+        (id: "courtier-cersei",  kingdom_id: "kingdom-centre", character_id: "char-cersei",  type: Courtier),
+        (id: "courtier-tyrion",  kingdom_id: "kingdom-centre", character_id: "char-tyrion",  type: Courtier),
+
+        // kingdom-east — Jon Arryn: wife + children
+        (id: "courtier-lysa",    kingdom_id: "kingdom-east", character_id: "char-lysa",    type: Courtier),
+        (id: "courtier-jeyne",   kingdom_id: "kingdom-east", character_id: "char-jeyne",   type: Courtier),
+        (id: "courtier-elbert",  kingdom_id: "kingdom-east", character_id: "char-elbert",  type: Courtier),
+        (id: "courtier-aemma",   kingdom_id: "kingdom-east", character_id: "char-aemma",   type: Courtier),
+
+        // kingdom-riverlands — Minisa Tully: husband + children
+        (id: "courtier-edmure",  kingdom_id: "kingdom-riverlands", character_id: "char-edmure",  type: Courtier),
+        (id: "courtier-hoster",  kingdom_id: "kingdom-riverlands", character_id: "char-hoster",  type: Courtier),
+        (id: "courtier-catelyn", kingdom_id: "kingdom-riverlands", character_id: "char-catelyn", type: Courtier),
+        (id: "courtier-lysara",  kingdom_id: "kingdom-riverlands", character_id: "char-lysara",  type: Courtier),
+
+        // kingdom-reach — Olenna Tyrell: husband + children
+        (id: "courtier-mace",     kingdom_id: "kingdom-reach", character_id: "char-mace",     type: Courtier),
+        (id: "courtier-luthor",   kingdom_id: "kingdom-reach", character_id: "char-luthor",   type: Courtier),
+        (id: "courtier-willas",   kingdom_id: "kingdom-reach", character_id: "char-willas",   type: Courtier),
+        (id: "courtier-garlan",   kingdom_id: "kingdom-reach", character_id: "char-garlan",   type: Courtier),
+        (id: "courtier-margaery", kingdom_id: "kingdom-reach", character_id: "char-margaery", type: Courtier),
+
+        // kingdom-dorne — Doran Martell: wife + children
+        (id: "courtier-oberyn",   kingdom_id: "kingdom-dorne", character_id: "char-oberyn",   type: Courtier),
+        (id: "courtier-mellario", kingdom_id: "kingdom-dorne", character_id: "char-mellario", type: Courtier),
+        (id: "courtier-arianne",  kingdom_id: "kingdom-dorne", character_id: "char-arianne",  type: Courtier),
+        (id: "courtier-quentyn",  kingdom_id: "kingdom-dorne", character_id: "char-quentyn",  type: Courtier),
+        (id: "courtier-trystane", kingdom_id: "kingdom-dorne", character_id: "char-trystane", type: Courtier),
     ],
     // Levy and gold_yield are left out on purpose: the sim recomputes both at
     // `new_game`, so writing them here would only ever be wrong.

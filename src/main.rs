@@ -120,7 +120,7 @@ fn main() -> Result<()> {
         .add_observer(game::yielding::on_building_updated)
         .add_observer(army_icon::on_army_raised)
         .add_observer(army_icon::on_army_dismiss)
-        .add_observer(ui::error::on_error_occured)
+        .add_observer(ui::error::on_error_occurred)
         .add_observer(chronicles::on_construction_started)
         .add_observer(chronicles::on_constructed)
         .add_observer(chronicles::on_destroyed)

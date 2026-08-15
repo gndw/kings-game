@@ -94,7 +94,7 @@ pub struct OnWarEnded {
 /// Fired by a command's validation when a player input is rejected. The error
 /// popup is the only observer.
 #[derive(Event)]
-pub struct OnErrorOccured {
+pub struct OnErrorOccurred {
     pub message: String,
 }
 

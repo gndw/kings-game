@@ -24,7 +24,7 @@ use crate::ecs::siege::SiegeProgress;
 use crate::resources::buildings::BuildingDefs;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
-use crate::events::OnErrorOccured;
+use crate::events::OnErrorOccurred;
 use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue};
 use bevy::prelude::RelationshipTarget;
 use bevy::prelude::Resource;
@@ -166,9 +166,9 @@ pub(super) fn next_id(world: &mut World) -> String {
     )
 }
 
-/// Fire `OnErrorOccured` with `message`; the error popup shows it as a modal.
+/// Fire `OnErrorOccurred` with `message`; the error popup shows it as a modal.
 pub(crate) fn error(world: &mut World, message: String) {
-    world.trigger(OnErrorOccured { message });
+    world.trigger(OnErrorOccurred { message });
 }
 
 // --- building-levy helpers ---------------------------------------------------

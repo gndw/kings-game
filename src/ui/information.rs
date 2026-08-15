@@ -7,7 +7,7 @@ use crate::ecs::{
     CharacterDateOfBirth, CharacterHasFather, CharacterHasHusband, CharacterHasMother,
     CharacterName, CharacterOfHouse, HouseName, KingdomHold, KingdomLedBy, LandName, Registry,
 };
-use crate::game::aging::age;
+use crate::helper::age_helper::age;
 use crate::helper::opinion_helper::{opinion_color, opinion_of};
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;

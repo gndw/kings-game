@@ -207,4 +207,12 @@
          until_date: (year: 1075, month: 6, day: 1),
          kind: ReceivedGold(amount: 50)),
     ],
+
+    // Event popup: the first popup fires on day 90 of year 1066 (April 1) —
+    // ~3 in-game months after the calendar's `start`. The resolver rewrites
+    // this every time an event resolves or the player forfeits, so it's the
+    // single source of truth for "when does the next popup trigger?".
+    event_deck: (
+        next_due_date: (year: 1066, month: 4, day: 1),
+    ),
 )

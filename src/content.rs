@@ -37,6 +37,10 @@ pub struct Content {
     pub memories: IndexMap<String, Memory>,
     /// Definition-only: baked at populate time, never edited.
     pub roads: IndexMap<String, Road>,
+    /// State-only: persisted next-due date for the event popup. The trigger
+    /// tick reads `Content::event_deck::next_due_date` at startup; the resolver
+    /// rewrites it after each event resolves or the player forfeits.
+    pub event_deck: EventDeckState,
 }
 
 /// Hand-written because an empty `speeds` list isn't a usable game.
@@ -55,6 +59,7 @@ impl Default for Content {
             courtiers: IndexMap::new(),
             memories: IndexMap::new(),
             roads: IndexMap::new(),
+            event_deck: EventDeckState::default(),
         }
     }
 }
@@ -83,6 +88,10 @@ pub struct ContentFile {
     pub roads: Vec<Road>,
     #[serde(default)]
     pub memories: Vec<Memory>,
+    /// State-shaped (the date a trigger should fire next); only meant to be
+    /// shipped in a state file. Definition files typically leave it absent.
+    #[serde(default)]
+    pub event_deck: Option<EventDeckState>,
 }
 
 impl Content {
@@ -114,6 +123,9 @@ impl Content {
         }
         for memory in file.memories {
             self.memories.insert(memory.id.clone(), memory);
+        }
+        if let Some(event_deck) = file.event_deck {
+            self.event_deck = event_deck;
         }
     }
 }
@@ -280,6 +292,23 @@ pub struct Memory {
     #[serde(default)]
     pub until_date: Date,
     pub kind: MemoryKind,
+}
+
+/// State for the event popup trigger. Persisted by `*.state.ron` so a save
+/// reload (or a mod that wants a different first-event date) can rewrite the
+/// `next_due_date` to a specific game day. The runtime `EventDeck` resource
+/// in `game::presenting_event` reads this through `main.rs` at startup; the
+/// resolver rewrites `Content::event_deck::next_due_date` is not currently
+/// wired (saves aren't yet a thing), so today this is one-shot at load.
+#[derive(Debug, Default, Deserialize, Clone, Copy)]
+#[serde(deny_unknown_fields)]
+pub struct EventDeckState {
+    /// Day the trigger tick should next consider firing. State files default
+    /// this to `Date::default()` (year 0); `main.rs` detects a missing
+    /// state-supplied date via `year == 0` and falls back to the RNG
+    /// first-offset draw.
+    #[serde(default)]
+    pub next_due_date: Date,
 }
 
 impl Content {

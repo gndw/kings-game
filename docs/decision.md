@@ -271,6 +271,15 @@ the next due date 90–180 days out.
   `mods::load_event_definitions` walk + a load pass away — the `EventDef`
   struct is the serialisation target. ponytail: lift to RON when the third
   modder asks, not before.
+- **Why first-event date lives in state, not code:** the state overlay
+  (`Content::event_deck::next_due_date`) seeds the trigger day. A save
+  reload restores the same date; a mod that wants a different cadence
+  ships its own `start.state.ron` (or a definition file with an
+  `event_deck:` section). Year 0 is the sentinel for "no state-supplied
+  date" and falls back to the original RNG first-offset draw, so a state
+  file that predates the event system keeps working. ponytail: when saves
+  become a thing, the resolver writes `Content::event_deck` back out on
+  every resolve — for now the field is read-once at startup.
 - **Why `attendee` is frozen at present time:** so the choice effect and the
   narration always agree. Decoupling "pick" from "render" invited a class of
   bugs where the popup showed an envoy from House A while the effect paid

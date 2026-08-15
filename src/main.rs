@@ -11,6 +11,7 @@ use kings_game::schedules::{OnDay, OnMonth};
 use kings_game::ui;
 use kings_game::ui::command_menu::CommandMenuUiContext;
 use kings_game::game;
+use kings_game::game::presenting_event::deck_from_state as initial_event_deck;
 use kings_game::map::components::army_icon;
 use kings_game::map::components::border_graphic;
 use kings_game::map::components::holding_icon;
@@ -44,6 +45,9 @@ fn main() -> Result<()> {
     let calendar = mods.content.calendar.clone();
     let border = mods.content.border;
     let start = calendar.start;
+    // `Content` is moved into `populate` below; pull out anything we need
+    // before that move so we can read it from this scope.
+    let event_deck_state = mods.content.event_deck;
 
     let ctx = Ctx::new_game(seed, &player);
 
@@ -100,7 +104,7 @@ fn main() -> Result<()> {
         .insert_resource(CommandMenuUiContext::default())
         .insert_resource(kings_game::ui::wiki::WikiUiContext::default())
         .insert_resource(kings_game::ui::event_popup::EventPopupUiContext::default())
-        .insert_resource(kings_game::game::presenting_event::EventDeck::default())
+        .insert_resource(initial_event_deck(&event_deck_state))
         .insert_resource(Time::<Fixed>::from_hz(hz))
         .add_systems(
             Startup,

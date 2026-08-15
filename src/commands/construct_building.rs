@@ -48,7 +48,7 @@ impl BaseCommand for ConstructBuilding {
 
         // Step 1: command picked, no land yet → render one row per ruled land.
         if land_pick.is_none() {
-            let actor = world.resource::<Game>().ctx.player_character_id.clone();
+            let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
             let lands = ruled_lands(world, &actor);
             let mut entities = Vec::new();
             for (land_id, land_name) in lands {
@@ -68,7 +68,7 @@ impl BaseCommand for ConstructBuilding {
 
         // Step 2: land picked, no building yet → render one row per def.
         if building_pick.is_none() {
-            let actor = world.resource::<Game>().ctx.player_character_id.clone();
+            let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
             let gold = world
                 .resource::<Registry>()
                 .get(&actor)
@@ -101,7 +101,7 @@ impl BaseCommand for ConstructBuilding {
         }
 
         // Step 3: both picks present → execute.
-        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
         let land_id = land_pick.as_deref().expect("step 3 reached without a land_id pick");
         let building_id = building_pick.as_deref().expect("step 3 reached without a building_id pick");
         construct(world, &actor, land_id, building_id);

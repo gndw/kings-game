@@ -83,7 +83,7 @@ impl BaseCommand for MarchingOrder {
 
 impl MarchingOrder {
     fn spawn_army_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
-        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
         let armies = armies_under(world, &actor);
         let mut entities = Vec::new();
         for (army_id, name, current_land, levy, status) in armies {
@@ -106,7 +106,7 @@ impl MarchingOrder {
         parent: Entity,
         army_id: &str,
     ) -> (Vec<Entity>, bool) {
-        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
         let own_kingdoms: std::collections::HashSet<Entity> = world
             .resource::<Registry>()
             .get(&actor)
@@ -136,7 +136,7 @@ impl MarchingOrder {
     }
 
     fn execute(&self, world: &mut World) -> (Vec<Entity>, bool) {
-        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
         let picks: Vec<(String, String)> = world.resource::<CommandMenuUiContext>().choices.clone();
         let army_id = picks.iter().find(|(k, _)| k == "army_id").map(|(_, v)| v.clone())
             .expect("execute reached without an army_id pick");

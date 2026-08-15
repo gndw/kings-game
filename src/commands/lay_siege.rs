@@ -61,7 +61,7 @@ impl BaseCommand for LaySiege {
 
 impl LaySiege {
     fn spawn_army_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
-        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
         let armies = foreign_army_rows(world, &actor);
         let mut entities = Vec::new();
         for row_data in armies {
@@ -79,7 +79,7 @@ impl LaySiege {
     }
 
     fn execute(&self, world: &mut World) -> (Vec<Entity>, bool) {
-        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
         let army_id = world
             .resource::<CommandMenuUiContext>()
             .choices

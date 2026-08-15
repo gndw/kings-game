@@ -66,7 +66,7 @@ impl BaseCommand for DeclareWar {
 
 impl DeclareWar {
     fn spawn_defender_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
-        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
         let others = defender_rows(world, &actor);
         let mut entities = Vec::new();
         for row_data in others {
@@ -95,7 +95,7 @@ impl DeclareWar {
     }
 
     fn execute(&self, world: &mut World) -> (Vec<Entity>, bool) {
-        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
         let picks: Vec<(String, String)> = world.resource::<CommandMenuUiContext>().choices.clone();
         let defender_id = picks.iter().find(|(k, _)| k == "defender_id").map(|(_, v)| v.clone())
             .expect("execute reached without a defender_id pick");

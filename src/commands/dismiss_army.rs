@@ -49,7 +49,7 @@ impl BaseCommand for DismissArmy {
 
         let army_pick = choices.iter().find(|(k, _)| k == "army_id").map(|(_, v)| v.clone());
         if army_pick.is_none() {
-            let actor = world.resource::<Game>().ctx.player_character_id.clone();
+            let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
             let armies = armies_under(world, &actor);
             let mut entities = Vec::new();
             for (army_id, name, current_land, levy, status) in armies {
@@ -66,7 +66,7 @@ impl BaseCommand for DismissArmy {
             return (entities, false);
         }
 
-        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
         let army_id = army_pick.as_deref().expect("step 1 reached without an army_id pick");
         dismiss(world, &actor, army_id);
         (Vec::new(), true)

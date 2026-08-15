@@ -13,8 +13,10 @@ pub struct Ctx {
     pub seed: u64,
     pub rng: Arc<Mutex<SimRng>>,
     /// Whoever the player is playing as. An id into the character entities,
-    /// resolved through `Registry` when a component is needed.
-    pub player_character_id: String,
+    /// resolved through `Registry` when a component is needed. `None` once the
+    /// player character dies without an heir under the current rules; UI
+    /// panels and commands already short-circuit on a missing registry hit.
+    pub player_character_id: Option<String>,
     /// The land the map selection sits on. Set on startup to the player's own seat.
     pub selected_land_id: Option<String>,
 }
@@ -26,7 +28,7 @@ impl Ctx {
         Ctx {
             seed,
             rng,
-            player_character_id: player.to_string(),
+            player_character_id: Some(player.to_string()),
             selected_land_id: None,
         }
     }
@@ -41,7 +43,10 @@ impl Ctx {
         kingdom_holds: Query<&KingdomHold>,
         string_ids: Query<&StringId>,
     ) {
-        let Some(player_e) = registry.get(&game.ctx.player_character_id) else {
+        let Some(player_id) = game.ctx.player_character_id.as_deref() else {
+            return;
+        };
+        let Some(player_e) = registry.get(player_id) else {
             return;
         };
         game.ctx.selected_land_id = character_leads

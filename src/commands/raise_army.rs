@@ -52,7 +52,7 @@ impl BaseCommand for RaiseArmy {
 
         let land_pick = choices.iter().find(|(k, _)| k == "land_id").map(|(_, v)| v.clone());
         if land_pick.is_none() {
-            let actor = world.resource::<Game>().ctx.player_character_id.clone();
+            let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
             let lands = ruled_lands(world, &actor);
             let mut entities = Vec::new();
             for (land_id, land_name) in lands {
@@ -81,7 +81,7 @@ impl BaseCommand for RaiseArmy {
             return (entities, false);
         }
 
-        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
         let land_id = land_pick.as_deref().expect("step 1 reached without a land_id pick");
         raise(world, &actor, land_id);
         (Vec::new(), true)

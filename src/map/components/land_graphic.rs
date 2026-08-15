@@ -41,8 +41,11 @@ pub fn update(
     kingdom_holds: Query<&KingdomHold>,
 ) {
     let sel = game.ctx.selected_land_id.as_deref();
-    let own: HashSet<String> = registry
-        .get(&game.ctx.player_character_id)
+    let own: HashSet<String> = game
+        .ctx
+        .player_character_id
+        .as_deref()
+        .and_then(|id| registry.get(id))
         .and_then(|pe| character_leads.get(pe).ok())
         .map(|character_leads| {
             let mut out = HashSet::new();

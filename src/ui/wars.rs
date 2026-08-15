@@ -73,8 +73,11 @@ pub fn update(
     // and hides the panel — including the case where the player
     // hasn't been resolved yet (fresh world, no player character
     // entity). Multi-kingdom: union every kingdom the player leads.
-    let war_lines: Vec<String> = registry
-        .get(&game.ctx.player_character_id)
+    let war_lines: Vec<String> = game
+        .ctx
+        .player_character_id
+        .as_deref()
+        .and_then(|id| registry.get(id))
         .and_then(|player_e| player_chars.get(player_e).ok())
         .map(|character_leads| {
             let mut out = Vec::new();

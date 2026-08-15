@@ -65,7 +65,7 @@ impl BaseCommand for DestroyBuilding {
 
 impl DestroyBuilding {
     fn spawn_land_picker(&self, world: &mut World, parent: Entity) -> (Vec<Entity>, bool) {
-        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
         let lands = ruled_lands(world, &actor);
         let mut entities = Vec::new();
         for (land_id, land_name) in lands {
@@ -109,7 +109,7 @@ impl DestroyBuilding {
     }
 
     fn execute(&self, world: &mut World) -> (Vec<Entity>, bool) {
-        let actor = world.resource::<Game>().ctx.player_character_id.clone();
+        let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
         let picks: Vec<(String, String)> = world.resource::<CommandMenuUiContext>().choices.clone();
         let land_id = picks.iter().find(|(k, _)| k == "land_id").map(|(_, v)| v.clone())
             .expect("execute reached without a land_id pick");

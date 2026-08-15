@@ -170,8 +170,11 @@ pub fn update(
         .as_deref()
         .and_then(|id| registry.get(id));
 
-    let player_kingdoms: std::collections::HashSet<bevy::ecs::entity::Entity> = registry
-        .get(&game.ctx.player_character_id)
+    let player_kingdoms: std::collections::HashSet<bevy::ecs::entity::Entity> = game
+        .ctx
+        .player_character_id
+        .as_deref()
+        .and_then(|id| registry.get(id))
         .and_then(|pe| character_leads.get(pe).ok())
         .map(|cl| cl.kingdoms().iter().copied().collect())
         .unwrap_or_default();

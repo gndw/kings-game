@@ -73,8 +73,11 @@ pub fn update(
     calendar: Res<Calendar>,
     date: Res<Date>,
 ) {
-    let army_lines: Vec<String> = registry
-        .get(&game.ctx.player_character_id)
+    let army_lines: Vec<String> = game
+        .ctx
+        .player_character_id
+        .as_deref()
+        .and_then(|id| registry.get(id))
         .and_then(|player_e| player_chars.get(player_e).ok())
         .map(|character_leads| {
             let mut out = Vec::new();

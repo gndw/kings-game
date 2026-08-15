@@ -53,5 +53,47 @@
 
         // ----- Cross-house marriage: Tyrell × Arryn -----
         (id: "fam-mar-willas-aemma",    type: Marriage, husband_character_id: "char-willas", wife_character_id: "char-aemma"),
+
+        // ----- House Hightower: dead ancestors & dead descendant -----
+        // Bors's marriage to Dalla produced Leyton. Leyton × Alerie produced the
+        // late Brynden (dead in his teens), in addition to the four living children above.
+        (id: "fam-mar-bors-dalla",      type: Marriage, husband_character_id: "char-bors", wife_character_id: "char-dalla"),
+        (id: "fam-leyton-anc",         type: Family, child_character_id: "char-leyton",     father_character_id: "char-bors",     mother_character_id: "char-dalla"),
+        (id: "fam-brynden-hi",         type: Family, child_character_id: "char-brynden-hi", father_character_id: "char-leyton",   mother_character_id: "char-alerie"),
+
+        // ----- House Lannister: dead ancestors & dead descendant -----
+        // Tytos × Jeyne produced Tywin. Tywin × Joanna produced the late
+        // Steffon (dead of fever), in addition to the twins and Tyrion above.
+        (id: "fam-mar-tytos-jeyne",     type: Marriage, husband_character_id: "char-tytos", wife_character_id: "char-jeyne-ln"),
+        (id: "fam-tywin-anc",          type: Family, child_character_id: "char-tywin",     father_character_id: "char-tytos",    mother_character_id: "char-jeyne-ln"),
+        (id: "fam-steffon",            type: Family, child_character_id: "char-steffon",   father_character_id: "char-tywin",    mother_character_id: "char-joanna"),
+
+        // ----- House Arryn: dead ancestors & dead descendant -----
+        // Isembard × Alyssa produced Jon. Jon × Jeyne produced the late
+        // Artys (killed in a hunting accident), in addition to the three living children above.
+        (id: "fam-mar-isembard-alyssa", type: Marriage, husband_character_id: "char-isembard", wife_character_id: "char-alyssa"),
+        (id: "fam-jon-anc",            type: Family, child_character_id: "char-jon",       father_character_id: "char-isembard", mother_character_id: "char-alyssa"),
+        (id: "fam-artys",              type: Family, child_character_id: "char-artys",     father_character_id: "char-jon",      mother_character_id: "char-jeyne"),
+
+        // ----- House Tully: dead ancestors & dead descendant -----
+        // Edmyn × Lysbeth produced Hoster. Hoster × Minisa produced the late
+        // Leo (drowned as a boy), in addition to Edmure, Catelyn, and Lysara above.
+        (id: "fam-mar-edmyn-lysbeth",   type: Marriage, husband_character_id: "char-edmyn",   wife_character_id: "char-lysbeth"),
+        (id: "fam-hoster-anc",         type: Family, child_character_id: "char-hoster",    father_character_id: "char-edmyn",    mother_character_id: "char-lysbeth"),
+        (id: "fam-leo",                type: Family, child_character_id: "char-leo",       father_character_id: "char-hoster",   mother_character_id: "char-minisa"),
+
+        // ----- House Tyrell: dead ancestors & dead descendant -----
+        // Moryn × Alannys produced Luthor. Luthor × Olenna produced the late
+        // Quentyn (killed in a tourney melee), in addition to Mace, Willas, Garlan, and Margaery above.
+        (id: "fam-mar-moryn-alannys",   type: Marriage, husband_character_id: "char-moryn",   wife_character_id: "char-alannys"),
+        (id: "fam-luthor-anc",         type: Family, child_character_id: "char-luthor",    father_character_id: "char-moryn",    mother_character_id: "char-alannys"),
+        (id: "fam-quentyn-ty",         type: Family, child_character_id: "char-quentyn-ty", father_character_id: "char-luthor",  mother_character_id: "char-olenna"),
+
+        // ----- House Martell: dead ancestors & dead descendant -----
+        // Qorell × Meria produced Doran. Doran × Mellario produced the late
+        // Olyvar (ambushed in the Boneway), in addition to Arianne, Quentyn, and Trystane above.
+        (id: "fam-mar-qorell-meria",    type: Marriage, husband_character_id: "char-qorell",  wife_character_id: "char-meria"),
+        (id: "fam-doran-anc",          type: Family, child_character_id: "char-doran",     father_character_id: "char-qorell",   mother_character_id: "char-meria"),
+        (id: "fam-olyvar",             type: Family, child_character_id: "char-olyvar",    father_character_id: "char-doran",    mother_character_id: "char-mellario"),
     ],
 )

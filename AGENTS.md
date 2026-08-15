@@ -16,6 +16,13 @@ is worse than none.
 `docs/decision.md` holds the standing decisions for this project. Read it
 before designing anything; append a new section when a decision is made.
 
+## Tests
+
+Don't add tests by default — no `#[test]` blocks, no `tests/` scaffolding,
+no testing-only deps. The user iterates fast and CI handles runs; bevy cold
+compile makes a one-off smoke test uneconomical. Write tests only when the
+user explicitly asks for them.
+
 ## Building and running
 
 You may run `cargo check` after making changes to confirm syntax and types

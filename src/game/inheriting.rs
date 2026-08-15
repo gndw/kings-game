@@ -7,7 +7,7 @@
 //! The heir ladder (alive-only with fall-through):
 //!   1. Eldest alive **son** — earliest `dob` among the dead's
 //!      [`CharacterHasFatheredChildren`] that are also [`CharacterIsAlive`] +
-//!      [`CharacterSex::Male`].
+//!      [`CharacterGender::Male`].
 //!   2. Eldest alive **male sibling** — anyone sharing father or mother
 //!      (deduped), alive + male, earliest `dob`.
 //!   3. Eldest alive **male of the house** — earliest `dob` among all alive +
@@ -32,9 +32,9 @@
 
 use crate::app::Game;
 use crate::ecs::{
-    Character, CharacterDateOfBirth, CharacterGold, CharacterHasFather, CharacterHasFatheredChildren,
-    CharacterHasMother, CharacterIsAlive, CharacterLeads, CharacterOfHouse, CharacterSex,
-    KingdomLedBy, KingdomLeaderless, StringId,
+    Character, CharacterDateOfBirth, CharacterGender, CharacterGold, CharacterHasFather,
+    CharacterHasFatheredChildren, CharacterHasMother, CharacterIsAlive, CharacterLeads,
+    CharacterOfHouse, KingdomLedBy, KingdomLeaderless, StringId,
 };
 use crate::events::{OnCharacterDied, OnKingdomSucceeded, SuccessionRelation};
 use crate::resources::date::Date;
@@ -49,7 +49,7 @@ pub fn on_character_died(
         (
             Entity,
             &CharacterOfHouse,
-            &CharacterSex,
+            &CharacterGender,
             &CharacterIsAlive,
             &CharacterDateOfBirth,
         ),
@@ -150,7 +150,7 @@ fn pick_heir(
         (
             Entity,
             &CharacterOfHouse,
-            &CharacterSex,
+            &CharacterGender,
             &CharacterIsAlive,
             &CharacterDateOfBirth,
         ),
@@ -165,8 +165,8 @@ fn pick_heir(
         if candidate == dead {
             return None;
         }
-        let (_, coh, sex, alive, dob) = characters.get(candidate).ok()?;
-        if !alive.0 || !matches!(sex, CharacterSex::Male) {
+        let (_, coh, gender, alive, dob) = characters.get(candidate).ok()?;
+        if !alive.0 || !matches!(gender, CharacterGender::Male) {
             return None;
         }
         if let Some(h) = house {
@@ -226,11 +226,11 @@ fn pick_heir(
         let dead_house = coh.0;
         let mut cands: Vec<_> = characters
             .iter()
-            .filter_map(|(e, coh2, sex, alive, dob)| {
+            .filter_map(|(e, coh2, gender, alive, dob)| {
                 if e == dead || coh2.0 != dead_house {
                     return None;
                 }
-                if !alive.0 || !matches!(sex, CharacterSex::Male) {
+                if !alive.0 || !matches!(gender, CharacterGender::Male) {
                     return None;
                 }
                 Some((e, dob.0))

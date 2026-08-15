@@ -2,7 +2,7 @@
 //! kind, loaded two-phase (definitions merge, then state overlays), then passed
 //! whole into `ecs::populate`.
 
-use crate::ecs::{BuildingStatus, CharacterSex, CourtierType};
+use crate::ecs::{BuildingStatus, CharacterGender, CourtierType};
 use crate::resources::border::Border;
 use crate::resources::buildings::{BuildingDef, BuildingDefs};
 use crate::resources::calendar::Calendar;
@@ -198,7 +198,7 @@ pub struct Character {
     pub next_death_event_date: Date,
     /// Definition: `"m"` / `"f"`. State files omit it (never changes in play).
     #[serde(default)]
-    pub sex: CharacterSex,
+    pub gender: CharacterGender,
 }
 
 /// `bool::default()` is `false`; alive is the natural starting state.

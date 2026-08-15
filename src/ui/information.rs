@@ -4,8 +4,9 @@
 use super::{FONT, TITLE, spawn_span};
 use crate::app::Game;
 use crate::ecs::{
-    CharacterDateOfBirth, CharacterHasFather, CharacterHasHusband, CharacterHasMother, CharacterName,
-    CharacterOfHouse, CharacterSex, HouseName, KingdomHold, KingdomLedBy, LandName, Registry,
+    CharacterDateOfBirth, CharacterGender, CharacterHasFather, CharacterHasHusband,
+    CharacterHasMother, CharacterName, CharacterOfHouse, HouseName, KingdomHold, KingdomLedBy,
+    LandName, Registry,
 };
 use crate::helper::age_helper::age;
 use crate::helper::opinion_helper::{opinion_color, opinion_of};
@@ -53,7 +54,7 @@ pub fn update(
     mut commands: Commands,
     lands: Query<&LandName>,
     kingdoms: Query<(&KingdomHold, Option<&KingdomLedBy>)>,
-    chars: Query<(&CharacterName, &CharacterDateOfBirth, &CharacterSex)>,
+    chars: Query<(&CharacterName, &CharacterDateOfBirth, &CharacterGender)>,
     character_of_house: Query<&CharacterOfHouse>,
     houses: Query<&HouseName>,
     opinion_fathers: Query<&CharacterHasFather>,
@@ -82,7 +83,7 @@ pub fn update(
         .find(|(kingdom_hold, _)| kingdom_hold.0 == land_e)
         .and_then(|(_, kingdom_led_by)| kingdom_led_by.copied())
         .and_then(|kingdom_led_by| {
-            let (character_name, character_dob, character_sex) =
+            let (character_name, character_dob, character_gender) =
                 chars.get(kingdom_led_by.0).ok()?;
             let house = character_of_house
                 .get(kingdom_led_by.0)
@@ -91,16 +92,16 @@ pub fn update(
                 .map(|hn| hn.0.clone())
                 .unwrap_or_default();
             let character_age = age(&character_dob.0, &date, &calendar);
-            let sex_marker = match character_sex {
-                CharacterSex::Male => "m",
-                CharacterSex::Female => "f",
+            let gender_marker = match character_gender {
+                CharacterGender::Male => "m",
+                CharacterGender::Female => "f",
             };
             Some((
                 kingdom_led_by.0,
                 character_name.0.clone(),
                 house,
                 character_age,
-                sex_marker,
+                gender_marker,
             ))
         });
 
@@ -109,10 +110,10 @@ pub fn update(
     commands.entity(info_e).despawn_children();
     commands.entity(info_e).with_children(|p| {
         spawn_span(p, format!("name:{}\n", land_name.0), Color::WHITE);
-        if let Some((ruler_e, ruler_name, house, age, sex_marker)) = ruler {
+        if let Some((ruler_e, ruler_name, house, age, gender_marker)) = ruler {
             spawn_span(p, "ruler: ", Color::WHITE);
             spawn_span(p, format!("{} {}", ruler_name, house), Color::WHITE);
-            spawn_span(p, format!(" [{}]", sex_marker), Color::WHITE);
+            spawn_span(p, format!(" [{}]", gender_marker), Color::WHITE);
             spawn_span(p, format!(" ({})", age), Color::WHITE);
             if let Some(player) = player_e.filter(|p| *p != ruler_e) {
                 let op = opinion_of(

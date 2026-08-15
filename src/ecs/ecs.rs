@@ -75,7 +75,7 @@ pub fn populate(world: &mut World, content: Content) {
                 CharacterGold(c.gold),
                 CharacterLevy(c.levy),
                 CharacterGoldYield(c.gold_yield),
-                c.sex,
+                c.gender,
             ));
             if let Some(he) = house_e {
                 ec.insert(CharacterOfHouse(he));

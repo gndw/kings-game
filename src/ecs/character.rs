@@ -11,9 +11,9 @@ use serde::Deserialize;
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Character;
 
-/// A character's sex. Authored as `"m"` / `"f"`.
+/// A character's gender. Authored as `"m"` / `"f"`.
 #[derive(Component, Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
-pub enum CharacterSex {
+pub enum CharacterGender {
     #[default]
     #[serde(rename = "m")]
     Male,

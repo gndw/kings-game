@@ -249,6 +249,6 @@
     // this every time an event resolves or the player forfeits, so it's the
     // single source of truth for "when does the next popup trigger?".
     event_deck: (
-        next_due_date: (year: 1066, month: 4, day: 1),
+        next_due_date: (year: 1066, month: 2, day: 1),
     ),
 )

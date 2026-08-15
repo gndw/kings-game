@@ -38,33 +38,18 @@ pub struct EventDeck {
     /// The in-flight event (`Some` while the popup is up). `None` between
     /// events; the tick fires only when this is `None`.
     pub pending: Option<EventInstance>,
-    /// `false` until `on_day` runs the first time and seeds `next_due_date`.
-    /// State-loaded games set this `true` (the state file provides a real
-    /// `next_due_date`); year-0 sentinels leave it `false` so the random
-    /// first-offset draw still fires for backwards compatibility with state
-    /// files that predate the event system.
-    pub initialized: bool,
 }
 
-/// Build the initial `EventDeck` from the state's `EventDeckState`. Year 0
-/// (= `Date::default()`) is treated as "no state-supplied date", leaving
-/// `initialized = false` and the first-run RNG fallback in place; any
-/// other date marks the deck as initialised and skips the random first
-/// offset. Called by `main.rs` after `mods::load`.
+/// Build the initial `EventDeck` from the state's `EventDeckState`. Called by
+/// `main.rs` after `mods::load`.
 pub fn deck_from_state(state: &EventDeckState) -> EventDeck {
     let next_due_date = state.next_due_date;
-    let initialized = next_due_date.year > 0;
     EventDeck {
         next_due_date,
         pending: None,
-        initialized,
     }
 }
 
-/// Initial cooldown before the first event ever fires (days of in-game time).
-/// 30–90 days ≈ 1–3 months in. Drawn from `SimRng` for replay determinism.
-const FIRST_EVENT_OFFSET_MIN: u32 = 30;
-const FIRST_EVENT_OFFSET_MAX: u32 = 90;
 /// Cooldown between events the player resolves or forfeits. 90–180 days ≈
 /// 3–6 in-game months.
 const NEXT_EVENT_OFFSET_MIN: u32 = 90;
@@ -85,17 +70,6 @@ pub fn on_day(world: &mut World) {
     let today = *world.resource::<Date>();
     let calendar = world.resource::<Calendar>().clone();
 
-    // First run: pick the initial offset; from then on `next_due_date` is
-    // maintained by the resolver. Compute the RNG draw separately so the
-    // mutable borrow on `EventDeck` doesn't overlap with the rng lock.
-    let initialized = world.resource::<EventDeck>().initialized;
-    if !initialized {
-        let offset = rng_u32_in_range(world, FIRST_EVENT_OFFSET_MIN, FIRST_EVENT_OFFSET_MAX);
-        let mut deck = world.resource_mut::<EventDeck>();
-        deck.next_due_date = today.after_days(offset, &calendar);
-        deck.initialized = true;
-        return;
-    }
     if world.resource::<EventDeck>().pending.is_some() {
         return;
     }

@@ -303,10 +303,8 @@ pub struct Memory {
 #[derive(Debug, Default, Deserialize, Clone, Copy)]
 #[serde(deny_unknown_fields)]
 pub struct EventDeckState {
-    /// Day the trigger tick should next consider firing. State files default
-    /// this to `Date::default()` (year 0); `main.rs` detects a missing
-    /// state-supplied date via `year == 0` and falls back to the RNG
-    /// first-offset draw.
+    /// Day the trigger tick should next consider firing. State files must
+    /// provide this date.
     #[serde(default)]
     pub next_due_date: Date,
 }

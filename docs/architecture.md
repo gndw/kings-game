@@ -99,8 +99,8 @@ off one place. `Kingdom` is state-only.
 - **`Registry`**, **`Border`**, **`Calendar`**, **`Date`**, **`BuildingDefs`**, **`Chronicles`**, **`EventDeck`** — seeded in `main`; the latter is read-only for
   game-logic code (events observed in `chronicles.rs` write it).
   `EventDeck` is the runtime state of the event system: the next-due
-  date, the in-flight event instance, and the first-run flag.
-  `Content::event_deck::next_due_date` (state-loaded via `merge_state`)
+  date and the in-flight event instance. The
+  `Content::event_deck::next_due_date` value (state-loaded via `merge_state`)
   seeds the first popup's trigger day; `presenting_event::on_day` rewrites
   it after each resolve or forfeit.
 - **`CommandMenu`**, **`CommandRegistry`/`CommandContext`**, **`EventPopupUiContext`** — UI state

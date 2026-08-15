@@ -28,9 +28,8 @@ pub struct StateFile {
     pub memories: Vec<Memory>,
     /// Event popup state — read at startup, governs when the first popup
     /// fires. Plain struct (not Option) so state-file RON can use the
-    /// `event_deck: (next_due_date: ...)` shorthand; `#[serde(default)]`
-    /// makes the field optional (year 0 = "no state-supplied date" and the
-    /// RNG first-offset fallback in `presenting_event::on_day` runs).
+    /// `event_deck: (next_due_date: ...)` shorthand. State files must
+    /// provide the date.
     #[serde(default)]
     pub event_deck: EventDeckState,
 }

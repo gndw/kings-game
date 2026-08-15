@@ -102,7 +102,7 @@ pub fn update(
             spawn_span(p, "ruler:", Color::WHITE);
             spawn_span(p, ruler_name, Color::WHITE);
             spawn_span(p, format!(" of {} ({})", house, age), Color::WHITE);
-            if let Some(player) = player_e {
+            if let Some(player) = player_e.filter(|p| *p != ruler_e) {
                 let op = opinion_of(
                     ruler_e,
                     player,

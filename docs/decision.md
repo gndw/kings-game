@@ -94,28 +94,6 @@ command's steps the same way; the roster is a `CommandRegistry` resource.
   gets. `input` recomputes the current list into the resource; `update`
   reads it.
 
-## Camera is a boolean with a tween
-
-Two views (whole map vs zoomed-on-selection) toggled by `Z`. Plain `bool`
-on `Game`, not a state machine. `update_camera` reads the flag and the
-current selection every PostUpdate frame and rewrites the camera's
-projection + transform in place.
-
-- **One frame, one write, every frame.** Recomputing a polygon's bbox is
-  trivial; diffing `(mode, selection)` would be premature optimisation.
-  Selection-following comes for free.
-- **Fit via `AutoMin`**, not by hand — same projection the default view
-  uses. Keeps the aspect-ratio guarantees and the 30%-zoom-in so the
-  transition doesn't pop.
-- **Smoothstep tween** between destinations. Two extra components on the
-  camera entity (`CameraView` = current rendered view, `CameraTween {
-  from, to, t }`). Each frame: (1) compute destination; (2) if it moved,
-  restart the tween from the current rendered view; (3) advance `t` with
-  a smoothstep ease; (4) write the lerped projection + transform. A tween
-  settles exactly to the destination (`t = 1` ⇒ `view = to`), which keeps
-  on-screen state clean for any later code that reads it. Exponential
-  smoothing approaches asymptotically and would need a snap threshold.
-
 ## Relationship components live in the file of their main component
 
 Every relationship component — both sources and reverses — is placed in
@@ -227,14 +205,6 @@ code touches.
   scheduled-tick modules; forcing it elsewhere would mis-name code
   that isn't a running system.
 
-## Wiki navigation is a left-hand tree
-
-The wiki uses a left navigation tree and a right details panel. Arrow up/down
-moves only through visible nodes; arrow right expands the selected node and
-arrow left collapses it. Selection owns the details shown in `WikiBody`, so
-adding another wiki item means adding its tree node and renderer, not a new
-navigation state system. `Houses` is the only root item today.
-
 ## Events use `On<PastTense>` names
 
 Every event in `src/events.rs` follows the same shape: `On<Entity><PastTense>`
@@ -250,76 +220,3 @@ the same `On<PastTense>` shape. `OnEventResolved.choice: Option<usize>`
 encodes both the picked-choice path (`Some(idx)`) and the forfeit path
 (`None` for `Esc`) — the resolver interprets `None` as "no effect, just
 clear pending and reschedule".
-
-## Event popup is an OnDay-triggered modal with weighted draw
-
-The event system runs one tick on [`OnDay`](crate::schedules::OnDay). When
-the world date passes `EventDeck::next_due_date`, the tick draws one event
-id via the seeded `SimRng` (weights from the `EventDef::weight` field), freezes
-the resolved `attendee` Entity onto `EventDeck::pending`, flips
-`Game::paused = true`, and triggers `OnEventPresented`. The UI's observer
-shows the popup and flips the input layer; the player navigates choices and
-fires `OnEventResolved`. The resolver (also an observer, registered *after*
-the chronicle observer) consumes `pending`, runs the effect, and schedules
-the next due date 90–180 days out.
-
-- **Why `OnDay` and not a separate timer:** the game already has a sim tick;
-  piggybacking means no new `Time` resource, every draw routes through one
-  rng counter, and the player pausing the sim already pauses events.
-- **Why hard-coded events for now:** three `EventDef`s in a `&'static` slice
-  in `src/game/event_data.rs`. RON-driven authoring is one
-  `mods::load_event_definitions` walk + a load pass away — the `EventDef`
-  struct is the serialisation target. ponytail: lift to RON when the third
-  modder asks, not before.
-- **Why first-event date lives in state, not code:** the state overlay
-  (`Content::event_deck::next_due_date`) seeds the trigger day. A save
-  reload restores the same date; a mod that wants a different cadence
-  ships its own `start.state.ron` (or a definition file with an
-  `event_deck:` section). Year 0 is the sentinel for "no state-supplied
-  date" and falls back to the original RNG first-offset draw, so a state
-  file that predates the event system keeps working. ponytail: when saves
-  become a thing, the resolver writes `Content::event_deck` back out on
-  every resolve — for now the field is read-once at startup.
-- **Why `attendee` is frozen at present time:** so the choice effect and the
-  narration always agree. Decoupling "pick" from "render" invited a class of
-  bugs where the popup showed an envoy from House A while the effect paid
-  gold to House B (because an `OnDay` system between present and resolve
-  flipped a leadership relationship). The freeze at present is the contract.
-- **Why pause on present:** the player cannot zoom past the popup. The
-  `Game::paused` flip is the same flag the root-layer `Space` handler
-  toggles — single concept.
-- **Why input layer, not a boolean:** an `InputLayer` variant follows the
-  existing pattern (command palette, error popup, wiki). The
-  `event_popup_layer_active` run-if gates `update`/`input` on `InputLayer::Event`
-  so the popup's keystrokes are out of the root layer's reach.
-- **Why forfeit reuses the same event:** `OnEventResolved { choice: None }`
-  is the same surface as the picked path, and `resolve_choice(None)` skips
-  the effect while clearing pending + scheduling the next event. One path
-  to test; the resolver + UI observer each handle both flavors.
-- **Why the chronicle observer runs before the resolver:** it reads
-  `EventDeck::pending` to pull the event id and attendee name. The resolver
-  calls `deck.pending.take()` as its first step, so ordering matters.
-  Registration order in `main.rs` determines observer order under Bevy 0.15;
-  document the ordering or rename to make it self-evident.
-
-## Transfer-with-memory helper lives in `commands::core`
-
-`commands::core::transfer_with_gold_memory` (and the related
-`alive_characters_excluding`) are the cross-cutting helpers used by both
-`commands::gift_gold::gift` and `game::presenting_event::resolve_choice`.
-The two call sites grew independently; the dedup was inevitable after the
-second. The helper centralises the three-phase borrow dance (snapshot →
-mutate `CharacterGold` → spawn the `Memory` entity + fire `OnGoldGifted`)
-that mirrors the patterns already documented on the existing `gift`
-function.
-
-- **Why here, not in `src/helper/`:** the helper borrows the
-  `MemoryKind` + `MemoryOfCharacter` + `MemoryTowardCharacter` types
-  already imported in `core.rs`, and the `gift` site is its primary user.
-  A `src/helper/gift_helper.rs` module is the right move if a third
-  caller appears (a tribute command, say) or if the helper grows past
-  gold+memory.
-- **Why not fold it into `gift_gold`:** the event system's
-  `resolve_choice` runs in a different layer and needs the same primitive.
-  Putting it in `gift_gold` would force the event module to import the
-  command module, which inverts the layer direction.

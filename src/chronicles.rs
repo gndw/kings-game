@@ -17,8 +17,8 @@ use crate::ecs::war::{WarCasusBelliType, WarDemandType};
 use crate::ecs::{Registry, StringId};
 use crate::events::{
     BuildingUpdateKind, OnArmyArrived, OnArmyDismiss, OnArmyRaised, OnBuildingUpdated,
-    OnCharacterDied, OnDemandEnforced, OnKingdomSucceeded, OnMarchingOrdered, OnSiegeLaid,
-    OnSiegeWon, OnWarDeclared, OnWarEnded,
+    OnCharacterDied, OnDemandEnforced, OnGoldGifted, OnKingdomSucceeded, OnMarchingOrdered,
+    OnSiegeLaid, OnSiegeWon, OnWarDeclared, OnWarEnded,
 };
 use crate::resources::buildings::BuildingDefs;
 use crate::resources::chronicle::Chronicles;
@@ -422,4 +422,29 @@ fn building_benefit(def_id: &str) -> &'static str {
         "mine" => "ore feeding the forges",
         _ => "work beginning",
     }
+}
+
+pub fn on_gold_gifted(
+    trigger: On<OnGoldGifted>,
+    mut chronicles: ResMut<Chronicles>,
+    character_names: Query<&CharacterName>,
+    player: PlayerCtx,
+) {
+    let event = trigger.event();
+    let from_name = character_names
+        .get(event.from)
+        .map(|n| n.0.clone())
+        .unwrap_or_else(|_| "someone".to_string());
+    let to_name = character_names
+        .get(event.to)
+        .map(|n| n.0.clone())
+        .unwrap_or_else(|_| "someone".to_string());
+    let actor = player.short();
+    let line = if event.from == player.entity().unwrap_or(event.from) {
+        // Player-driven gift — speak as "You".
+        format!("{actor} gifted {} gold to {to_name}.", event.amount)
+    } else {
+        format!("{from_name} gifted {} gold to {to_name}.", event.amount)
+    };
+    chronicles.0.push(line);
 }

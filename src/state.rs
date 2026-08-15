@@ -5,7 +5,7 @@
 //! fields onto the matching content entries and leaves every definition field
 //! alone. `reconcile` then repairs every reference that no longer resolves.
 
-use crate::content::{Building, Character, Content, Courtier, Kingdom};
+use crate::content::{Building, Character, Content, Courtier, Kingdom, Memory};
 use serde::Deserialize;
 
 /// The deserialization target for a `*.state.ron` file. State entries reuse
@@ -24,6 +24,8 @@ pub struct StateFile {
     pub characters: Vec<Character>,
     #[serde(default)]
     pub courtiers: Vec<Courtier>,
+    #[serde(default)]
+    pub memories: Vec<Memory>,
 }
 
 impl Content {
@@ -49,6 +51,9 @@ impl Content {
         }
         for c in file.courtiers {
             self.courtiers.insert(c.id.clone(), c);
+        }
+        for m in file.memories {
+            self.memories.insert(m.id.clone(), m);
         }
     }
 }
@@ -105,6 +110,19 @@ pub fn reconcile(content: &mut Content) -> Vec<String> {
         {
             notes.push(format!(
                 "dropped courtier `{id}`: unknown kingdom or character"
+            ));
+            false
+        } else {
+            true
+        }
+    });
+
+    content.memories.retain(|id, m| {
+        if !known_chars.contains(m.character_id.as_str())
+            || !known_chars.contains(m.toward_character_id.as_str())
+        {
+            notes.push(format!(
+                "dropped memory `{id}`: unknown character or toward_character"
             ));
             false
         } else {

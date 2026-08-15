@@ -18,6 +18,7 @@
 //! - [`declare_war`] — declare war on another kingdom under a casus belli.
 //! - [`lay_siege`] — lay siege to a land with one of the player's armies.
 //! - [`enforce_demands`] — resolve one demand on a war the player is fighting.
+//! - [`gift_gold`] — send some of the player's treasury to another character.
 
 pub mod construct_building;
 pub mod core;
@@ -25,6 +26,7 @@ pub mod declare_war;
 pub mod destroy_building;
 pub mod dismiss_army;
 pub mod enforce_demands;
+pub mod gift_gold;
 pub mod lay_siege;
 pub mod marching;
 pub mod raise_army;

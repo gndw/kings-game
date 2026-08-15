@@ -138,3 +138,14 @@ impl SuccessionRelation {
         }
     }
 }
+
+/// Fired by the `gift_gold` command after the player's gold has moved to the
+/// target and the recipient's memory of the gift has been spawned. Sole
+/// publisher: `commands::gift_gold::execute`. The chronicle observer writes
+/// the line; the gift itself is handled synchronously inside `execute`.
+#[derive(Event)]
+pub struct OnGoldGifted {
+    pub from: Entity,
+    pub to: Entity,
+    pub amount: i64,
+}

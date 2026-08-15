@@ -149,8 +149,8 @@ digit speed, `Z` zoom); yields to the palette while it's open.
 `ui::map::update_input` (exclusive) — arrow keys move the selection,
 yields to the palette. `ui::command_menu::input` (exclusive) — `c`
 opens the palette, drives the active command's steps. `ui::wiki::input`
-(exclusive) — `w` toggles the wiki; arrow keys navigate the house list,
-`Enter` drills into a house's family tree, `Esc` backs out. `ui::error::input`
+(exclusive) — `w` toggles the wiki; arrow keys navigate the visible wiki tree
+and expand or collapse the Houses node, `Esc` closes it. `ui::error::input`
 (Update) — `esc` closes the error popup, gated to the popup layer.
 
 ## Chronicle generation
@@ -181,9 +181,11 @@ Bevy flex tree + `Gizmos` line drawing; no asset sprites.
   `GlobalZIndex` above the panels. `CommandMenu` resource holds
   open/active-command/step/cursor + the cached list + search query.
   Command-agnostic — drives any registered command's steps.
-- **Wiki window** — a `W`-toggled modal panel (`ui::wiki`); `Esc`
-  closes it. An `InputLayer::Wiki` gates root-layer keys while it's
-  open.
+- **Wiki window** — a `W`-toggled modal panel (`ui::wiki`) split 30/70:
+  the left tree owns wiki navigation (`Houses` is currently the only root),
+  while the right `WikiBody` shows the selected item (currently a house and
+  its members). `Esc` closes it, and an `InputLayer::Wiki` gates root-layer
+  keys while it's open.
 
 ## Key invariants
 

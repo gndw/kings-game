@@ -226,3 +226,11 @@ code touches.
   (entities, commands, resources). The gerund rule is a fit for
   scheduled-tick modules; forcing it elsewhere would mis-name code
   that isn't a running system.
+
+## Wiki navigation is a left-hand tree
+
+The wiki uses a left navigation tree and a right details panel. Arrow up/down
+moves only through visible nodes; arrow right expands the selected node and
+arrow left collapses it. Selection owns the details shown in `WikiBody`, so
+adding another wiki item means adding its tree node and renderer, not a new
+navigation state system. `Houses` is the only root item today.

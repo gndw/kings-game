@@ -15,4 +15,7 @@ pub enum InputLayer {
     CommandMenu = 2,
     ErrorPopup = 3,
     Wiki = 4,
+    /// The event modal is up. Up/down navigate choices; Enter resolves;
+    /// Esc forfeits. The root layer is gated off while this is active.
+    Event = 5,
 }

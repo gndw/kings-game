@@ -17,9 +17,11 @@ use crate::ecs::war::{WarCasusBelliType, WarDemandType};
 use crate::ecs::{Registry, StringId};
 use crate::events::{
     BuildingUpdateKind, OnArmyArrived, OnArmyDismiss, OnArmyRaised, OnBuildingUpdated,
-    OnCharacterDied, OnDemandEnforced, OnGoldGifted, OnKingdomSucceeded, OnMarchingOrdered,
-    OnSiegeLaid, OnSiegeWon, OnWarDeclared, OnWarEnded,
+    OnCharacterDied, OnDemandEnforced, OnEventResolved, OnGoldGifted, OnKingdomSucceeded,
+    OnMarchingOrdered, OnSiegeLaid, OnSiegeWon, OnWarDeclared, OnWarEnded,
 };
+use crate::game::event_data::{ChoiceEffect, EVENT_DEFS};
+use crate::game::presenting_event::EventDeck;
 use crate::resources::buildings::BuildingDefs;
 use crate::resources::chronicle::Chronicles;
 use bevy::ecs::system::SystemParam;
@@ -445,6 +447,53 @@ pub fn on_gold_gifted(
         format!("{actor} gifted {} gold to {to_name}.", event.amount)
     } else {
         format!("{from_name} gifted {} gold to {to_name}.", event.amount)
+    };
+    chronicles.0.push(line);
+}
+
+/// Event-resolution chronicle. Runs before
+/// [`crate::game::presenting_event::on_event_resolved`] (registration order
+/// in `main.rs`) so it still sees `pending = Some` before the resolver
+/// clears it. Writes one line for `None`-effect choices and forfeits;
+/// gold-moving choices are already chronicled by [`on_gold_gifted`] (the
+/// event resolver delegates to `transfer_with_gold_memory`, which fires
+/// `OnGoldGifted`).
+pub fn on_event_resolved(
+    trigger: On<OnEventResolved>,
+    deck: Res<EventDeck>,
+    mut chronicles: ResMut<Chronicles>,
+    character_names: Query<&CharacterName>,
+) {
+    let event = trigger.event();
+    let Some(pending) = deck.pending.as_ref() else {
+        return;
+    };
+    let def = &EVENT_DEFS[pending.def_index];
+    let attendee_name = pending
+        .attendee
+        .and_then(|e| character_names.get(e).ok())
+        .map(|n| n.0.clone())
+        .unwrap_or_else(|| "a stranger".to_string());
+
+    let line = match event.choice {
+        None => format!("You dismissed {attendee_name} without a word."),
+        Some(idx) => match def.choices.get(idx).map(|c| c.effect) {
+            Some(ChoiceEffect::None) => match def.id {
+                "event:wayfaring_stranger" => format!(
+                    "You turned {attendee_name} away at the gates."
+                ),
+                "event:envoy_house" => {
+                    "The envoy returned to {attendee_name}'s court without an answer."
+                        .replace("{attendee_name}", &attendee_name)
+                }
+                "event:foreign_knight" => format!(
+                    "You turned {attendee_name} away, and they rode off into the dusk."
+                ),
+                _ => format!("You declined {attendee_name}."),
+            },
+            // Gold-moving choices: chronicled by `on_gold_gifted`.
+            _ => return,
+        },
     };
     chronicles.0.push(line);
 }

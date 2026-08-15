@@ -96,11 +96,16 @@ off one place. `Kingdom` is state-only.
   `Arc<Mutex<>>`, `player_character_id`, `selected_land_id`.
 - **`Game`** — `Resource` wrapping `Ctx`, plus `paused`, `speed_idx`,
   `zoomed`. `Game::running()` gates the tick.
-- **`Registry`**, **`Border`**, **`Calendar`**, **`Date`**, **`BuildingDefs`**,
-  **`Chronicles`** — seeded in `main`; the latter is read-only for
+- **`Registry`**, **`Border`**, **`Calendar`**, **`Date`**, **`BuildingDefs`**, **`Chronicles`**, **`EventDeck`** — seeded in `main`; the latter is read-only for
   game-logic code (events observed in `chronicles.rs` write it).
-- **`CommandMenu`**, **`CommandRegistry`/`CommandContext`** — UI state
-  for the palette and the roster of registered commands; seeded in `main`.
+  `EventDeck` is the runtime state of the event system: the next-due
+  date, the in-flight event instance, and the first-run flag.
+  `Content::event_deck::next_due_date` (state-loaded via `merge_state`)
+  seeds the first popup's trigger day; `presenting_event::on_day` rewrites
+  it after each resolve or forfeit.
+- **`CommandMenu`**, **`CommandRegistry`/`CommandContext`**, **`EventPopupUiContext`** — UI state
+  for the palette, the roster of registered commands, and the event
+  popup's cursor + spawned choice rows; seeded in `main`.
 
 ## The simulation loop
 
@@ -161,6 +166,22 @@ ids or game-mechanic words. Commands and ticks only `world.trigger(...)`;
 the module reads display names off the world and writes one line to
 `Chronicles`. Future mod-voicing is a one-file change.
 
+The event system (`OnEventPresented`, `OnEventResolved`) hands the
+chronicle observer the resolved event + choice; the module writes a
+line for `None`-effect choices and forfeits. Gold-moving choices are
+already chronicled by `on_gold_gifted` (the resolver delegates to
+`transfer_with_gold_memory`, which fires `OnGoldGifted`). Observer
+order is `chronicles` before `game::presenting_event::on_event_resolved`
+so the chronicle sees `pending = Some` before the resolver clears it.
+
+The event system (`OnEventPresented`, `OnEventResolved`) hands the
+chronicle observer the resolved event + choice; the module writes a
+line for `None`-effect choices and forfeits. Gold-moving choices are
+already chronicled by `on_gold_gifted` (the resolver delegates to
+`transfer_with_gold_memory`, which fires `OnGoldGifted`). Observer
+order is `chronicles` before `game::presenting_event::on_event_resolved`
+so the chronicle sees `pending = Some` before the resolver clears it.
+
 ## UI
 
 Bevy flex tree + `Gizmos` line drawing; no asset sprites.
@@ -181,6 +202,16 @@ Bevy flex tree + `Gizmos` line drawing; no asset sprites.
   `GlobalZIndex` above the panels. `CommandMenu` resource holds
   open/active-command/step/cursor + the cached list + search query.
   Command-agnostic — drives any registered command's steps.
+- **Event popup** — a modal that fires when the sim date passes
+  `EventDeck::next_due_date`. Mirrors the error popup's shell (backdrop
+  + window + title + body + choices list + hint), with a vertical
+  stack of choice rows in place of the single Esc-to-close body. New
+  `InputLayer::Event` gates root-layer input while it's up (same
+  pattern as the command palette + wiki). The `OnEventPresented`
+  observer in `ui::event_popup` shows the popup and flips the layer;
+  `OnEventResolved` (with `Some(idx)` chosen or `None` forfeit) hides
+  it. The resolver in `game::presenting_event::on_event_resolved`
+  runs the `ChoiceEffect` and schedules the next event 90–180 days out.
 - **Wiki window** — a `W`-toggled modal panel (`ui::wiki`) split 30/70:
   the left tree owns wiki navigation (`Houses` is currently the only root),
   while the right `WikiBody` shows the selected item (currently a house and
@@ -218,11 +249,12 @@ Bevy flex tree + `Gizmos` line drawing; no asset sprites.
 | `src/ecs/*.rs` | marker + components + relationships per entity kind |
 | `src/commands/` | the `Command` trait + `CommandRegistry` + one submodule per command |
 | `src/chronicles.rs` | chronicle generation — one observer per game event |
-| `src/game/` | per-day / per-month ticks — gerund-named systems (advancing_date, aging, besieging, building_releasing, constructing, court_releasing, inheriting, marching, paying_out, raising_army, replenishing_levy, yielding) |
+| `src/game/` | per-day / per-month ticks — gerund-named systems (advancing_date, aging, besieging, building_releasing, constructing, court_releasing, inheriting, marching, paying_out, presenting_event, raising_army, replenishing_levy, yielding) |
+| `src/game/event_data.rs` | authored `EventDef` slice + `ChoiceEffect` enum + `EventInstance` |
 | `src/schedules.rs` | `OnDay` + `OnMonth` labels |
 | `src/events.rs` | the event surface observers and triggers fire |
 | `src/rng.rs` | `SimRng` — seeded, draw-counted for exact replay |
-| `src/ui/` | flex layout, map/camera gizmos, panels, command palette, error popup |
+| `src/ui/` | flex layout, map/camera gizmos, panels, command palette, error popup, event popup |
 | `src/map/components/` | per-entity graphics (border, land, road, holding) |
 
 ## Related docs

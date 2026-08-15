@@ -13,6 +13,7 @@ pub mod chronicle;
 pub mod command_menu;
 pub mod courts;
 pub mod error;
+pub mod event_popup;
 pub mod flag;
 pub mod information;
 pub mod input;

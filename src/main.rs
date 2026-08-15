@@ -99,6 +99,8 @@ fn main() -> Result<()> {
         .insert_resource(InputLayer::default())
         .insert_resource(CommandMenuUiContext::default())
         .insert_resource(kings_game::ui::wiki::WikiUiContext::default())
+        .insert_resource(kings_game::ui::event_popup::EventPopupUiContext::default())
+        .insert_resource(kings_game::game::presenting_event::EventDeck::default())
         .insert_resource(Time::<Fixed>::from_hz(hz))
         .add_systems(
             Startup,
@@ -108,6 +110,7 @@ fn main() -> Result<()> {
                 ui::camera::startup,
                 ui::command_menu::startup,
                 ui::error::startup,
+                ui::event_popup::startup,
                 ui::wiki::startup,
                 commands::startup,
                 game::yielding::recompute_yields,
@@ -121,6 +124,9 @@ fn main() -> Result<()> {
         .add_observer(army_icon::on_army_raised)
         .add_observer(army_icon::on_army_dismiss)
         .add_observer(ui::error::on_error_occurred)
+        .add_observer(ui::event_popup::on_event_presented)
+        .add_observer(ui::event_popup::on_event_resolved)
+        .add_observer(chronicles::on_event_resolved)
         .add_observer(chronicles::on_construction_started)
         .add_observer(chronicles::on_constructed)
         .add_observer(chronicles::on_destroyed)
@@ -139,6 +145,7 @@ fn main() -> Result<()> {
         .add_observer(chronicles::on_kingdom_succeeded)
         .add_observer(game::inheriting::on_character_died)
         .add_observer(chronicles::on_gold_gifted)
+        .add_observer(game::presenting_event::on_event_resolved)
         .add_systems(
             Update,
             (
@@ -150,6 +157,10 @@ fn main() -> Result<()> {
                     .run_if(ui::wiki::wiki_layer_active),
                 ui::error::input
                     .run_if(ui::error::error_popup_layer_active),
+                ui::event_popup::input
+                    .run_if(ui::event_popup::input_layer_active),
+                ui::event_popup::update
+                    .run_if(ui::event_popup::event_popup_layer_active),
                 ui::courts::update,
                 ui::resource::update,
                 ui::information::update,
@@ -186,6 +197,7 @@ fn main() -> Result<()> {
                 game::besieging::on_day,
                 game::aging::on_day,
                 game::remembering::on_day,
+                game::presenting_event::on_day,
             ),
         )
         .add_systems(

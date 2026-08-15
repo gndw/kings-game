@@ -10,15 +10,15 @@
 //! a memory materialised between picker render and execute.
 
 use super::core::{
-    error, picker_row, set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR, STAT_DIM,
+    error, picker_row, set_row_selected, transfer_with_gold_memory, BaseCommand, NAME_COLOR,
+    STAT_COLOR, STAT_DIM,
 };
 use crate::app::Game;
 use crate::ecs::character::{
-    Character, CharacterGold, CharacterIsAlive, CharacterName, Memory, MemoryCreatedDate,
-    MemoryKind, MemoryOfCharacter, MemoryTowardCharacter, MemoryUntilDate,
+    Character, CharacterGold, CharacterIsAlive, CharacterName, Memory, MemoryKind,
+    MemoryOfCharacter,
 };
 use crate::ecs::{Registry, StringId};
-use crate::events::OnGoldGifted;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;
@@ -228,30 +228,5 @@ fn gift(world: &mut World, actor: &str, target_id: &str, amount: i64) {
         today.after_days((amount as u32) * 72, calendar)
     };
 
-    // Phase 2 (mutable). Transfer the gold.
-    if let Some(mut actor_g) = world.get_mut::<CharacterGold>(actor_e) {
-        actor_g.0 -= amount;
-    }
-    if let Some(mut target_g) = world.get_mut::<CharacterGold>(target_e) {
-        target_g.0 += amount;
-    }
-
-    // Phase 3 (post-borrows). Spawn the memory and trigger the event.
-    let today = *world.resource::<Date>();
-    let memory_id = format!("memory-{actor}-{target_id}-{today}");
-    let memory_e = world
-        .spawn((
-            StringId(memory_id),
-            Memory,
-            MemoryOfCharacter(target_e),
-            MemoryTowardCharacter(actor_e),
-            MemoryCreatedDate(today),
-            MemoryUntilDate(until),
-            MemoryKind::ReceivedGold { amount },
-        ))
-        .id();
-    let registry_id = format!("memory-{actor}-{target_id}-{today}");
-    world.resource_mut::<Registry>().by_id.insert(registry_id, memory_e);
-
-    world.trigger(OnGoldGifted { from: actor_e, to: target_e, amount });
+    transfer_with_gold_memory(world, actor_e, target_e, amount, until);
 }

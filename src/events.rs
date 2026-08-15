@@ -149,3 +149,21 @@ pub struct OnGoldGifted {
     pub to: Entity,
     pub amount: i64,
 }
+
+/// Fired by `game::presenting_event::on_day` the moment the event tick picks
+/// an event for the player to see. Sole observer:
+/// [`crate::ui::event_popup::on_event_presented`]. Reads the pending event
+/// off the `EventDeck` resource to render the modal.
+#[derive(Event)]
+pub struct OnEventPresented;
+
+/// Fired by the event-popup input handler when the player picks a choice
+/// (`Some(idx)`) or dismisses the popup (`None`).
+/// [`crate::game::presenting_event::on_event_resolved`] runs the effect,
+/// clears the pending state, and schedules the next event;
+/// [`crate::ui::event_popup::on_event_resolved`] hides the modal.
+#[derive(Event)]
+pub struct OnEventResolved {
+    /// `Some(i)` — the player picked choice `i`. `None` — the player hit Esc.
+    pub choice: Option<usize>,
+}

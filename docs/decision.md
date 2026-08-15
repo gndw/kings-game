@@ -244,3 +244,73 @@ thing happened, never before. The chronicle module reads this in the doc
 ("commands and ticks only `world.trigger(...)`") and one observer per event
 writes one past-tense line. A new event lands as a `On<PastTense>` struct,
 a trigger site, and an observer — three additions, no renames.
+
+The event popup uses `OnEventPresented` and `OnEventResolved`; both follow
+the same `On<PastTense>` shape. `OnEventResolved.choice: Option<usize>`
+encodes both the picked-choice path (`Some(idx)`) and the forfeit path
+(`None` for `Esc`) — the resolver interprets `None` as "no effect, just
+clear pending and reschedule".
+
+## Event popup is an OnDay-triggered modal with weighted draw
+
+The event system runs one tick on [`OnDay`](crate::schedules::OnDay). When
+the world date passes `EventDeck::next_due_date`, the tick draws one event
+id via the seeded `SimRng` (weights from the `EventDef::weight` field), freezes
+the resolved `attendee` Entity onto `EventDeck::pending`, flips
+`Game::paused = true`, and triggers `OnEventPresented`. The UI's observer
+shows the popup and flips the input layer; the player navigates choices and
+fires `OnEventResolved`. The resolver (also an observer, registered *after*
+the chronicle observer) consumes `pending`, runs the effect, and schedules
+the next due date 90–180 days out.
+
+- **Why `OnDay` and not a separate timer:** the game already has a sim tick;
+  piggybacking means no new `Time` resource, every draw routes through one
+  rng counter, and the player pausing the sim already pauses events.
+- **Why hard-coded events for now:** three `EventDef`s in a `&'static` slice
+  in `src/game/event_data.rs`. RON-driven authoring is one
+  `mods::load_event_definitions` walk + a load pass away — the `EventDef`
+  struct is the serialisation target. ponytail: lift to RON when the third
+  modder asks, not before.
+- **Why `attendee` is frozen at present time:** so the choice effect and the
+  narration always agree. Decoupling "pick" from "render" invited a class of
+  bugs where the popup showed an envoy from House A while the effect paid
+  gold to House B (because an `OnDay` system between present and resolve
+  flipped a leadership relationship). The freeze at present is the contract.
+- **Why pause on present:** the player cannot zoom past the popup. The
+  `Game::paused` flip is the same flag the root-layer `Space` handler
+  toggles — single concept.
+- **Why input layer, not a boolean:** an `InputLayer` variant follows the
+  existing pattern (command palette, error popup, wiki). The
+  `event_popup_layer_active` run-if gates `update`/`input` on `InputLayer::Event`
+  so the popup's keystrokes are out of the root layer's reach.
+- **Why forfeit reuses the same event:** `OnEventResolved { choice: None }`
+  is the same surface as the picked path, and `resolve_choice(None)` skips
+  the effect while clearing pending + scheduling the next event. One path
+  to test; the resolver + UI observer each handle both flavors.
+- **Why the chronicle observer runs before the resolver:** it reads
+  `EventDeck::pending` to pull the event id and attendee name. The resolver
+  calls `deck.pending.take()` as its first step, so ordering matters.
+  Registration order in `main.rs` determines observer order under Bevy 0.15;
+  document the ordering or rename to make it self-evident.
+
+## Transfer-with-memory helper lives in `commands::core`
+
+`commands::core::transfer_with_gold_memory` (and the related
+`alive_characters_excluding`) are the cross-cutting helpers used by both
+`commands::gift_gold::gift` and `game::presenting_event::resolve_choice`.
+The two call sites grew independently; the dedup was inevitable after the
+second. The helper centralises the three-phase borrow dance (snapshot →
+mutate `CharacterGold` → spawn the `Memory` entity + fire `OnGoldGifted`)
+that mirrors the patterns already documented on the existing `gift`
+function.
+
+- **Why here, not in `src/helper/`:** the helper borrows the
+  `MemoryKind` + `MemoryOfCharacter` + `MemoryTowardCharacter` types
+  already imported in `core.rs`, and the `gift` site is its primary user.
+  A `src/helper/gift_helper.rs` module is the right move if a third
+  caller appears (a tribute command, say) or if the helper grows past
+  gold+memory.
+- **Why not fold it into `gift_gold`:** the event system's
+  `resolve_choice` runs in a different layer and needs the same primitive.
+  Putting it in `gift_gold` would force the event module to import the
+  command module, which inverts the layer direction.

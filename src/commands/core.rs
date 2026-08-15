@@ -15,8 +15,12 @@ use crate::commands::raise_army::RaiseArmy;
 use crate::commands::declare_war::DeclareWar;
 use crate::commands::destroy_building::DestroyBuilding;
 use crate::ecs::{
-    BuildingIsRaised, BuildingLevy, BuildingOf, BuildingStatus, CharacterLeads, KingdomHold,
-    LandHasBuildings, LandName, Registry, StringId,
+    BuildingIsRaised, BuildingLevy, BuildingOf, BuildingStatus, CharacterGold, CharacterLeads,
+    KingdomHold, LandHasBuildings, LandName, Registry, StringId,
+};
+use crate::ecs::character::{
+    Memory, MemoryCreatedDate, MemoryKind, MemoryOfCharacter, MemoryTowardCharacter,
+    MemoryUntilDate,
 };
 use crate::ecs::army::{ArmyHasMarching, ArmyHasSiege, ArmyLevy, ArmyMarching, ArmyMaxLevy, ArmyStatus};
 use crate::ecs::marching::{MarchingArrivedDate, MarchingOnRoad, MarchingToLand};
@@ -25,7 +29,7 @@ use crate::ecs::siege::SiegeProgress;
 use crate::resources::buildings::BuildingDefs;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
-use crate::events::OnErrorOccurred;
+use crate::events::{OnErrorOccurred, OnGoldGifted};
 use crate::ui::command_menu::{CommandHasId, CommandHasKey, CommandHasValue};
 use bevy::prelude::RelationshipTarget;
 use bevy::prelude::Resource;
@@ -452,4 +456,108 @@ pub(super) fn picker_row(
             .insert(crate::ui::command_menu::RowNameText(name_text));
     }
     row
+}
+
+// --- shared gold transfer helper --------------------------------------------
+// Phase 2 (mutate) and phase 3 (spawn memory) of `gift_gold::gift`; the event
+// resolver uses the same dance. Callers do their own validation (sufficient
+// gold on `from_e`, no active `ReceivedGold` memory on `to_e`) and pass the
+// computed memory-expiry `until`.
+
+/// Transfer `amount` gold from `from_e` to `to_e` and spawn a `ReceivedGold`
+/// memory on `to_e` (the recipient) whose owner is `to_e` and whose
+/// `MemoryTowardCharacter` is `from_e` — so [`crate::helper::opinion_helper`]
+/// credits the recipient's opinion of `from_e` by `amount` for the memory's
+/// lifetime. Fires [`OnGoldGifted`] so the chronicle observer writes a line.
+///
+/// Validation is the caller's job; this helper assumes `from_e` can afford
+/// `amount` and `to_e` has no active `ReceivedGold` memory (matching
+/// `gift_gold::gift`'s pre-checks). The two call sites today are
+/// `commands::gift_gold::gift` and `game::presenting_event::resolve_choice`.
+///
+/// ponytail: the helper lives here because both call sites work through
+/// `commands::core`. If a third caller appears (e.g. a tribute command), keep
+/// it here — the right refactor would be a `src/helper/gift_helper.rs` module
+/// only if the helper grows contract surface (more effects than
+/// gold+memory).
+pub(crate) fn transfer_with_gold_memory(
+    world: &mut World,
+    from_e: Entity,
+    to_e: Entity,
+    amount: i64,
+    until: Date,
+) {
+    // Phase 2: move the gold. `from_e` is allowed to go negative — debt is
+    // real (matches `CharacterGold`'s signed semantics).
+    if let Some(mut from_g) = world.get_mut::<CharacterGold>(from_e) {
+        from_g.0 -= amount;
+    }
+    if let Some(mut to_g) = world.get_mut::<CharacterGold>(to_e) {
+        to_g.0 += amount;
+    }
+
+    // Phase 3: spawn the memory and register it for `from_e → to_e` lookup.
+    let today = *world.resource::<Date>();
+    let from_id = id_string_for(world, from_e);
+    let to_id = id_string_for(world, to_e);
+    let memory_id = format!("memory-{from_id}-{to_id}-{today}");
+    let memory_e = world
+        .spawn((
+            StringId(memory_id.clone()),
+            Memory,
+            MemoryOfCharacter(to_e),
+            MemoryTowardCharacter(from_e),
+            MemoryCreatedDate(today),
+            MemoryUntilDate(until),
+            MemoryKind::ReceivedGold { amount },
+        ))
+        .id();
+    world
+        .resource_mut::<Registry>()
+        .by_id
+        .insert(memory_id, memory_e);
+
+    world.trigger(OnGoldGifted {
+        from: from_e,
+        to: to_e,
+        amount,
+    });
+}
+
+/// StringId lookup with a stable fallback so memory ids remain unique even
+/// when an entity somehow lacks a `StringId` (every game entity should carry
+/// one — see architecture.md, "Key invariants" — but the memory id format
+/// predates the invariant, so we keep a defensive fallback here).
+fn id_string_for(world: &World, e: Entity) -> String {
+    world
+        .get::<StringId>(e)
+        .map(|s| s.0.clone())
+        .unwrap_or_else(|| format!("e{e:?}"))
+}
+
+/// Every alive character in deterministic registry order. Walks
+/// `Registry.by_id`, filters to `char-*` ids, and skips the actor. Used by
+/// event attendee pickers and reusable anywhere a roster of "everyone" is
+/// needed.
+pub(crate) fn alive_characters_excluding(
+    world: &World,
+    actor: Entity,
+) -> Vec<(String, Entity)> {
+    let registry = world.resource::<Registry>();
+    let mut out: Vec<(String, Entity)> = registry
+        .by_id
+        .iter()
+        .filter(|(id, _)| id.starts_with("char-"))
+        .map(|(id, e)| (id.clone(), *e))
+        .collect();
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    out.into_iter()
+        .filter(|(_, e)| {
+            *e != actor
+                && world
+                    .get::<crate::ecs::character::CharacterIsAlive>(*e)
+                    .map(|a| a.0)
+                    .unwrap_or(false)
+        })
+        .collect()
 }

@@ -3,7 +3,6 @@ pub mod paying_out;
 pub mod advancing_date;
 pub mod yielding;
 pub mod constructing;
-pub mod event_data;
 pub mod marching;
 pub mod presenting_event;
 pub mod raising_army;

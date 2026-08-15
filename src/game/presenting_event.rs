@@ -27,7 +27,7 @@ use crate::observers::{OnEventPresented, OnEventResolved};
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
 
-use super::event_data::{ChoiceEffect, EVENT_DEFS, EventDef, EventInstance};
+use crate::event::{ChoiceEffect, EVENT_DEFS, EventDef, EventInstance};
 
 /// `EventDeck` resource: state for the trigger tick and the resolver.
 #[derive(Resource, Default)]

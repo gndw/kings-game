@@ -1,5 +1,5 @@
 //! The event popup: a modal that surfaces one of the events from
-//! [`crate::game::event_data::EVENT_DEFS`]. Mirrors the error-popup shape
+//! [`crate::event::EVENT_DEFS`]. Mirrors the error-popup shape
 //! (backdrop + window + title + body + choices list + hint) with a vertical
 //! stack of choice rows in place of the single Esc-to-close body.
 //!
@@ -12,7 +12,7 @@
 use bevy::prelude::*;
 
 use crate::observers::{OnEventPresented, OnEventResolved};
-use crate::game::event_data::EVENT_DEFS;
+use crate::event::EVENT_DEFS;
 use crate::game::presenting_event::EventDeck;
 use crate::resources::input_layer::InputLayer;
 

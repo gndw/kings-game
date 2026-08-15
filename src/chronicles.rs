@@ -20,7 +20,7 @@ use crate::observers::{
     OnCharacterDied, OnDemandEnforced, OnEventResolved, OnGoldGifted, OnKingdomSucceeded,
     OnMarchingOrdered, OnSiegeLaid, OnSiegeWon, OnWarDeclared, OnWarEnded,
 };
-use crate::game::event_data::{ChoiceEffect, EVENT_DEFS};
+use crate::event::{ChoiceEffect, EVENT_DEFS};
 use crate::helper::age_helper::age;
 use crate::game::presenting_event::EventDeck;
 use crate::resources::buildings::BuildingDefs;

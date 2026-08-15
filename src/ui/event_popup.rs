@@ -52,7 +52,7 @@ const ROW_PANEL_SELECTED: Color = Color::srgb(0.55, 0.42, 0.20);
 const ROW_BORDER: Color = Color::srgba(0.55, 0.50, 0.55, 0.35);
 const ROW_TEXT: Color = Color::srgb(0.96, 0.96, 0.98);
 const HINT_COLOR: Color = Color::srgba(0.75, 0.75, 0.80, 0.85);
-const FONT: f32 = 16.0;
+const FONT: f32 = 12.0;
 /// Above the command palette (100) and the error popup (200).
 const Z_INDEX: i32 = 300;
 

@@ -186,9 +186,20 @@ pub struct Character {
     /// State: gold per month — profit less upkeep. Signed. Recomputed on load.
     #[serde(default)]
     pub gold_yield: i64,
+    /// State: whether the character is still alive. Defaults to `true`; flips to `false` on death.
+    #[serde(default = "default_alive")]
+    pub is_alive: bool,
+    /// State: date of death — `None` while alive, set once the character dies.
+    #[serde(default)]
+    pub death_date: Option<Date>,
     /// Definition: `"m"` / `"f"`. State files omit it (never changes in play).
     #[serde(default)]
     pub sex: CharacterSex,
+}
+
+/// `bool::default()` is `false`; alive is the natural starting state.
+fn default_alive() -> bool {
+    true
 }
 
 /// One built building instance: which def it instantiates, which land it stands on, its status.

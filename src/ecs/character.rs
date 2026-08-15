@@ -33,6 +33,16 @@ pub struct CharacterOfHouse(pub Entity);
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct CharacterDateOfBirth(pub Date);
 
+/// Whether a character is alive. Defaults to `true`; flips to `false` on death
+/// (along with [`CharacterDateOfDeath`]).
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct CharacterIsAlive(pub bool);
+
+/// When a character died — `None` while alive, the date of death once
+/// [`CharacterIsAlive`] flips to `false`.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct CharacterDateOfDeath(pub Option<Date>);
+
 /// A character's treasury. Signed: a ruler can be in debt.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct CharacterGold(pub i64);

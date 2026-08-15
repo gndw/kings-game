@@ -111,5 +111,36 @@
         (id: "char-arianne",  dob: (year: 1042, month: 1, day: 1), gold: 10),
         (id: "char-quentyn",  dob: (year: 1047, month: 1, day: 1), gold: 9),
         (id: "char-trystane", dob: (year: 1051, month: 1, day: 1), gold: 6),
+
+        // ----- Dead characters: dob recorded so ages come out right (gold left at 0; they're dead). -----
+        // House Hightower: dead ancestors of Leyton, plus dead son Brynden.
+        (id: "char-bors",      dob: (year:  984, month: 1, day: 1)),
+        (id: "char-dalla",     dob: (year:  987, month: 1, day: 1)),
+        (id: "char-brynden-hi", dob: (year: 1042, month: 1, day: 1)),
+
+        // House Lannister: dead ancestors of Tywin, plus dead son Steffon.
+        (id: "char-tytos",     dob: (year:  977, month: 1, day: 1)),
+        (id: "char-jeyne-ln",  dob: (year:  984, month: 1, day: 1)),
+        (id: "char-steffon",   dob: (year: 1043, month: 1, day: 1)),
+
+        // House Arryn: dead ancestors of Jon, plus dead son Artys.
+        (id: "char-isembard",  dob: (year:  968, month: 1, day: 1)),
+        (id: "char-alyssa",    dob: (year:  973, month: 1, day: 1)),
+        (id: "char-artys",     dob: (year: 1050, month: 1, day: 1)),
+
+        // House Tully: dead ancestors of Hoster, plus dead son Leo.
+        (id: "char-edmyn",     dob: (year:  974, month: 1, day: 1)),
+        (id: "char-lysbeth",   dob: (year:  979, month: 1, day: 1)),
+        (id: "char-leo",       dob: (year: 1034, month: 1, day: 1)),
+
+        // House Tyrell: dead ancestors of Luthor, plus dead son Quentyn.
+        (id: "char-moryn",     dob: (year:  958, month: 1, day: 1)),
+        (id: "char-alannys",   dob: (year:  964, month: 1, day: 1)),
+        (id: "char-quentyn-ty", dob: (year: 1038, month: 1, day: 1)),
+
+        // House Martell: dead ancestors of Doran, plus dead son Olyvar.
+        (id: "char-qorell",    dob: (year:  978, month: 1, day: 1)),
+        (id: "char-meria",     dob: (year:  984, month: 1, day: 1)),
+        (id: "char-olyvar",    dob: (year: 1045, month: 1, day: 1)),
     ],
 )

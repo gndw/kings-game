@@ -9,8 +9,9 @@ use std::collections::HashMap;
 
 use super::building::{Building, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand};
 use super::character::{
-    Character, CharacterDateOfBirth, CharacterGold, CharacterGoldYield, CharacterHasFather,
-    CharacterHasHusband, CharacterHasMother, CharacterLevy, CharacterName, CharacterOfHouse,
+    Character, CharacterDateOfBirth, CharacterDateOfDeath, CharacterGold, CharacterGoldYield,
+    CharacterHasFather, CharacterHasHusband, CharacterHasMother, CharacterIsAlive, CharacterLevy,
+    CharacterName, CharacterOfHouse,
 };
 use super::courtier::{Courtier, CourtierOfCharacter, CourtierOfKingdom};
 use super::house::{House, HouseName};
@@ -68,6 +69,8 @@ pub fn populate(world: &mut World, content: Content) {
                 Character,
                 CharacterName(c.name),
                 CharacterDateOfBirth(c.dob),
+                CharacterIsAlive(c.is_alive),
+                CharacterDateOfDeath(c.death_date),
                 CharacterGold(c.gold),
                 CharacterLevy(c.levy),
                 CharacterGoldYield(c.gold_yield),

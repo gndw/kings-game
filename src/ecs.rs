@@ -11,8 +11,11 @@
 //! - **Character** entities: [`StringId`], [`Character`], [`CharacterName`],
 //!   [`CharacterDateOfBirth`], [`CharacterGold`], [`CharacterLevy`],
 //!   [`CharacterGoldYield`], [`CharacterOfHouse`], maybe [`CharacterLeads`],
-//!   plus family ties ([`CharacterHasFather`] / [`CharacterHasMother`] on the
-//!   child, [`CharacterHasHusband`] on the wife with the auto-maintained
+//!   plus the six skill components ([`CharacterMartial`], [`CharacterProwess`],
+//!   [`CharacterTreasury`], [`CharacterPrudence`], [`CharacterIntrigue`],
+//!   [`CharacterFaith`], each `i32` 0..=20), plus family ties
+//!   ([`CharacterHasFather`] / [`CharacterHasMother`] on the child,
+//!   [`CharacterHasHusband`] on the wife with the auto-maintained
 //!   [`CharacterHasWife`] target on the husband) and reverse Vecs
 //!   (`CharacterHasFatheredChildren` / `CharacterHasMotheredChildren`) on the parents.
 //!   Populated from `families.ron` after every character entity exists.

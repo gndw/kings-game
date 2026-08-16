@@ -1,23 +1,24 @@
 // The families. Characters belong to one; kingdoms are ruled through them.
 (
     houses: [
-        (id: "house-hightower", name: "Hightower"),
-        (id: "house-lannister", name: "Lannister"),
-        (id: "house-arryn",     name: "Arryn"),
-        (id: "house-tully",     name: "Tully"),
-        (id: "house-tyrell",    name: "Tyrell"),
-        (id: "house-martell",   name: "Martell"),
+        // The six great houses — one per kingdom.
+        (id: "house-cresswell",   name: "Cresswell"),
+        (id: "house-aurelan",     name: "Aurelan"),
+        (id: "house-selwyn",      name: "Selwyn"),
+        (id: "house-darrowmont",  name: "Darrowmont"),
+        (id: "house-margaux",     name: "Margaux"),
+        (id: "house-corvin",      name: "Corvin"),
 
         // Minor houses added for the opening court.
-        (id: "house-ashford",   name: "Ashford"),
-        (id: "house-beesbury",  name: "Beesbury"),
-        (id: "house-brax",      name: "Brax"),
-        (id: "house-crakehall", name: "Crakehall"),
-        (id: "house-estermont", name: "Estermont"),
-        (id: "house-fossoway",  name: "Fossoway"),
-        (id: "house-grandison", name: "Grandison"),
-        (id: "house-mertyns",   name: "Mertyns"),
-        (id: "house-staunton",  name: "Staunton"),
-        (id: "house-wylde",     name: "Wylde"),
+        (id: "house-brackenwell", name: "Brackenwell"),
+        (id: "house-hollowfield", name: "Hollowfield"),
+        (id: "house-marfield",    name: "Marfield"),
+        (id: "house-stonedale",   name: "Stonedale"),
+        (id: "house-greenmere",   name: "Greenmere"),
+        (id: "house-wyndham",     name: "Wyndham"),
+        (id: "house-greycairn",   name: "Greycairn"),
+        (id: "house-rookswood",   name: "Rookswood"),
+        (id: "house-thornkeep",   name: "Thornkeep"),
+        (id: "house-saltmoor",    name: "Saltmoor"),
     ],
 )

@@ -46,7 +46,7 @@ pub struct ArmyOnLand(pub Entity);
 #[relationship(relationship_target = KingdomHasArmies)]
 pub struct ArmyBelongsToKingdom(pub Entity);
 
-/// Display name, e.g. `"Lannister Army"`. Set at raise from the leader's house.
+/// Display name, e.g. `"Aurelan Army"`. Set at raise from the leader's house.
 #[derive(Component, Debug, Clone)]
 pub struct ArmyName(pub String);
 

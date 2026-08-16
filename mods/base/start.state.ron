@@ -12,49 +12,49 @@
 // characters simply start where their own mod says they do.
 (
     kingdoms: [
-        (id: "kingdom-west",        leader_character_id: "char-leyton", land_id: "land-2"),
-        (id: "kingdom-centre",      leader_character_id: "char-tywin",  land_id: "land-3"),
-        (id: "kingdom-east",        leader_character_id: "char-jon",    land_id: "land-5"),
-        (id: "kingdom-riverlands",  leader_character_id: "char-minisa", land_id: "land-1"),
-        (id: "kingdom-reach",       leader_character_id: "char-olenna", land_id: "land-4"),
-        (id: "kingdom-dorne",       leader_character_id: "char-doran",  land_id: "land-6"),
+        (id: "kingdom-westmarch",  leader_character_id: "char-aldric", land_id: "land-2"),
+        (id: "kingdom-goldharbour",leader_character_id: "char-tybalt", land_id: "land-3"),
+        (id: "kingdom-hawkrest",   leader_character_id: "char-jorell", land_id: "land-5"),
+        (id: "kingdom-riversmeet", leader_character_id: "char-maren",  land_id: "land-1"),
+        (id: "kingdom-greenfields",leader_character_id: "char-olwen",  land_id: "land-4"),
+        (id: "kingdom-sunend",     leader_character_id: "char-dorian", land_id: "land-6"),
     ],
     // Each built building is its own instance: a unique `id`, the `def_id` of
     // the building kind it is (an entry in building_definitions.ron), and the
     // `land_id` it stands on. These become building entities in the ECS, each
     // related to its land.
     buildings: [
-        // land-1 (Westwatch)
+        // land-1 (Aldgate)
         (id: "b-1-1", def_id: "building-tannery",     land_id: "land-1", status: Active),
         (id: "b-1-2", def_id: "building-wharf",       land_id: "land-1", status: Active),
         (id: "b-1-3", def_id: "building-vineyard",    land_id: "land-1", status: Active),
         (id: "b-1-4", def_id: "building-watchtower",  land_id: "land-1", status: Active),
         (id: "b-1-5", def_id: "building-castle",      land_id: "land-1", status: Active),
-        // land-2 (Oldtown)
+        // land-2 (Westmarch)
         (id: "b-2-1", def_id: "building-mill",          land_id: "land-2", status: Active),
         (id: "b-2-2", def_id: "building-smithy",        land_id: "land-2", status: Active),
         (id: "b-2-3", def_id: "building-vineyard",      land_id: "land-2", status: Active),
         (id: "b-2-4", def_id: "building-archery-range", land_id: "land-2", status: Active),
         (id: "b-2-5", def_id: "building-castle",        land_id: "land-2", status: Active),
-        // land-3 (Lannisport)
+        // land-3 (Goldharbour)
         (id: "b-3-1", def_id: "building-guildhall", land_id: "land-3", status: Active),
         (id: "b-3-2", def_id: "building-market",    land_id: "land-3", status: Active),
         (id: "b-3-3", def_id: "building-barracks",  land_id: "land-3", status: Active),
         (id: "b-3-4", def_id: "building-stables",   land_id: "land-3", status: Active),
         (id: "b-3-5", def_id: "building-castle",    land_id: "land-3", status: Active),
-        // land-4 (Riverrun)
+        // land-4 (Crossford)
         (id: "b-4-1", def_id: "building-brewery",       land_id: "land-4", status: Active),
         (id: "b-4-2", def_id: "building-smithy",        land_id: "land-4", status: Active),
         (id: "b-4-3", def_id: "building-barracks",      land_id: "land-4", status: Active),
         (id: "b-4-4", def_id: "building-training-yard", land_id: "land-4", status: Active),
         (id: "b-4-5", def_id: "building-castle",        land_id: "land-4", status: Active),
-        // land-5 (Gulltown)
+        // land-5 (Hawkrest)
         (id: "b-5-1", def_id: "building-quarry",   land_id: "land-5", status: Active),
         (id: "b-5-2", def_id: "building-tannery",  land_id: "land-5", status: Active),
         (id: "b-5-3", def_id: "building-wharf",    land_id: "land-5", status: Active),
         (id: "b-5-4", def_id: "building-stables",  land_id: "land-5", status: Active),
         (id: "b-5-5", def_id: "building-castle",   land_id: "land-5", status: Active),
-        // land-6 (Duskendale)
+        // land-6 (Sun's End)
         (id: "b-6-1", def_id: "building-lumber-camp",   land_id: "land-6", status: Active),
         (id: "b-6-2", def_id: "building-market",        land_id: "land-6", status: Active),
         (id: "b-6-3", def_id: "building-archery-range", land_id: "land-6", status: Active),
@@ -62,58 +62,58 @@
         (id: "b-6-5", def_id: "building-castle",        land_id: "land-6", status: Active),
     ],
     courtiers: [
-        // kingdom-west — Leyton Hightower: wife + children
-        (id: "courtier-alerie",  kingdom_id: "kingdom-west", character_id: "char-alerie",  type: Courtier),
-        (id: "courtier-baelor",  kingdom_id: "kingdom-west", character_id: "char-baelor",  type: Courtier),
-        (id: "courtier-rhea",    kingdom_id: "kingdom-west", character_id: "char-rhea",    type: Courtier),
-        (id: "courtier-denyse",  kingdom_id: "kingdom-west", character_id: "char-denyse",  type: Courtier),
-        (id: "courtier-gunthor", kingdom_id: "kingdom-west", character_id: "char-gunthor", type: Courtier),
+        // kingdom-westmarch — Aldric Cresswell: wife + children
+        (id: "courtier-mara",     kingdom_id: "kingdom-westmarch",   character_id: "char-mara",     type: Courtier),
+        (id: "courtier-bors",     kingdom_id: "kingdom-westmarch",   character_id: "char-bors",     type: Courtier),
+        (id: "courtier-rhael",    kingdom_id: "kingdom-westmarch",   character_id: "char-rhael",    type: Courtier),
+        (id: "courtier-denyse",   kingdom_id: "kingdom-westmarch",   character_id: "char-denyse",   type: Courtier),
+        (id: "courtier-gunthor",  kingdom_id: "kingdom-westmarch",   character_id: "char-gunthor",  type: Courtier),
 
-        // kingdom-centre — Tywin Lannister: wife + children
-        (id: "courtier-jaime",   kingdom_id: "kingdom-centre", character_id: "char-jaime",   type: Courtier),
-        (id: "courtier-joanna",  kingdom_id: "kingdom-centre", character_id: "char-joanna",  type: Courtier),
-        (id: "courtier-cersei",  kingdom_id: "kingdom-centre", character_id: "char-cersei",  type: Courtier),
-        (id: "courtier-tyrion",  kingdom_id: "kingdom-centre", character_id: "char-tyrion",  type: Courtier),
-        (id: "courtier-lyra-ashford", kingdom_id: "kingdom-centre", character_id: "char-lyra-ashford", type: Courtier),
-        (id: "courtier-rolf-brax",    kingdom_id: "kingdom-centre", character_id: "char-rolf-brax",    type: Courtier),
+        // kingdom-goldharbour — Tybalt Aurelan: wife + children
+        (id: "courtier-joran",    kingdom_id: "kingdom-goldharbour", character_id: "char-joran",    type: Courtier),
+        (id: "courtier-josara",   kingdom_id: "kingdom-goldharbour", character_id: "char-josara",   type: Courtier),
+        (id: "courtier-cerelia",  kingdom_id: "kingdom-goldharbour", character_id: "char-cerelia",  type: Courtier),
+        (id: "courtier-tristam",  kingdom_id: "kingdom-goldharbour", character_id: "char-tristam",  type: Courtier),
+        (id: "courtier-lyra-brackenwell", kingdom_id: "kingdom-goldharbour", character_id: "char-lyra-brackenwell", type: Courtier),
+        (id: "courtier-rolf-marfield",    kingdom_id: "kingdom-goldharbour", character_id: "char-rolf-marfield",    type: Courtier),
 
-        // kingdom-east — Jon Arryn: wife + children
-        (id: "courtier-lysa",    kingdom_id: "kingdom-east", character_id: "char-lysa",    type: Courtier),
-        (id: "courtier-jeyne",   kingdom_id: "kingdom-east", character_id: "char-jeyne",   type: Courtier),
-        (id: "courtier-elbert",  kingdom_id: "kingdom-east", character_id: "char-elbert",  type: Courtier),
-        (id: "courtier-aemma",   kingdom_id: "kingdom-east", character_id: "char-aemma",   type: Courtier),
+        // kingdom-hawkrest — Jorell Selwyn: wife + children
+        (id: "courtier-lysette",  kingdom_id: "kingdom-hawkrest",    character_id: "char-lysette",  type: Courtier),
+        (id: "courtier-jeyne",    kingdom_id: "kingdom-hawkrest",    character_id: "char-jeyne",    type: Courtier),
+        (id: "courtier-elric",    kingdom_id: "kingdom-hawkrest",    character_id: "char-elric",    type: Courtier),
+        (id: "courtier-aemma",    kingdom_id: "kingdom-hawkrest",    character_id: "char-aemma",    type: Courtier),
 
-        // kingdom-riverlands — Minisa Tully: husband + children
-        (id: "courtier-edmure",  kingdom_id: "kingdom-riverlands", character_id: "char-edmure",  type: Courtier),
-        (id: "courtier-hoster",  kingdom_id: "kingdom-riverlands", character_id: "char-hoster",  type: Courtier),
-        (id: "courtier-catelyn", kingdom_id: "kingdom-riverlands", character_id: "char-catelyn", type: Courtier),
-        (id: "courtier-lysara",  kingdom_id: "kingdom-riverlands", character_id: "char-lysara",  type: Courtier),
+        // kingdom-riversmeet — Maren Darrowmont: husband + children
+        (id: "courtier-edric",    kingdom_id: "kingdom-riversmeet",  character_id: "char-edric",    type: Courtier),
+        (id: "courtier-halric",   kingdom_id: "kingdom-riversmeet",  character_id: "char-halric",   type: Courtier),
+        (id: "courtier-cassia",   kingdom_id: "kingdom-riversmeet",  character_id: "char-cassia",   type: Courtier),
+        (id: "courtier-lysara",   kingdom_id: "kingdom-riversmeet",  character_id: "char-lysara",   type: Courtier),
 
-        // kingdom-reach — Olenna Tyrell: husband + children
-        (id: "courtier-mace",     kingdom_id: "kingdom-reach", character_id: "char-mace",     type: Courtier),
-        (id: "courtier-luthor",   kingdom_id: "kingdom-reach", character_id: "char-luthor",   type: Courtier),
-        (id: "courtier-willas",   kingdom_id: "kingdom-reach", character_id: "char-willas",   type: Courtier),
-        (id: "courtier-garlan",   kingdom_id: "kingdom-reach", character_id: "char-garlan",   type: Courtier),
-        (id: "courtier-margaery", kingdom_id: "kingdom-reach", character_id: "char-margaery", type: Courtier),
+        // kingdom-greenfields — Olwen Margaux: husband + children
+        (id: "courtier-markel",   kingdom_id: "kingdom-greenfields", character_id: "char-markel",   type: Courtier),
+        (id: "courtier-lorian",   kingdom_id: "kingdom-greenfields", character_id: "char-lorian",   type: Courtier),
+        (id: "courtier-wendell",  kingdom_id: "kingdom-greenfields", character_id: "char-wendell",  type: Courtier),
+        (id: "courtier-garrick",  kingdom_id: "kingdom-greenfields", character_id: "char-garrick",  type: Courtier),
+        (id: "courtier-mariel",   kingdom_id: "kingdom-greenfields", character_id: "char-mariel",   type: Courtier),
 
-        // kingdom-dorne — Doran Martell: wife + children
-        (id: "courtier-oberyn",   kingdom_id: "kingdom-dorne", character_id: "char-oberyn",   type: Courtier),
-        (id: "courtier-mellario", kingdom_id: "kingdom-dorne", character_id: "char-mellario", type: Courtier),
-        (id: "courtier-arianne",  kingdom_id: "kingdom-dorne", character_id: "char-arianne",  type: Courtier),
-        (id: "courtier-quentyn",  kingdom_id: "kingdom-dorne", character_id: "char-quentyn",  type: Courtier),
-        (id: "courtier-trystane", kingdom_id: "kingdom-dorne", character_id: "char-trystane", type: Courtier),
+        // kingdom-sunend — Dorian Corvin: wife + children
+        (id: "courtier-oryn",     kingdom_id: "kingdom-sunend",      character_id: "char-oryn",     type: Courtier),
+        (id: "courtier-melora",   kingdom_id: "kingdom-sunend",      character_id: "char-melora",   type: Courtier),
+        (id: "courtier-ariel",    kingdom_id: "kingdom-sunend",      character_id: "char-ariel",    type: Courtier),
+        (id: "courtier-quentin",  kingdom_id: "kingdom-sunend",      character_id: "char-quentin",  type: Courtier),
+        (id: "courtier-torren",   kingdom_id: "kingdom-sunend",      character_id: "char-torren",   type: Courtier),
 
         // New minor-house courtiers.
-        (id: "courtier-elian-fossoway", kingdom_id: "kingdom-reach",       character_id: "char-elian-fossoway", type: Courtier),
-        (id: "courtier-ysara-wylde",     kingdom_id: "kingdom-riverlands", character_id: "char-ysara-wylde",     type: Courtier),
-        (id: "courtier-lyonel-crakehall", kingdom_id: "kingdom-west",      character_id: "char-lyonel-crakehall", type: Courtier),
-        (id: "courtier-jeyne-staunton",  kingdom_id: "kingdom-east",       character_id: "char-jeyne-staunton",  type: Courtier),
-        (id: "courtier-harbert-staunton", kingdom_id: "kingdom-east",      character_id: "char-harbert-staunton", type: Courtier),
-        (id: "courtier-balar-estermont", kingdom_id: "kingdom-east",       character_id: "char-balar-estermont", type: Courtier),
-        (id: "courtier-melisande-mertyns", kingdom_id: "kingdom-west",     character_id: "char-melisande-mertyns", type: Courtier),
-        (id: "courtier-emma-brax",       kingdom_id: "kingdom-riverlands", character_id: "char-emma-brax",       type: Courtier),
-        (id: "courtier-ormond-wylde",    kingdom_id: "kingdom-riverlands", character_id: "char-ormond-wylde",    type: Courtier),
-        (id: "courtier-joan-grandison",  kingdom_id: "kingdom-reach",       character_id: "char-joan-grandison",  type: Courtier),
+        (id: "courtier-elian-wyndham",     kingdom_id: "kingdom-greenfields", character_id: "char-elian-wyndham",     type: Courtier),
+        (id: "courtier-ysara-saltmoor",    kingdom_id: "kingdom-riversmeet",  character_id: "char-ysara-saltmoor",    type: Courtier),
+        (id: "courtier-lyonel-stonedale",  kingdom_id: "kingdom-westmarch",   character_id: "char-lyonel-stonedale",  type: Courtier),
+        (id: "courtier-jeyne-thornkeep",   kingdom_id: "kingdom-hawkrest",    character_id: "char-jeyne-thornkeep",   type: Courtier),
+        (id: "courtier-harbert-thornkeep", kingdom_id: "kingdom-hawkrest",    character_id: "char-harbert-thornkeep", type: Courtier),
+        (id: "courtier-balar-greenmere",   kingdom_id: "kingdom-hawkrest",    character_id: "char-balar-greenmere",   type: Courtier),
+        (id: "courtier-melisande-rookswood", kingdom_id: "kingdom-westmarch", character_id: "char-melisande-rookswood", type: Courtier),
+        (id: "courtier-emma-marfield",     kingdom_id: "kingdom-riversmeet",  character_id: "char-emma-marfield",     type: Courtier),
+        (id: "courtier-ormond-saltmoor",   kingdom_id: "kingdom-riversmeet",  character_id: "char-ormond-saltmoor",   type: Courtier),
+        (id: "courtier-joan-greycairn",    kingdom_id: "kingdom-greenfields", character_id: "char-joan-greycairn",    type: Courtier),
     ],
     // Levy and gold_yield are left out on purpose: the sim recomputes both at
     // `new_game`, so writing them here would only ever be wrong.
@@ -121,92 +121,92 @@
     // `calendar.start.year - dob.year`, so a mod that picks a different
     // opening year doesn't need to recompute anyone's birthday.
     characters: [
-        (id: "char-leyton", dob: (year: 1005, month: 1, day: 1), gold: 42, next_death_event_date: (year: 1066, month: 8, day: 7)),
-        (id: "char-alerie", dob: (year: 1032, month: 1, day: 1), gold: 8, next_death_event_date: (year: 1067, month: 7, day: 30)),
-        (id: "char-baelor", dob: (year: 1029, month: 1, day: 1), gold: 18, next_death_event_date: (year: 1068, month: 7, day: 13)),
-        (id: "char-rhea", dob: (year: 1032, month: 1, day: 1), gold: 9, next_death_event_date: (year: 1067, month: 4, day: 25)),
-        (id: "char-denyse", dob: (year: 1035, month: 1, day: 1), gold: 7, next_death_event_date: (year: 1068, month: 2, day: 17)),
-        (id: "char-gunthor", dob: (year: 1038, month: 1, day: 1), gold: 11, next_death_event_date: (year: 1068, month: 11, day: 3)),
-        (id: "char-tywin", dob: (year: 1009, month: 1, day: 1), gold: 35, next_death_event_date: (year: 1066, month: 12, day: 18)),
-        (id: "char-jaime", dob: (year: 1037, month: 1, day: 1), gold: 13, next_death_event_date: (year: 1067, month: 6, day: 17)),
-        (id: "char-cersei", dob: (year: 1038, month: 1, day: 1), gold: 12, next_death_event_date: (year: 1068, month: 3, day: 24)),
-        (id: "char-tyrion", dob: (year: 1041, month: 1, day: 1), gold: 14, next_death_event_date: (year: 1068, month: 8, day: 20)),
-        (id: "char-joanna", dob: (year: 1004, month: 1, day: 1), gold: 22, next_death_event_date: (year: 1066, month: 6, day: 4)),
-        (id: "char-lancel", dob: (year: 1049, month: 1, day: 1), gold: 5, next_death_event_date: (year: 1067, month: 3, day: 19)),
-        (id: "char-jon", dob: (year: 1000, month: 1, day: 1), gold: 27, next_death_event_date: (year: 1066, month: 7, day: 19)),
-        (id: "char-lysa", dob: (year: 1034, month: 1, day: 1), gold: 6, next_death_event_date: (year: 1067, month: 10, day: 28)),
-        (id: "char-jeyne", dob: (year: 1006, month: 1, day: 1), gold: 19, next_death_event_date: (year: 1067, month: 6, day: 2)),
-        (id: "char-elbert", dob: (year: 1028, month: 1, day: 1), gold: 16, next_death_event_date: (year: 1067, month: 9, day: 21)),
-        (id: "char-aemma", dob: (year: 1036, month: 1, day: 1), gold: 8, next_death_event_date: (year: 1068, month: 4, day: 30)),
-        (id: "char-alaric", dob: (year: 1054, month: 1, day: 1), gold: 4, next_death_event_date: (year: 1077, month: 10, day: 21)),
-        (id: "char-minisa", dob: (year: 1016, month: 1, day: 1), gold: 20, next_death_event_date: (year: 1066, month: 11, day: 29)),
-        (id: "char-edmure", dob: (year: 1043, month: 1, day: 1), gold: 10, next_death_event_date: (year: 1068, month: 6, day: 7)),
-        (id: "char-hoster", dob: (year: 1011, month: 1, day: 1), gold: 24, next_death_event_date: (year: 1067, month: 1, day: 24)),
-        (id: "char-brynden", dob: (year: 1014, month: 1, day: 1), gold: 17, next_death_event_date: (year: 1066, month: 10, day: 5)),
-        (id: "char-catelyn", dob: (year: 1044, month: 1, day: 1), gold: 11, next_death_event_date: (year: 1068, month: 9, day: 27)),
-        (id: "char-lysara", dob: (year: 1047, month: 1, day: 1), gold: 8, next_death_event_date: (year: 1067, month: 12, day: 5)),
-        (id: "char-olenna", dob: (year:  991, month: 1, day: 1), gold: 30, next_death_event_date: (year: 1066, month: 6, day: 22)),
-        (id: "char-mace", dob: (year: 1026, month: 1, day: 1), gold: 15, next_death_event_date: (year: 1068, month: 2, day: 17)),
-        (id: "char-luthor", dob: (year:  996, month: 1, day: 1), gold: 26, next_death_event_date: (year: 1066, month: 5, day: 25)),
-        (id: "char-willas", dob: (year: 1034, month: 1, day: 1), gold: 13, next_death_event_date: (year: 1067, month: 7, day: 30)),
-        (id: "char-garlan", dob: (year: 1037, month: 1, day: 1), gold: 11, next_death_event_date: (year: 1068, month: 6, day: 7)),
-        (id: "char-margaery", dob: (year: 1048, month: 1, day: 1), gold: 7, next_death_event_date: (year: 1068, month: 3, day: 24)),
-        (id: "char-doran", dob: (year: 1011, month: 1, day: 1), gold: 25, next_death_event_date: (year: 1066, month: 11, day: 11)),
-        (id: "char-oberyn", dob: (year: 1028, month: 1, day: 1), gold: 12, next_death_event_date: (year: 1068, month: 2, day: 17)),
-        (id: "char-mellario", dob: (year: 1016, month: 1, day: 1), gold: 18, next_death_event_date: (year: 1067, month: 4, day: 25)),
-        (id: "char-arianne", dob: (year: 1042, month: 1, day: 1), gold: 10, next_death_event_date: (year: 1067, month: 10, day: 28)),
-        (id: "char-quentyn", dob: (year: 1047, month: 1, day: 1), gold: 9, next_death_event_date: (year: 1068, month: 7, day: 13)),
-        (id: "char-trystane", dob: (year: 1051, month: 1, day: 1), gold: 6, next_death_event_date: (year: 1080, month: 8, day: 1)),
+        (id: "char-aldric", dob: (year: 1005, month: 1, day: 1), gold: 42, next_death_event_date: (year: 1066, month: 8, day: 7)),
+        (id: "char-mara",   dob: (year: 1032, month: 1, day: 1), gold: 8,  next_death_event_date: (year: 1067, month: 7, day: 30)),
+        (id: "char-bors",   dob: (year: 1029, month: 1, day: 1), gold: 18, next_death_event_date: (year: 1068, month: 7, day: 13)),
+        (id: "char-rhael",  dob: (year: 1032, month: 1, day: 1), gold: 9,  next_death_event_date: (year: 1067, month: 4, day: 25)),
+        (id: "char-denyse", dob: (year: 1035, month: 1, day: 1), gold: 7,  next_death_event_date: (year: 1068, month: 2, day: 17)),
+        (id: "char-gunthor",dob: (year: 1038, month: 1, day: 1), gold: 11, next_death_event_date: (year: 1068, month: 11, day: 3)),
+        (id: "char-tybalt", dob: (year: 1009, month: 1, day: 1), gold: 35, next_death_event_date: (year: 1066, month: 12, day: 18)),
+        (id: "char-joran",  dob: (year: 1037, month: 1, day: 1), gold: 13, next_death_event_date: (year: 1067, month: 6, day: 17)),
+        (id: "char-cerelia", dob: (year: 1038, month: 1, day: 1), gold: 12, next_death_event_date: (year: 1068, month: 3, day: 24)),
+        (id: "char-tristam",dob: (year: 1041, month: 1, day: 1), gold: 14, next_death_event_date: (year: 1068, month: 8, day: 20)),
+        (id: "char-josara", dob: (year: 1004, month: 1, day: 1), gold: 22, next_death_event_date: (year: 1066, month: 6, day: 4)),
+        (id: "char-laurent", dob: (year: 1049, month: 1, day: 1), gold: 5, next_death_event_date: (year: 1067, month: 3, day: 19)),
+        (id: "char-jorell", dob: (year: 1000, month: 1, day: 1), gold: 27, next_death_event_date: (year: 1066, month: 7, day: 19)),
+        (id: "char-lysette", dob: (year: 1034, month: 1, day: 1), gold: 6, next_death_event_date: (year: 1067, month: 10, day: 28)),
+        (id: "char-jeyne",  dob: (year: 1006, month: 1, day: 1), gold: 19, next_death_event_date: (year: 1067, month: 6, day: 2)),
+        (id: "char-elric",  dob: (year: 1028, month: 1, day: 1), gold: 16, next_death_event_date: (year: 1067, month: 9, day: 21)),
+        (id: "char-aemma",  dob: (year: 1036, month: 1, day: 1), gold: 8,  next_death_event_date: (year: 1068, month: 4, day: 30)),
+        (id: "char-alaric", dob: (year: 1054, month: 1, day: 1), gold: 4,  next_death_event_date: (year: 1077, month: 10, day: 21)),
+        (id: "char-maren",  dob: (year: 1016, month: 1, day: 1), gold: 20, next_death_event_date: (year: 1066, month: 11, day: 29)),
+        (id: "char-edric",  dob: (year: 1043, month: 1, day: 1), gold: 10, next_death_event_date: (year: 1068, month: 6, day: 7)),
+        (id: "char-halric", dob: (year: 1011, month: 1, day: 1), gold: 24, next_death_event_date: (year: 1067, month: 1, day: 24)),
+        (id: "char-brand",  dob: (year: 1014, month: 1, day: 1), gold: 17, next_death_event_date: (year: 1066, month: 10, day: 5)),
+        (id: "char-cassia", dob: (year: 1044, month: 1, day: 1), gold: 11, next_death_event_date: (year: 1068, month: 9, day: 27)),
+        (id: "char-lysara", dob: (year: 1047, month: 1, day: 1), gold: 8,  next_death_event_date: (year: 1067, month: 12, day: 5)),
+        (id: "char-olwen",  dob: (year:  991, month: 1, day: 1), gold: 30, next_death_event_date: (year: 1066, month: 6, day: 22)),
+        (id: "char-markel", dob: (year: 1026, month: 1, day: 1), gold: 15, next_death_event_date: (year: 1068, month: 2, day: 17)),
+        (id: "char-lorian", dob: (year:  996, month: 1, day: 1), gold: 26, next_death_event_date: (year: 1066, month: 5, day: 25)),
+        (id: "char-wendell", dob: (year: 1034, month: 1, day: 1), gold: 13, next_death_event_date: (year: 1067, month: 7, day: 30)),
+        (id: "char-garrick", dob: (year: 1037, month: 1, day: 1), gold: 11, next_death_event_date: (year: 1068, month: 6, day: 7)),
+        (id: "char-mariel", dob: (year: 1048, month: 1, day: 1), gold: 7, next_death_event_date: (year: 1068, month: 3, day: 24)),
+        (id: "char-dorian", dob: (year: 1011, month: 1, day: 1), gold: 25, next_death_event_date: (year: 1066, month: 11, day: 11)),
+        (id: "char-oryn",   dob: (year: 1028, month: 1, day: 1), gold: 12, next_death_event_date: (year: 1068, month: 2, day: 17)),
+        (id: "char-melora", dob: (year: 1016, month: 1, day: 1), gold: 18, next_death_event_date: (year: 1067, month: 4, day: 25)),
+        (id: "char-ariel",  dob: (year: 1042, month: 1, day: 1), gold: 10, next_death_event_date: (year: 1067, month: 10, day: 28)),
+        (id: "char-quentin",dob: (year: 1047, month: 1, day: 1), gold: 9,  next_death_event_date: (year: 1068, month: 7, day: 13)),
+        (id: "char-torren", dob: (year: 1051, month: 1, day: 1), gold: 6, next_death_event_date: (year: 1080, month: 8, day: 1)),
 
         // New minor-house characters.
-        (id: "char-lyra-ashford", dob: (year: 1048, month: 1, day: 1), gold: 9, next_death_event_date: (year: 1074, month: 2, day: 12)),
-        (id: "char-ronald-ashford", dob: (year: 1042, month: 1, day: 1), gold: 14, next_death_event_date: (year: 1068, month: 9, day: 4)),
-        (id: "char-elda-beesbury", dob: (year: 1037, month: 1, day: 1), gold: 11, next_death_event_date: (year: 1070, month: 11, day: 19)),
-        (id: "char-lucas-beesbury", dob: (year: 1030, month: 1, day: 1), gold: 18, next_death_event_date: (year: 1069, month: 4, day: 3)),
-        (id: "char-emma-brax", dob: (year: 1050, month: 1, day: 1), gold: 6, next_death_event_date: (year: 1076, month: 6, day: 22)),
-        (id: "char-rolf-brax", dob: (year: 1044, month: 1, day: 1), gold: 12, next_death_event_date: (year: 1071, month: 8, day: 30)),
-        (id: "char-lyonel-crakehall", dob: (year: 1024, month: 1, day: 1), gold: 21, next_death_event_date: (year: 1067, month: 12, day: 10)),
-        (id: "char-sara-crakehall", dob: (year: 1047, month: 1, day: 1), gold: 8, next_death_event_date: (year: 1073, month: 3, day: 15)),
-        (id: "char-cassana-estermont", dob: (year: 1031, month: 1, day: 1), gold: 16, next_death_event_date: (year: 1068, month: 1, day: 28)),
-        (id: "char-balar-estermont", dob: (year: 1039, month: 1, day: 1), gold: 10, next_death_event_date: (year: 1072, month: 5, day: 9)),
-        (id: "char-elian-fossoway", dob: (year: 1046, month: 1, day: 1), gold: 13, next_death_event_date: (year: 1070, month: 7, day: 21)),
-        (id: "char-lyenna-fossoway", dob: (year: 1052, month: 1, day: 1), gold: 7, next_death_event_date: (year: 1078, month: 10, day: 2)),
-        (id: "char-brian-grandison", dob: (year: 1019, month: 1, day: 1), gold: 24, next_death_event_date: (year: 1067, month: 2, day: 14)),
-        (id: "char-joan-grandison", dob: (year: 1049, month: 1, day: 1), gold: 10, next_death_event_date: (year: 1075, month: 11, day: 6)),
-        (id: "char-rolland-mertyns", dob: (year: 1027, month: 1, day: 1), gold: 17, next_death_event_date: (year: 1066, month: 10, day: 23)),
-        (id: "char-melisande-mertyns", dob: (year: 1041, month: 1, day: 1), gold: 8, next_death_event_date: (year: 1069, month: 6, day: 17)),
-        (id: "char-harbert-staunton", dob: (year: 1016, month: 1, day: 1), gold: 19, next_death_event_date: (year: 1067, month: 8, day: 5)),
-        (id: "char-jeyne-staunton", dob: (year: 1045, month: 1, day: 1), gold: 9, next_death_event_date: (year: 1071, month: 1, day: 12)),
-        (id: "char-ormond-wylde", dob: (year: 1022, month: 1, day: 1), gold: 15, next_death_event_date: (year: 1066, month: 12, day: 30)),
-        (id: "char-ysara-wylde", dob: (year: 1053, month: 1, day: 1), gold: 6, next_death_event_date: (year: 1080, month: 4, day: 18)),
+        (id: "char-lyra-brackenwell",  dob: (year: 1048, month: 1, day: 1), gold: 9,  next_death_event_date: (year: 1074, month: 2, day: 12)),
+        (id: "char-ronan-brackenwell", dob: (year: 1042, month: 1, day: 1), gold: 14, next_death_event_date: (year: 1068, month: 9, day: 4)),
+        (id: "char-elda-hollowfield",  dob: (year: 1037, month: 1, day: 1), gold: 11, next_death_event_date: (year: 1070, month: 11, day: 19)),
+        (id: "char-lucan-hollowfield", dob: (year: 1030, month: 1, day: 1), gold: 18, next_death_event_date: (year: 1069, month: 4, day: 3)),
+        (id: "char-emma-marfield",     dob: (year: 1050, month: 1, day: 1), gold: 6,  next_death_event_date: (year: 1076, month: 6, day: 22)),
+        (id: "char-rolf-marfield",     dob: (year: 1044, month: 1, day: 1), gold: 12, next_death_event_date: (year: 1071, month: 8, day: 30)),
+        (id: "char-lyonel-stonedale",  dob: (year: 1024, month: 1, day: 1), gold: 21, next_death_event_date: (year: 1067, month: 12, day: 10)),
+        (id: "char-sara-stonedale",    dob: (year: 1047, month: 1, day: 1), gold: 8,  next_death_event_date: (year: 1073, month: 3, day: 15)),
+        (id: "char-cassana-greenmere", dob: (year: 1031, month: 1, day: 1), gold: 16, next_death_event_date: (year: 1068, month: 1, day: 28)),
+        (id: "char-balar-greenmere",   dob: (year: 1039, month: 1, day: 1), gold: 10, next_death_event_date: (year: 1072, month: 5, day: 9)),
+        (id: "char-elian-wyndham",     dob: (year: 1046, month: 1, day: 1), gold: 13, next_death_event_date: (year: 1070, month: 7, day: 21)),
+        (id: "char-lyenna-wyndham",    dob: (year: 1052, month: 1, day: 1), gold: 7,  next_death_event_date: (year: 1078, month: 10, day: 2)),
+        (id: "char-brian-greycairn",   dob: (year: 1019, month: 1, day: 1), gold: 24, next_death_event_date: (year: 1067, month: 2, day: 14)),
+        (id: "char-joan-greycairn",    dob: (year: 1049, month: 1, day: 1), gold: 10, next_death_event_date: (year: 1075, month: 11, day: 6)),
+        (id: "char-rolland-rookswood", dob: (year: 1027, month: 1, day: 1), gold: 17, next_death_event_date: (year: 1066, month: 10, day: 23)),
+        (id: "char-melisande-rookswood", dob: (year: 1041, month: 1, day: 1), gold: 8, next_death_event_date: (year: 1069, month: 6, day: 17)),
+        (id: "char-harbert-thornkeep", dob: (year: 1016, month: 1, day: 1), gold: 19, next_death_event_date: (year: 1067, month: 8, day: 5)),
+        (id: "char-jeyne-thornkeep",   dob: (year: 1045, month: 1, day: 1), gold: 9,  next_death_event_date: (year: 1071, month: 1, day: 12)),
+        (id: "char-ormond-saltmoor",   dob: (year: 1022, month: 1, day: 1), gold: 15, next_death_event_date: (year: 1066, month: 12, day: 30)),
+        (id: "char-ysara-saltmoor",    dob: (year: 1053, month: 1, day: 1), gold: 6,  next_death_event_date: (year: 1080, month: 4, day: 18)),
 
         // ----- Dead characters: dob recorded so ages come out right (gold left at 0; they're dead). -----
-        // House Hightower: dead ancestors of Leyton, plus dead son Brynden.
-        (id: "char-bors",      dob: (year:  984, month: 1, day: 1)),
+        // House Cresswell: dead ancestors of Aldric, plus dead son Braddon.
+        (id: "char-bordan",    dob: (year:  984, month: 1, day: 1)),
         (id: "char-dalla",     dob: (year:  987, month: 1, day: 1)),
-        (id: "char-brynden-hi", dob: (year: 1042, month: 1, day: 1)),
+        (id: "char-braddon",   dob: (year: 1042, month: 1, day: 1)),
 
-        // House Lannister: dead ancestors of Tywin, plus dead son Steffon.
-        (id: "char-tytos",     dob: (year:  977, month: 1, day: 1)),
-        (id: "char-jeyne-ln",  dob: (year:  984, month: 1, day: 1)),
-        (id: "char-steffon",   dob: (year: 1043, month: 1, day: 1)),
+        // House Aurelan: dead ancestors of Tybalt, plus dead son Steff.
+        (id: "char-torin",     dob: (year:  977, month: 1, day: 1)),
+        (id: "char-jeyne-au",  dob: (year:  984, month: 1, day: 1)),
+        (id: "char-steff",     dob: (year: 1043, month: 1, day: 1)),
 
-        // House Arryn: dead ancestors of Jon, plus dead son Artys.
-        (id: "char-isembard",  dob: (year:  968, month: 1, day: 1)),
-        (id: "char-alyssa",    dob: (year:  973, month: 1, day: 1)),
-        (id: "char-artys",     dob: (year: 1050, month: 1, day: 1)),
+        // House Selwyn: dead ancestors of Jorell, plus dead son Aldric.
+        (id: "char-ingrey",    dob: (year:  968, month: 1, day: 1)),
+        (id: "char-alessia",   dob: (year:  973, month: 1, day: 1)),
+        (id: "char-aldric",    dob: (year: 1050, month: 1, day: 1)),
 
-        // House Tully: dead ancestors of Hoster, plus dead son Leo.
-        (id: "char-edmyn",     dob: (year:  974, month: 1, day: 1)),
-        (id: "char-lysbeth",   dob: (year:  979, month: 1, day: 1)),
-        (id: "char-leo",       dob: (year: 1034, month: 1, day: 1)),
+        // House Darrowmont: dead ancestors of Halric, plus dead son Leofric.
+        (id: "char-edwyn",     dob: (year:  974, month: 1, day: 1)),
+        (id: "char-elspeth",   dob: (year:  979, month: 1, day: 1)),
+        (id: "char-leofric",   dob: (year: 1034, month: 1, day: 1)),
 
-        // House Tyrell: dead ancestors of Luthor, plus dead son Quentyn.
-        (id: "char-moryn",     dob: (year:  958, month: 1, day: 1)),
-        (id: "char-alannys",   dob: (year:  964, month: 1, day: 1)),
-        (id: "char-quentyn-ty", dob: (year: 1038, month: 1, day: 1)),
+        // House Margaux: dead ancestors of Lorian, plus dead son Quent.
+        (id: "char-morian",    dob: (year:  958, month: 1, day: 1)),
+        (id: "char-alanna",    dob: (year:  964, month: 1, day: 1)),
+        (id: "char-quent",     dob: (year: 1038, month: 1, day: 1)),
 
-        // House Martell: dead ancestors of Doran, plus dead son Olyvar.
+        // House Corvin: dead ancestors of Dorian, plus dead son Olyvar.
         (id: "char-qorell",    dob: (year:  978, month: 1, day: 1)),
         (id: "char-meria",     dob: (year:  984, month: 1, day: 1)),
         (id: "char-olyvar",    dob: (year: 1045, month: 1, day: 1)),
@@ -217,28 +217,28 @@
     // contribution so long as today < until_date. A fresh gift is blocked
     // while any active ReceivedGold memory remains on the recipient.
     memories: [
-        // Alerie remembers Mace's wedding gift of 25 gold, +25 opinion for 5 years.
-        (id: "memory-alerie-mace-wedding",
-         character_id: "char-alerie",
-         toward_character_id: "char-mace",
+        // Mara remembers Markel's wedding gift of 25 gold, +25 opinion for 5 years.
+        (id: "memory-mara-markel-wedding",
+         character_id: "char-mara",
+         toward_character_id: "char-markel",
          created_date: (year: 1064, month: 6, day: 1),
          until_date: (year: 1069, month: 6, day: 1),
          kind: ReceivedGold(amount: 25)),
 
-        // Luthor remembers Olenna's gift of 50 gold, +50 opinion for 10 years.
-        (id: "memory-luthor-olenna",
-         character_id: "char-luthor",
-         toward_character_id: "char-olenna",
+        // Lorian remembers Olwen's gift of 50 gold, +50 opinion for 10 years.
+        (id: "memory-lorian-olwen",
+         character_id: "char-lorian",
+         toward_character_id: "char-olwen",
          created_date: (year: 1060, month: 1, day: 1),
          until_date: (year: 1070, month: 1, day: 1),
          kind: ReceivedGold(amount: 50)),
 
-        // Tywin gifted 50 gold to Minisa (leader of kingdom-riverlands / Riverrun)
+        // Tybalt gifted 50 gold to Maren (leader of kingdom-riversmeet)
         // as a diplomatic gesture dated 1065.6.1 — ~7 months before game open
         // (1066.1.1) so the +50 opinion boost is live at start and lasts ~9.4 years.
-        (id: "memory-minisa-tywin-gift",
-         character_id: "char-minisa",
-         toward_character_id: "char-tywin",
+        (id: "memory-maren-tybalt-gift",
+         character_id: "char-maren",
+         toward_character_id: "char-tybalt",
          created_date: (year: 1065, month: 6, day: 1),
          until_date: (year: 1075, month: 6, day: 1),
          kind: ReceivedGold(amount: 50)),

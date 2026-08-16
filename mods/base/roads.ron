@@ -1,7 +1,7 @@
 // Connections between adjacent lands, west to east. Each road is a polyline:
 // point 1 = western land's holding, last point = eastern land's holding.
 // `between_land_ids` lists the two lands the road joins. Roads through
-// Lannisport's belly have extra intermediate points so they bend slightly
+// Goldharbour's belly have extra intermediate points so they bend slightly
 // instead of running dead straight; the other roads stay at 3 points.
 //
 // `distance_days` is how long an army takes to march the road — one marching
@@ -15,10 +15,10 @@
     roads: [
         // ~430 units
         (id: "road-1-2", points: [(330, 345),  (540.0, 390.0),  (750, 435)],   between_land_ids: ["land-1", "land-2"], distance_days: 17),
-        // through Lannisport's belly: 5 points, gentle southward dip — the
+        // through Goldharbour's belly: 5 points, gentle southward dip — the
         // longest road on the map, so it sets the 30-day ceiling
         (id: "road-2-3", points: [(750, 435),  (970, 540),  (1170, 630), (1300, 675), (1440, 720)],  between_land_ids: ["land-2", "land-3"], distance_days: 30),
-        // leaving Lannisport into Riverrun: 5 points, slight northward kink
+        // leaving Goldharbour into Crossford: 5 points, slight northward kink
         // — ~284 units, the shortest of the belly roads
         (id: "road-3-4", points: [(1440, 720), (1510, 755), (1570, 795), (1630, 840), (1680, 870)], between_land_ids: ["land-3", "land-4"], distance_days: 11),
         // ~573 units

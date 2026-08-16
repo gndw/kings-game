@@ -102,7 +102,7 @@ fn spawn_label(commands: &mut Commands, text: &str, anchor: Vec2) -> (Entity, En
     (text_e, bg_e)
 }
 
-/// Format the on-map label: `"Lannister Army (90)"`. Falls back to `"Army"` when no `ArmyName`.
+/// Format the on-map label: `"Aurelan Army (90)"`. Falls back to `"Army"` when no `ArmyName`.
 fn format_label(name: Option<&ArmyName>, levy: &ArmyLevy) -> String {
     let name = name.map(|army_name| army_name.0.as_str()).unwrap_or("Army");
     format!("{name} ({})", levy.0)

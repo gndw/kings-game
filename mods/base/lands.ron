@@ -10,19 +10,19 @@
 (
     lands: [
         // far west: the tip of the tail, out past the (540, ...) cut
-        (id: "land-1", name: "Westwatch", holding: (330, 345), borders: [
+        (id: "land-1", name: "Aldgate", holding: (330, 345), borders: [
             (540, 465), (390, 435), (240, 420), (120, 330),
             (240, 240), (390, 285), (540, 345),
             (540, 465),
         ]),
         // west: the rest of the tail, up to the belly border
-        (id: "land-2", name: "Oldtown", holding: (750, 435), borders: [
+        (id: "land-2", name: "Westmarch", holding: (750, 435), borders: [
             (960, 555), (840, 510), (690, 450), (540, 465),
             (540, 345), (690, 375), (840, 390), (960, 420),
             (954, 465), (966, 510), (960, 555),
         ]),
         // centre-west: the lower belly
-        (id: "land-3", name: "Lannisport", holding: (1440, 720), borders: [
+        (id: "land-3", name: "Goldharbour", holding: (1440, 720), borders: [
             (960, 555), (1080, 645), (1170, 750), (1260, 825), (1350, 900),
             (1410, 990),
             (1620, 570), (1530, 510), (1440, 450), (1350, 420), (1260, 360),
@@ -30,20 +30,20 @@
             (954, 465), (966, 510), (960, 555),
         ]),
         // centre-east: the upper belly, up to the head border
-        (id: "land-4", name: "Riverrun", holding: (1680, 870), borders: [
+        (id: "land-4", name: "Crossford", holding: (1680, 870), borders: [
             (1410, 990), (1500, 1050), (1620, 1125), (1710, 1200), (1800, 1260), (1920, 1335),
             (1884, 1200), (1935, 1050), (1980, 900),
             (1890, 870), (1800, 795), (1740, 720), (1680, 645), (1620, 570),
             (1410, 990),
         ]),
         // north-east: the head, west of the lobe cut
-        (id: "land-5", name: "Gulltown", holding: (2100, 1260), borders: [
+        (id: "land-5", name: "Hawkrest", holding: (2100, 1260), borders: [
             (1920, 1335), (2010, 1395), (2100, 1440), (2220, 1410),
             (2280, 1185), (2190, 1125), (2100, 1050), (2070, 960), (1980, 900),
             (1935, 1050), (1884, 1200), (1920, 1335),
         ]),
         // east: the coastal lobe on the far side of the head
-        (id: "land-6", name: "Duskendale", holding: (2325, 1335), borders: [
+        (id: "land-6", name: "Sun's End", holding: (2325, 1335), borders: [
             (2220, 1410), (2310, 1455), (2400, 1380), (2430, 1290), (2370, 1215),
             (2280, 1185),
             (2220, 1410),

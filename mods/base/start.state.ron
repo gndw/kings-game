@@ -194,7 +194,7 @@
         // House Selwyn: dead ancestors of Jorell, plus dead son Aldric.
         (id: "char-ingrey",    dob: (year:  968, month: 1, day: 1)),
         (id: "char-alessia",   dob: (year:  973, month: 1, day: 1)),
-        (id: "char-aldric",    dob: (year: 1050, month: 1, day: 1)),
+        (id: "char-aldric-selwyn",    dob: (year: 1050, month: 1, day: 1)),
 
         // House Darrowmont: dead ancestors of Halric, plus dead son Leofric.
         (id: "char-edwyn",     dob: (year:  974, month: 1, day: 1)),

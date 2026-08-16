@@ -61,33 +61,33 @@ pub struct CharacterLevy(pub u64);
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct CharacterGoldYield(pub i64);
 
-/// A character's martial skill (0..=10) — field command, battle tactics,
+/// A character's martial skill (0..=20) — field command, battle tactics,
 /// siegecraft. Folded with logistics: drives monthly levy replenishment,
 /// march distance, and army combat power.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct CharacterMartial(pub i32);
 
-/// A character's prowess (0..=10) — personal combat, duels, ambushes,
+/// A character's prowess (0..=20) — personal combat, duels, ambushes,
 /// surviving assassination. Drives the monthly personal safety check.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct CharacterProwess(pub i32);
 
-/// A character's treasury skill (0..=10) — tax efficiency plus trade
+/// A character's treasury skill (0..=20) — tax efficiency plus trade
 /// leverage. Drives the monthly gold yield multiplier on the realm.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct CharacterTreasury(pub i32);
 
-/// A character's prudence (0..=10) — internal judgment and external accord.
+/// A character's prudence (0..=20) — internal judgment and external accord.
 /// Drives monthly vassal + foreign opinion drift.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct CharacterPrudence(pub i32);
 
-/// A character's intrigue (0..=10) — plots, detection, secrets. Drives
+/// A character's intrigue (0..=20) — plots, detection, secrets. Drives
 /// monthly plot-detection threshold and rumor spread.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct CharacterIntrigue(pub i32);
 
-/// A character's faith (0..=10) — piety plus theological literacy. Drives
+/// A character's faith (0..=20) — piety plus theological literacy. Drives
 /// monthly Church favor drift, legitimacy drift, and event-tier unlocks.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct CharacterFaith(pub i32);

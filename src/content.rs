@@ -227,7 +227,7 @@ pub struct Character {
     #[serde(default)]
     pub gender: CharacterGender,
     /// Authored baseline + state overlay: the character's six abilities.
-    /// Skill values are clamped into `0..=10` at populate time, so a state
+    /// Skill values are clamped into `0..=20` at populate time, so a state
     /// save can drift a stat without breaking the definition.
     #[serde(default)]
     pub skills: Skills,
@@ -238,7 +238,7 @@ pub struct Character {
 /// them so a "Wounded" / "Well-taught" trait can shift current values without
 /// breaking the definition.
 ///
-/// The range is 0..=10 across all six. Definition-time values outside the
+/// The range is 0..=20 across all six. Definition-time values outside the
 /// range fail `validate`; state-overlay values are clamped silently in
 /// `populate`.
 #[derive(Debug, Default, Deserialize, Clone, Copy)]
@@ -271,9 +271,9 @@ pub struct Skills {
 
 impl Skills {
     /// The minimum / maximum a single skill can hold. Values are clamped into
-    /// the half-open range `[0, 10]` at populate time.
+    /// the half-open range `[0, 20]` at populate time.
     pub const MIN: i32 = 0;
-    pub const MAX: i32 = 10;
+    pub const MAX: i32 = 20;
 
     /// True if every skill lies in `MIN..=MAX`. `validate` calls this on
     /// each character's authored skill block.
@@ -427,7 +427,7 @@ pub fn validate(content: &Content) -> Result<()> {
         }
         if !c.skills.in_range() {
             bail!(
-                "character `{}` has out-of-range skills (must be 0..=10): {:?}",
+                "character `{}` has out-of-range skills (must be 0..=20): {:?}",
                 c.id,
                 c.skills
             );

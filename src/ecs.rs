@@ -13,7 +13,7 @@
 //!   [`CharacterGoldYield`], [`CharacterOfHouse`], maybe [`CharacterLeads`],
 //!   plus the six skill components ([`CharacterMartial`], [`CharacterProwess`],
 //!   [`CharacterTreasury`], [`CharacterPrudence`], [`CharacterIntrigue`],
-//!   [`CharacterFaith`], each `i32` 0..=10), plus family ties
+//!   [`CharacterFaith`], each `i32` 0..=20), plus family ties
 //!   ([`CharacterHasFather`] / [`CharacterHasMother`] on the child,
 //!   [`CharacterHasHusband`] on the wife with the auto-maintained
 //!   [`CharacterHasWife`] target on the husband) and reverse Vecs

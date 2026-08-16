@@ -7,140 +7,144 @@
 // Family ties (parent↔child, husband↔wife) live in families.ron.
 //
 // Each character carries a `skills` block (martial / prowess / treasury /
-// prudence / intrigue / faith), all 0..=10. The values here are the authored
+// prudence / intrigue / faith), all 0..=20. The values here are the authored
 // baseline; a state overlay may replace them so future traits can drift a
 // stat without breaking the definition.
+//
+// Distribution target (mod-wide): mean ~10, std-dev ~4, with 19-20 reserved
+// for legendary rulers and 2-4 for the clearly weak. The range 0..=20 lets
+// the AI monthly formulas have headroom — see docs/skills.md (TODO).
 (
     characters: [
         // House Cresswell — Aldric rules Westmarch; Mara is his wife.
-        (id: "char-aldric",   name: "Aldric",   house_id: "house-cresswell", gender: m, skills: (martial: 4, prowess: 3, treasury: 7, prudence: 8, intrigue: 5, faith: 6)),
-        (id: "char-mara",     name: "Mara",     house_id: "house-cresswell", gender: f, skills: (martial: 2, prowess: 2, treasury: 4, prudence: 6, intrigue: 4, faith: 7)),
-        (id: "char-bors",     name: "Bors",     house_id: "house-cresswell", gender: m, skills: (martial: 6, prowess: 7, treasury: 5, prudence: 5, intrigue: 4, faith: 5)),
-        (id: "char-rhael",    name: "Rhael",    house_id: "house-cresswell", gender: f, skills: (martial: 3, prowess: 3, treasury: 4, prudence: 7, intrigue: 5, faith: 6)),
-        (id: "char-denyse",   name: "Denyse",   house_id: "house-cresswell", gender: f, skills: (martial: 2, prowess: 2, treasury: 3, prudence: 5, intrigue: 4, faith: 7)),
-        (id: "char-gunthor",  name: "Gunthor",  house_id: "house-cresswell", gender: m, skills: (martial: 5, prowess: 6, treasury: 4, prudence: 4, intrigue: 3, faith: 5)),
+        (id: "char-aldric",   name: "Aldric",   house_id: "house-cresswell", gender: m, skills: (martial:  8, prowess:  6, treasury: 14, prudence: 18, intrigue: 10, faith: 12)),
+        (id: "char-mara",     name: "Mara",     house_id: "house-cresswell", gender: f, skills: (martial:  4, prowess:  4, treasury:  8, prudence: 12, intrigue:  8, faith: 14)),
+        (id: "char-bors",     name: "Bors",     house_id: "house-cresswell", gender: m, skills: (martial: 12, prowess: 14, treasury: 10, prudence: 10, intrigue:  8, faith: 10)),
+        (id: "char-rhael",    name: "Rhael",    house_id: "house-cresswell", gender: f, skills: (martial:  6, prowess:  6, treasury:  8, prudence: 14, intrigue: 10, faith: 12)),
+        (id: "char-denyse",   name: "Denyse",   house_id: "house-cresswell", gender: f, skills: (martial:  4, prowess:  4, treasury:  6, prudence: 10, intrigue:  8, faith: 14)),
+        (id: "char-gunthor",  name: "Gunthor",  house_id: "house-cresswell", gender: m, skills: (martial: 10, prowess: 12, treasury:  8, prudence:  8, intrigue:  6, faith: 10)),
 
         // House Cresswell — dead ancestors of Aldric.
-        (id: "char-bordan",   name: "Bordan",   house_id: "house-cresswell", gender: m, is_alive: false, death_date: (year: 1049, month: 4, day: 7), skills: (martial: 5, prowess: 4, treasury: 7, prudence: 9, intrigue: 6, faith: 7)),
-        (id: "char-dalla",    name: "Dalla",    house_id: "house-cresswell", gender: f, is_alive: false, death_date: (year: 1044, month: 8, day: 22), skills: (martial: 2, prowess: 2, treasury: 4, prudence: 8, intrigue: 4, faith: 8)),
+        (id: "char-bordan",   name: "Bordan",   house_id: "house-cresswell", gender: m, is_alive: false, death_date: (year: 1049, month: 4, day: 7), skills: (martial: 10, prowess:  8, treasury: 14, prudence: 19, intrigue: 12, faith: 14)),
+        (id: "char-dalla",    name: "Dalla",    house_id: "house-cresswell", gender: f, is_alive: false, death_date: (year: 1044, month: 8, day: 22), skills: (martial:  4, prowess:  4, treasury:  8, prudence: 16, intrigue:  8, faith: 16)),
 
         // House Cresswell — dead descendant of Aldric (elder son, died in his teens).
-        (id: "char-braddon",  name: "Braddon",  house_id: "house-cresswell", gender: m, is_alive: false, death_date: (year: 1058, month: 6, day: 15), skills: (martial: 3, prowess: 3, treasury: 2, prudence: 4, intrigue: 3, faith: 4)),
+        (id: "char-braddon",  name: "Braddon",  house_id: "house-cresswell", gender: m, is_alive: false, death_date: (year: 1058, month: 6, day: 15), skills: (martial:  6, prowess:  6, treasury:  4, prudence:  8, intrigue:  6, faith:  8)),
 
         // House Aurelan — Tybalt rules Goldharbour; Josara is his wife.
-        (id: "char-tybalt",   name: "Tybalt",   house_id: "house-aurelan", gender: m, skills: (martial: 8, prowess: 6, treasury: 9, prudence: 6, intrigue: 7, faith: 5)),
-        (id: "char-joran",    name: "Joran",    house_id: "house-aurelan", gender: m, skills: (martial: 7, prowess: 8, treasury: 5, prudence: 4, intrigue: 4, faith: 4)),
-        (id: "char-cerelia",  name: "Cerelia",  house_id: "house-aurelan", gender: f, skills: (martial: 3, prowess: 3, treasury: 6, prudence: 7, intrigue: 7, faith: 5)),
-        (id: "char-tristam",  name: "Tristam",  house_id: "house-aurelan", gender: m, skills: (martial: 5, prowess: 4, treasury: 8, prudence: 8, intrigue: 6, faith: 4)),
-        (id: "char-josara",   name: "Josara",   house_id: "house-aurelan", gender: f, skills: (martial: 2, prowess: 2, treasury: 6, prudence: 7, intrigue: 6, faith: 7)),
-        (id: "char-laurent",  name: "Laurent",  house_id: "house-aurelan", gender: m, skills: (martial: 3, prowess: 4, treasury: 3, prudence: 4, intrigue: 3, faith: 5)),
+        (id: "char-tybalt",   name: "Tybalt",   house_id: "house-aurelan", gender: m, skills: (martial: 16, prowess: 12, treasury: 20, prudence: 12, intrigue: 14, faith: 10)),
+        (id: "char-joran",    name: "Joran",    house_id: "house-aurelan", gender: m, skills: (martial: 14, prowess: 19, treasury: 10, prudence:  8, intrigue:  8, faith:  8)),
+        (id: "char-cerelia",  name: "Cerelia",  house_id: "house-aurelan", gender: f, skills: (martial:  6, prowess:  6, treasury: 12, prudence: 14, intrigue: 14, faith: 10)),
+        (id: "char-tristam",  name: "Tristam",  house_id: "house-aurelan", gender: m, skills: (martial: 10, prowess:  8, treasury: 16, prudence: 16, intrigue: 12, faith:  8)),
+        (id: "char-josara",   name: "Josara",   house_id: "house-aurelan", gender: f, skills: (martial:  4, prowess:  4, treasury: 12, prudence: 14, intrigue: 12, faith: 14)),
+        (id: "char-laurent",  name: "Laurent",  house_id: "house-aurelan", gender: m, skills: (martial:  6, prowess:  8, treasury:  6, prudence:  8, intrigue:  6, faith: 10)),
 
         // House Aurelan — dead ancestors of Tybalt.
-        (id: "char-torin",    name: "Torin",    house_id: "house-aurelan", gender: m, is_alive: false, death_date: (year: 1054, month: 2, day: 11), skills: (martial: 2, prowess: 2, treasury: 5, prudence: 8, intrigue: 5, faith: 6)),
-        (id: "char-jeyne-au", name: "Jeyne",    house_id: "house-aurelan", gender: f, is_alive: false, death_date: (year: 1051, month: 10, day: 30), skills: (martial: 1, prowess: 1, treasury: 4, prudence: 7, intrigue: 4, faith: 7)),
+        (id: "char-torin",    name: "Torin",    house_id: "house-aurelan", gender: m, is_alive: false, death_date: (year: 1054, month: 2, day: 11), skills: (martial:  4, prowess:  4, treasury: 10, prudence: 16, intrigue: 10, faith: 12)),
+        (id: "char-jeyne-au", name: "Jeyne",    house_id: "house-aurelan", gender: f, is_alive: false, death_date: (year: 1051, month: 10, day: 30), skills: (martial:  2, prowess:  2, treasury:  8, prudence: 14, intrigue:  8, faith: 14)),
 
         // House Aurelan — dead descendant of Tybalt (second son, fever).
-        (id: "char-steff",    name: "Steff",    house_id: "house-aurelan", gender: m, is_alive: false, death_date: (year: 1063, month: 11, day: 12), skills: (martial: 4, prowess: 3, treasury: 3, prudence: 4, intrigue: 3, faith: 4)),
+        (id: "char-steff",    name: "Steff",    house_id: "house-aurelan", gender: m, is_alive: false, death_date: (year: 1063, month: 11, day: 12), skills: (martial:  8, prowess:  6, treasury:  6, prudence:  8, intrigue:  6, faith:  8)),
 
         // House Selwyn — Jorell rules Hawkrest; Jeyne is his wife.
-        (id: "char-jorell",   name: "Jorell",   house_id: "house-selwyn",  gender: m, skills: (martial: 5, prowess: 4, treasury: 6, prudence: 9, intrigue: 6, faith: 7)),
-        (id: "char-lysette",  name: "Lysette",  house_id: "house-selwyn",  gender: f, skills: (martial: 3, prowess: 3, treasury: 4, prudence: 6, intrigue: 5, faith: 5)),
-        (id: "char-jeyne",    name: "Jeyne",    house_id: "house-selwyn",  gender: f, skills: (martial: 2, prowess: 2, treasury: 5, prudence: 6, intrigue: 5, faith: 6)),
-        (id: "char-elric",    name: "Elric",    house_id: "house-selwyn",  gender: m, skills: (martial: 6, prowess: 5, treasury: 5, prudence: 6, intrigue: 4, faith: 6)),
-        (id: "char-aemma",    name: "Aemma",    house_id: "house-selwyn",  gender: f, skills: (martial: 2, prowess: 2, treasury: 4, prudence: 6, intrigue: 6, faith: 7)),
-        (id: "char-alaric",   name: "Alaric",   house_id: "house-selwyn",  gender: m, skills: (martial: 1, prowess: 1, treasury: 2, prudence: 3, intrigue: 2, faith: 3)),
+        (id: "char-jorell",   name: "Jorell",   house_id: "house-selwyn",  gender: m, skills: (martial: 10, prowess:  8, treasury: 12, prudence: 19, intrigue: 12, faith: 14)),
+        (id: "char-lysette",  name: "Lysette",  house_id: "house-selwyn",  gender: f, skills: (martial:  6, prowess:  6, treasury:  8, prudence: 12, intrigue: 10, faith: 10)),
+        (id: "char-jeyne",    name: "Jeyne",    house_id: "house-selwyn",  gender: f, skills: (martial:  4, prowess:  4, treasury: 10, prudence: 12, intrigue: 10, faith: 12)),
+        (id: "char-elric",    name: "Elric",    house_id: "house-selwyn",  gender: m, skills: (martial: 12, prowess: 10, treasury: 10, prudence: 12, intrigue:  8, faith: 12)),
+        (id: "char-aemma",    name: "Aemma",    house_id: "house-selwyn",  gender: f, skills: (martial:  4, prowess:  4, treasury:  8, prudence: 12, intrigue: 12, faith: 14)),
+        (id: "char-alaric",   name: "Alaric",   house_id: "house-selwyn",  gender: m, skills: (martial:  2, prowess:  2, treasury:  4, prudence:  6, intrigue:  4, faith:  6)),
 
         // House Selwyn — dead ancestors of Jorell.
-        (id: "char-ingrey",   name: "Ingrey",   house_id: "house-selwyn",  gender: m, is_alive: false, death_date: (year: 1037, month: 5, day: 9), skills: (martial: 5, prowess: 4, treasury: 5, prudence: 8, intrigue: 5, faith: 7)),
-        (id: "char-alessia", name: "Alessia",  house_id: "house-selwyn",  gender: f, is_alive: false, death_date: (year: 1043, month: 9, day: 14), skills: (martial: 2, prowess: 2, treasury: 4, prudence: 7, intrigue: 4, faith: 7)),
+        (id: "char-ingrey",   name: "Ingrey",   house_id: "house-selwyn",  gender: m, is_alive: false, death_date: (year: 1037, month: 5, day: 9), skills: (martial: 10, prowess:  8, treasury: 10, prudence: 16, intrigue: 10, faith: 14)),
+        (id: "char-alessia",  name: "Alessia",  house_id: "house-selwyn",  gender: f, is_alive: false, death_date: (year: 1043, month: 9, day: 14), skills: (martial:  4, prowess:  4, treasury:  8, prudence: 14, intrigue:  8, faith: 14)),
 
         // House Selwyn — dead descendant of Jorell (first son, hunting accident).
-        (id: "char-aldric",   name: "Aldric",   house_id: "house-selwyn",  gender: m, is_alive: false, death_date: (year: 1065, month: 8, day: 11), skills: (martial: 3, prowess: 3, treasury: 3, prudence: 4, intrigue: 3, faith: 4)),
+        (id: "char-aldric-selwyn", name: "Aldric", house_id: "house-selwyn",  gender: m, is_alive: false, death_date: (year: 1065, month: 8, day: 11), skills: (martial:  6, prowess:  6, treasury:  6, prudence:  8, intrigue:  6, faith:  8)),
 
         // House Darrowmont — Maren rules Aldgate; Halric is her husband.
-        (id: "char-maren",    name: "Maren",    house_id: "house-darrowmont", gender: f, skills: (martial: 3, prowess: 2, treasury: 6, prudence: 8, intrigue: 5, faith: 6)),
-        (id: "char-edric",    name: "Edric",    house_id: "house-darrowmont", gender: m, skills: (martial: 5, prowess: 5, treasury: 4, prudence: 5, intrigue: 4, faith: 5)),
-        (id: "char-halric",   name: "Halric",   house_id: "house-darrowmont", gender: m, skills: (martial: 4, prowess: 3, treasury: 5, prudence: 7, intrigue: 5, faith: 5)),
-        (id: "char-brand",    name: "Brand",    house_id: "house-darrowmont", gender: m, skills: (martial: 7, prowess: 5, treasury: 4, prudence: 6, intrigue: 7, faith: 4)),
-        (id: "char-cassia",   name: "Cassia",   house_id: "house-darrowmont", gender: f, skills: (martial: 3, prowess: 3, treasury: 5, prudence: 7, intrigue: 5, faith: 6)),
-        (id: "char-lysara",   name: "Lysara",   house_id: "house-darrowmont", gender: f, skills: (martial: 2, prowess: 2, treasury: 3, prudence: 5, intrigue: 4, faith: 6)),
+        (id: "char-maren",    name: "Maren",    house_id: "house-darrowmont", gender: f, skills: (martial:  6, prowess:  4, treasury: 12, prudence: 18, intrigue: 10, faith: 12)),
+        (id: "char-edric",    name: "Edric",    house_id: "house-darrowmont", gender: m, skills: (martial: 10, prowess: 10, treasury:  8, prudence: 10, intrigue:  8, faith: 10)),
+        (id: "char-halric",   name: "Halric",   house_id: "house-darrowmont", gender: m, skills: (martial:  8, prowess:  6, treasury: 10, prudence: 14, intrigue: 10, faith: 10)),
+        (id: "char-brand",    name: "Brand",    house_id: "house-darrowmont", gender: m, skills: (martial: 14, prowess: 10, treasury:  8, prudence: 12, intrigue: 14, faith:  8)),
+        (id: "char-cassia",   name: "Cassia",   house_id: "house-darrowmont", gender: f, skills: (martial:  6, prowess:  6, treasury: 10, prudence: 14, intrigue: 10, faith: 12)),
+        (id: "char-lysara",   name: "Lysara",   house_id: "house-darrowmont", gender: f, skills: (martial:  4, prowess:  4, treasury:  6, prudence: 10, intrigue:  8, faith: 12)),
 
         // House Darrowmont — dead ancestors of Halric.
-        (id: "char-edwyn",    name: "Edwyn",    house_id: "house-darrowmont", gender: m, is_alive: false, death_date: (year: 1036, month: 7, day: 22), skills: (martial: 6, prowess: 4, treasury: 5, prudence: 7, intrigue: 5, faith: 5)),
-        (id: "char-elspeth", name: "Elspeth",  house_id: "house-darrowmont", gender: f, is_alive: false, death_date: (year: 1044, month: 3, day: 11), skills: (martial: 1, prowess: 1, treasury: 4, prudence: 7, intrigue: 4, faith: 7)),
+        (id: "char-edwyn",    name: "Edwyn",    house_id: "house-darrowmont", gender: m, is_alive: false, death_date: (year: 1036, month: 7, day: 22), skills: (martial: 12, prowess:  8, treasury: 10, prudence: 14, intrigue: 10, faith: 10)),
+        (id: "char-elspeth",  name: "Elspeth",  house_id: "house-darrowmont", gender: f, is_alive: false, death_date: (year: 1044, month: 3, day: 11), skills: (martial:  2, prowess:  2, treasury:  8, prudence: 14, intrigue:  8, faith: 14)),
 
         // House Darrowmont — dead descendant of Halric & Maren (first son, drowned in the Tumblestone as a boy).
-        (id: "char-leofric",  name: "Leofric",  house_id: "house-darrowmont", gender: m, is_alive: false, death_date: (year: 1050, month: 8, day: 3), skills: (martial: 2, prowess: 2, treasury: 2, prudence: 3, intrigue: 2, faith: 3)),
+        (id: "char-leofric",  name: "Leofric",  house_id: "house-darrowmont", gender: m, is_alive: false, death_date: (year: 1050, month: 8, day: 3), skills: (martial:  4, prowess:  4, treasury:  4, prudence:  6, intrigue:  4, faith:  6)),
 
         // House Margaux — Olwen rules the Greenfields; Lorian is her husband.
-        (id: "char-olwen",    name: "Olwen",    house_id: "house-margaux", gender: f, skills: (martial: 2, prowess: 2, treasury: 7, prudence: 8, intrigue: 9, faith: 4)),
-        (id: "char-markel",   name: "Markel",   house_id: "house-margaux", gender: m, skills: (martial: 5, prowess: 4, treasury: 6, prudence: 7, intrigue: 5, faith: 5)),
-        (id: "char-lorian",   name: "Lorian",   house_id: "house-margaux", gender: m, skills: (martial: 5, prowess: 4, treasury: 6, prudence: 7, intrigue: 5, faith: 6)),
-        (id: "char-wendell",  name: "Wendell",  house_id: "house-margaux", gender: m, skills: (martial: 6, prowess: 4, treasury: 5, prudence: 6, intrigue: 6, faith: 5)),
-        (id: "char-garrick",  name: "Garrick",  house_id: "house-margaux", gender: m, skills: (martial: 8, prowess: 7, treasury: 5, prudence: 5, intrigue: 4, faith: 4)),
-        (id: "char-mariel",   name: "Mariel",   house_id: "house-margaux", gender: f, skills: (martial: 3, prowess: 3, treasury: 5, prudence: 8, intrigue: 8, faith: 5)),
+        (id: "char-olwen",    name: "Olwen",    house_id: "house-margaux", gender: f, skills: (martial:  4, prowess:  4, treasury: 14, prudence: 19, intrigue: 20, faith:  8)),
+        (id: "char-markel",   name: "Markel",   house_id: "house-margaux", gender: m, skills: (martial: 10, prowess:  8, treasury: 12, prudence: 14, intrigue: 10, faith: 10)),
+        (id: "char-lorian",   name: "Lorian",   house_id: "house-margaux", gender: m, skills: (martial: 10, prowess:  8, treasury: 12, prudence: 14, intrigue: 10, faith: 12)),
+        (id: "char-wendell",  name: "Wendell",  house_id: "house-margaux", gender: m, skills: (martial: 12, prowess:  8, treasury: 10, prudence: 12, intrigue: 12, faith: 10)),
+        (id: "char-garrick",  name: "Garrick",  house_id: "house-margaux", gender: m, skills: (martial: 19, prowess: 18, treasury: 10, prudence: 10, intrigue:  8, faith:  8)),
+        (id: "char-mariel",   name: "Mariel",   house_id: "house-margaux", gender: f, skills: (martial:  6, prowess:  6, treasury: 10, prudence: 16, intrigue: 20, faith: 10)),
 
         // House Margaux — dead ancestors of Lorian.
-        (id: "char-morian",   name: "Morian",   house_id: "house-margaux", gender: m, is_alive: false, death_date: (year: 1034, month: 6, day: 4), skills: (martial: 4, prowess: 3, treasury: 6, prudence: 7, intrigue: 5, faith: 5)),
-        (id: "char-alanna",   name: "Alanna",   house_id: "house-margaux", gender: f, is_alive: false, death_date: (year: 1044, month: 11, day: 17), skills: (martial: 2, prowess: 2, treasury: 5, prudence: 8, intrigue: 5, faith: 7)),
+        (id: "char-morian",   name: "Morian",   house_id: "house-margaux", gender: m, is_alive: false, death_date: (year: 1034, month: 6, day: 4), skills: (martial:  8, prowess:  6, treasury: 12, prudence: 14, intrigue: 10, faith: 10)),
+        (id: "char-alanna",   name: "Alanna",   house_id: "house-margaux", gender: f, is_alive: false, death_date: (year: 1044, month: 11, day: 17), skills: (martial:  4, prowess:  4, treasury: 10, prudence: 16, intrigue: 10, faith: 14)),
 
         // House Margaux — dead descendant of Olwen (first son, killed in a tourney melee).
-        (id: "char-quent",    name: "Quent",    house_id: "house-margaux", gender: m, is_alive: false, death_date: (year: 1063, month: 4, day: 7), skills: (martial: 4, prowess: 3, treasury: 3, prudence: 4, intrigue: 3, faith: 4)),
+        (id: "char-quent",    name: "Quent",    house_id: "house-margaux", gender: m, is_alive: false, death_date: (year: 1063, month: 4, day: 7), skills: (martial:  8, prowess:  6, treasury:  6, prudence:  8, intrigue:  6, faith:  8)),
 
         // House Corvin — Dorian rules Sun's End; Melora is his wife.
-        (id: "char-dorian",   name: "Dorian",   house_id: "house-corvin", gender: m, skills: (martial: 4, prowess: 3, treasury: 6, prudence: 9, intrigue: 8, faith: 4)),
-        (id: "char-oryn",     name: "Oryn",     house_id: "house-corvin", gender: m, skills: (martial: 7, prowess: 8, treasury: 4, prudence: 5, intrigue: 5, faith: 3)),
-        (id: "char-melora",   name: "Melora",   house_id: "house-corvin", gender: f, skills: (martial: 2, prowess: 2, treasury: 5, prudence: 7, intrigue: 5, faith: 5)),
-        (id: "char-ariel",    name: "Ariel",    house_id: "house-corvin", gender: f, skills: (martial: 5, prowess: 4, treasury: 6, prudence: 8, intrigue: 7, faith: 4)),
-        (id: "char-quentin",  name: "Quentin",  house_id: "house-corvin", gender: m, skills: (martial: 4, prowess: 4, treasury: 4, prudence: 5, intrigue: 4, faith: 4)),
-        (id: "char-torren",   name: "Torren",   house_id: "house-corvin", gender: m, skills: (martial: 2, prowess: 2, treasury: 3, prudence: 4, intrigue: 3, faith: 4)),
+        (id: "char-dorian",   name: "Dorian",   house_id: "house-corvin", gender: m, skills: (martial:  8, prowess:  6, treasury: 12, prudence: 20, intrigue: 16, faith:  8)),
+        (id: "char-oryn",     name: "Oryn",     house_id: "house-corvin", gender: m, skills: (martial: 14, prowess: 19, treasury:  8, prudence: 10, intrigue: 10, faith:  6)),
+        (id: "char-melora",   name: "Melora",   house_id: "house-corvin", gender: f, skills: (martial:  4, prowess:  4, treasury: 10, prudence: 14, intrigue: 10, faith: 10)),
+        (id: "char-ariel",    name: "Ariel",    house_id: "house-corvin", gender: f, skills: (martial: 10, prowess:  8, treasury: 12, prudence: 16, intrigue: 14, faith:  8)),
+        (id: "char-quentin",  name: "Quentin",  house_id: "house-corvin", gender: m, skills: (martial:  8, prowess:  8, treasury:  8, prudence: 10, intrigue:  8, faith:  8)),
+        (id: "char-torren",   name: "Torren",   house_id: "house-corvin", gender: m, skills: (martial:  4, prowess:  4, treasury:  6, prudence:  8, intrigue:  6, faith:  8)),
 
         // Minor houses added for the opening court.
         // House Brackenwell.
-        (id: "char-lyra-brackenwell",   name: "Lyra",   house_id: "house-brackenwell", gender: f, skills: (martial: 3, prowess: 3, treasury: 5, prudence: 5, intrigue: 4, faith: 5)),
-        (id: "char-ronan-brackenwell",  name: "Ronan",  house_id: "house-brackenwell", gender: m, skills: (martial: 5, prowess: 5, treasury: 4, prudence: 4, intrigue: 3, faith: 4)),
+        (id: "char-lyra-brackenwell",   name: "Lyra",   house_id: "house-brackenwell", gender: f, skills: (martial:  6, prowess:  6, treasury: 10, prudence: 10, intrigue:  8, faith: 10)),
+        (id: "char-ronan-brackenwell",  name: "Ronan",  house_id: "house-brackenwell", gender: m, skills: (martial: 10, prowess: 10, treasury:  8, prudence:  8, intrigue:  6, faith:  8)),
 
         // House Hollowfield.
-        (id: "char-elda-hollowfield",   name: "Elda",   house_id: "house-hollowfield", gender: f, skills: (martial: 2, prowess: 2, treasury: 4, prudence: 5, intrigue: 4, faith: 5)),
-        (id: "char-lucan-hollowfield",  name: "Lucan",  house_id: "house-hollowfield", gender: m, skills: (martial: 5, prowess: 4, treasury: 5, prudence: 5, intrigue: 4, faith: 5)),
+        (id: "char-elda-hollowfield",   name: "Elda",   house_id: "house-hollowfield", gender: f, skills: (martial:  4, prowess:  4, treasury:  8, prudence: 10, intrigue:  8, faith: 10)),
+        (id: "char-lucan-hollowfield",  name: "Lucan",  house_id: "house-hollowfield", gender: m, skills: (martial: 10, prowess:  8, treasury: 10, prudence: 10, intrigue:  8, faith: 10)),
 
         // House Marfield.
-        (id: "char-emma-marfield",  name: "Emma", house_id: "house-marfield", gender: f, skills: (martial: 2, prowess: 2, treasury: 3, prudence: 4, intrigue: 3, faith: 5)),
-        (id: "char-rolf-marfield",  name: "Rolf",  house_id: "house-marfield", gender: m, skills: (martial: 6, prowess: 6, treasury: 4, prudence: 4, intrigue: 3, faith: 4)),
+        (id: "char-emma-marfield",  name: "Emma", house_id: "house-marfield", gender: f, skills: (martial:  4, prowess:  4, treasury:  6, prudence:  8, intrigue:  6, faith: 10)),
+        (id: "char-rolf-marfield",  name: "Rolf",  house_id: "house-marfield", gender: m, skills: (martial: 12, prowess: 12, treasury:  8, prudence:  8, intrigue:  6, faith:  8)),
 
         // House Stonedale.
-        (id: "char-lyonel-stonedale", name: "Lyonel", house_id: "house-stonedale", gender: m, skills: (martial: 5, prowess: 5, treasury: 6, prudence: 5, intrigue: 4, faith: 5)),
-        (id: "char-sara-stonedale",   name: "Sara",    house_id: "house-stonedale", gender: f, skills: (martial: 2, prowess: 2, treasury: 4, prudence: 5, intrigue: 4, faith: 5)),
+        (id: "char-lyonel-stonedale", name: "Lyonel", house_id: "house-stonedale", gender: m, skills: (martial: 10, prowess: 10, treasury: 12, prudence: 10, intrigue:  8, faith: 10)),
+        (id: "char-sara-stonedale",   name: "Sara",    house_id: "house-stonedale", gender: f, skills: (martial:  4, prowess:  4, treasury:  8, prudence: 10, intrigue:  8, faith: 10)),
 
         // House Greenmere.
-        (id: "char-cassana-greenmere", name: "Cassana", house_id: "house-greenmere", gender: f, skills: (martial: 3, prowess: 3, treasury: 5, prudence: 6, intrigue: 4, faith: 5)),
-        (id: "char-balar-greenmere",   name: "Balar",   house_id: "house-greenmere", gender: m, skills: (martial: 6, prowess: 6, treasury: 4, prudence: 4, intrigue: 3, faith: 4)),
+        (id: "char-cassana-greenmere", name: "Cassana", house_id: "house-greenmere", gender: f, skills: (martial:  6, prowess:  6, treasury: 10, prudence: 12, intrigue:  8, faith: 10)),
+        (id: "char-balar-greenmere",   name: "Balar",   house_id: "house-greenmere", gender: m, skills: (martial: 12, prowess: 12, treasury:  8, prudence:  8, intrigue:  6, faith:  8)),
 
         // House Wyndham.
-        (id: "char-elian-wyndham",  name: "Elian",   house_id: "house-wyndham", gender: m, skills: (martial: 5, prowess: 5, treasury: 5, prudence: 4, intrigue: 4, faith: 4)),
-        (id: "char-lyenna-wyndham", name: "Lyenna",  house_id: "house-wyndham", gender: f, skills: (martial: 2, prowess: 2, treasury: 3, prudence: 4, intrigue: 3, faith: 5)),
+        (id: "char-elian-wyndham",  name: "Elian",   house_id: "house-wyndham", gender: m, skills: (martial: 10, prowess: 10, treasury: 10, prudence:  8, intrigue:  8, faith:  8)),
+        (id: "char-lyenna-wyndham", name: "Lyenna",  house_id: "house-wyndham", gender: f, skills: (martial:  4, prowess:  4, treasury:  6, prudence:  8, intrigue:  6, faith: 10)),
 
         // House Greycairn.
-        (id: "char-brian-greycairn", name: "Brian", house_id: "house-greycairn", gender: m, skills: (martial: 6, prowess: 5, treasury: 6, prudence: 5, intrigue: 4, faith: 5)),
-        (id: "char-joan-greycairn",  name: "Joan",  house_id: "house-greycairn", gender: f, skills: (martial: 3, prowess: 3, treasury: 4, prudence: 5, intrigue: 4, faith: 5)),
+        (id: "char-brian-greycairn", name: "Brian", house_id: "house-greycairn", gender: m, skills: (martial: 12, prowess: 10, treasury: 12, prudence: 10, intrigue:  8, faith: 10)),
+        (id: "char-joan-greycairn",  name: "Joan",  house_id: "house-greycairn", gender: f, skills: (martial:  6, prowess:  6, treasury:  8, prudence: 10, intrigue:  8, faith: 10)),
 
         // House Rookswood.
-        (id: "char-rolland-rookswood",   name: "Rolland",   house_id: "house-rookswood", gender: m, skills: (martial: 6, prowess: 5, treasury: 5, prudence: 5, intrigue: 4, faith: 4)),
-        (id: "char-melisande-rookswood", name: "Melisande", house_id: "house-rookswood", gender: f, skills: (martial: 3, prowess: 3, treasury: 5, prudence: 6, intrigue: 5, faith: 5)),
+        (id: "char-rolland-rookswood",   name: "Rolland",   house_id: "house-rookswood", gender: m, skills: (martial: 12, prowess: 10, treasury: 10, prudence: 10, intrigue:  8, faith:  8)),
+        (id: "char-melisande-rookswood", name: "Melisande", house_id: "house-rookswood", gender: f, skills: (martial:  6, prowess:  6, treasury: 10, prudence: 12, intrigue: 10, faith: 10)),
 
         // House Thornkeep.
-        (id: "char-harbert-thornkeep", name: "Harbert", house_id: "house-thornkeep", gender: m, skills: (martial: 5, prowess: 5, treasury: 6, prudence: 6, intrigue: 4, faith: 5)),
-        (id: "char-jeyne-thornkeep",   name: "Jeyne",   house_id: "house-thornkeep", gender: f, skills: (martial: 3, prowess: 3, treasury: 4, prudence: 5, intrigue: 5, faith: 5)),
+        (id: "char-harbert-thornkeep", name: "Harbert", house_id: "house-thornkeep", gender: m, skills: (martial: 10, prowess: 10, treasury: 12, prudence: 12, intrigue:  8, faith: 10)),
+        (id: "char-jeyne-thornkeep",   name: "Jeyne",   house_id: "house-thornkeep", gender: f, skills: (martial:  6, prowess:  6, treasury:  8, prudence: 10, intrigue: 10, faith: 10)),
 
         // House Saltmoor.
-        (id: "char-ormond-saltmoor", name: "Ormond", house_id: "house-saltmoor", gender: m, skills: (martial: 6, prowess: 5, treasury: 5, prudence: 5, intrigue: 4, faith: 5)),
-        (id: "char-ysara-saltmoor",  name: "Ysara",  house_id: "house-saltmoor", gender: f, skills: (martial: 1, prowess: 1, treasury: 3, prudence: 3, intrigue: 3, faith: 4)),
+        (id: "char-ormond-saltmoor", name: "Ormond", house_id: "house-saltmoor", gender: m, skills: (martial: 12, prowess: 10, treasury: 10, prudence: 10, intrigue:  8, faith: 10)),
+        (id: "char-ysara-saltmoor",  name: "Ysara",  house_id: "house-saltmoor", gender: f, skills: (martial:  2, prowess:  2, treasury:  6, prudence:  6, intrigue:  6, faith:  8)),
 
         // House Corvin — dead ancestors of Dorian.
-        (id: "char-qorell",   name: "Qorell",   house_id: "house-corvin", gender: m, is_alive: false, death_date: (year: 1049, month: 5, day: 2), skills: (martial: 5, prowess: 4, treasury: 6, prudence: 8, intrigue: 6, faith: 5)),
-        (id: "char-meria",    name: "Meria",    house_id: "house-corvin", gender: f, is_alive: false, death_date: (year: 1036, month: 3, day: 1), skills: (martial: 3, prowess: 3, treasury: 5, prudence: 7, intrigue: 6, faith: 6)),
+        (id: "char-qorell",   name: "Qorell",   house_id: "house-corvin", gender: m, is_alive: false, death_date: (year: 1049, month: 5, day: 2), skills: (martial: 10, prowess:  8, treasury: 12, prudence: 16, intrigue: 12, faith: 10)),
+        (id: "char-meria",    name: "Meria",    house_id: "house-corvin", gender: f, is_alive: false, death_date: (year: 1036, month: 3, day: 1), skills: (martial:  6, prowess:  6, treasury: 10, prudence: 14, intrigue: 12, faith: 12)),
 
         // House Corvin — dead descendant of Dorian (second son, ambush in the Boneway).
-        (id: "char-olyvar",   name: "Olyvar",   house_id: "house-corvin", gender: m, is_alive: false, death_date: (year: 1063, month: 7, day: 22), skills: (martial: 4, prowess: 3, treasury: 3, prudence: 4, intrigue: 3, faith: 4)),
+        (id: "char-olyvar",   name: "Olyvar",   house_id: "house-corvin", gender: m, is_alive: false, death_date: (year: 1063, month: 7, day: 22), skills: (martial:  8, prowess:  6, treasury:  6, prudence:  8, intrigue:  6, faith:  8)),
     ],
 )

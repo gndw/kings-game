@@ -73,7 +73,7 @@
         // Aldric (killed in a hunting accident), in addition to the three living children above.
         (id: "fam-mar-ingrey-alessia",  type: Marriage, husband_character_id: "char-ingrey",  wife_character_id: "char-alessia"),
         (id: "fam-jorell-anc",          type: Family,   child_character_id: "char-jorell",   father_character_id: "char-ingrey",  mother_character_id: "char-alessia"),
-        (id: "fam-aldric",              type: Family,   child_character_id: "char-aldric",   father_character_id: "char-jorell",  mother_character_id: "char-jeyne"),
+        (id: "fam-aldric-selwyn",       type: Family,   child_character_id: "char-aldric-selwyn", father_character_id: "char-jorell",  mother_character_id: "char-jeyne"),
 
         // ----- House Darrowmont: dead ancestors & dead descendant -----
         // Edwyn × Elspeth produced Halric. Halric × Maren produced the late

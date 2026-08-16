@@ -190,8 +190,9 @@ pub enum FamilyType {
     Marriage,
 }
 
-/// One character: definition (name/house) + state (numbers). State fields default
-/// to zero on a definition-only entry and are filled in by the state overlay.
+/// One character: definition (name/house/skills) + state (numbers). State
+/// fields default to zero on a definition-only entry and are filled in by the
+/// state overlay.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Character {
@@ -225,6 +226,84 @@ pub struct Character {
     /// Definition: `"m"` / `"f"`. State files omit it (never changes in play).
     #[serde(default)]
     pub gender: CharacterGender,
+    /// Authored baseline + state overlay: the character's six abilities.
+    /// Skill values are clamped into `0..=10` at populate time, so a state
+    /// save can drift a stat without breaking the definition.
+    #[serde(default)]
+    pub skills: Skills,
+}
+
+/// A character's six abilities. Authored as definitions so a mod can rebalance
+/// a whole house by editing one file; the state overlay may replace any of
+/// them so a "Wounded" / "Well-taught" trait can shift current values without
+/// breaking the definition.
+///
+/// The range is 0..=10 across all six. Definition-time values outside the
+/// range fail `validate`; state-overlay values are clamped silently in
+/// `populate`.
+#[derive(Debug, Default, Deserialize, Clone, Copy)]
+#[serde(deny_unknown_fields)]
+pub struct Skills {
+    /// Field command, battle tactics, siegecraft. Folded with logistics:
+    /// affects monthly levy replenishment, march distance, and army combat.
+    #[serde(default)]
+    pub martial: i32,
+    /// Personal combat, duels, ambushes, surviving assassination. Drives
+    /// the monthly personal safety check.
+    #[serde(default)]
+    pub prowess: i32,
+    /// Tax efficiency plus trade leverage. Monthly gold yield multiplier.
+    #[serde(default)]
+    pub treasury: i32,
+    /// Internal judgment plus external accord. Monthly vassal and foreign
+    /// opinion drift.
+    #[serde(default)]
+    pub prudence: i32,
+    /// Plots, detection, secrets. Monthly plot-detection threshold and
+    /// rumor spread.
+    #[serde(default)]
+    pub intrigue: i32,
+    /// Piety plus theological literacy. Church favor and legitimacy drift,
+    /// event-tier unlocks.
+    #[serde(default)]
+    pub faith: i32,
+}
+
+impl Skills {
+    /// The minimum / maximum a single skill can hold. Values are clamped into
+    /// the half-open range `[0, 10]` at populate time.
+    pub const MIN: i32 = 0;
+    pub const MAX: i32 = 10;
+
+    /// True if every skill lies in `MIN..=MAX`. `validate` calls this on
+    /// each character's authored skill block.
+    pub fn in_range(&self) -> bool {
+        self.martial >= Self::MIN
+            && self.martial <= Self::MAX
+            && self.prowess >= Self::MIN
+            && self.prowess <= Self::MAX
+            && self.treasury >= Self::MIN
+            && self.treasury <= Self::MAX
+            && self.prudence >= Self::MIN
+            && self.prudence <= Self::MAX
+            && self.intrigue >= Self::MIN
+            && self.intrigue <= Self::MAX
+            && self.faith >= Self::MIN
+            && self.faith <= Self::MAX
+    }
+
+    /// Clamp every skill into `MIN..=MAX`, returning a new value.
+    pub fn clamped(&self) -> Self {
+        let c = |v: i32| v.clamp(Self::MIN, Self::MAX);
+        Self {
+            martial: c(self.martial),
+            prowess: c(self.prowess),
+            treasury: c(self.treasury),
+            prudence: c(self.prudence),
+            intrigue: c(self.intrigue),
+            faith: c(self.faith),
+        }
+    }
 }
 
 /// `bool::default()` is `false`; alive is the natural starting state.
@@ -344,6 +423,13 @@ pub fn validate(content: &Content) -> Result<()> {
                 "character `{}` references unknown house `{}`",
                 c.id,
                 c.house_id
+            );
+        }
+        if !c.skills.in_range() {
+            bail!(
+                "character `{}` has out-of-range skills (must be 0..=10): {:?}",
+                c.id,
+                c.skills
             );
         }
     }

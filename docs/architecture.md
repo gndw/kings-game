@@ -67,7 +67,11 @@ off one place. `Kingdom` is state-only.
 - **One marker tag per entity kind** (`House`, `Character`, `Land`,
   `Kingdom`, `Building`, `Army`, `Marching`, `Road`, `War`, `Siege`,
   `Courtier`); data is one field per component so a system queries only
-  what it touches.
+  what it touches. `Character` carries six skill components
+  (`CharacterMartial` / `CharacterProwess` / `CharacterTreasury` /
+  `CharacterPrudence` / `CharacterIntrigue` / `CharacterFaith`, each
+  `i32` 0..=10) alongside the family / wealth components; they are the
+  medieval-genuine ruler stat set and replace no existing component.
 - **Bevy-native relationships** (`#[relationship]` / `#[relationship_target]`)
   for every link. Naming convention: `<On-entity><Verb-or-preposition><Target>`
   so the component name tells you which entity it sits on. Set the

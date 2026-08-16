@@ -47,7 +47,7 @@ pub struct WarDemand {
 #[derive(Component, Debug, Clone, Default)]
 pub struct WarDemands(pub Vec<WarDemand>);
 
-/// Human-readable label, e.g. `"Conquest over Kingdom of Riverrun"`. Set at declare time.
+/// Human-readable label, e.g. `"Conquest over Kingdom of Crossford"`. Set at declare time.
 #[derive(Component, Debug, Clone)]
 pub struct WarName(pub String);
 

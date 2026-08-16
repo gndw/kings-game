@@ -54,6 +54,7 @@ impl Content {
                 existing.gold = c.gold;
                 existing.levy = c.levy;
                 existing.gold_yield = c.gold_yield;
+                existing.skills = c.skills;
             }
         }
         for c in file.courtiers {

@@ -9,10 +9,12 @@ use std::collections::HashMap;
 
 use super::building::{Building, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand};
 use super::character::{
-    Character, CharacterDateOfBirth, CharacterDateOfDeath, CharacterGold, CharacterGoldYield,
-    CharacterHasFather, CharacterHasHusband, CharacterHasMother, CharacterIsAlive, CharacterLevy,
-    CharacterName, CharacterNextDeathEventDate, CharacterOfHouse, Memory, MemoryCreatedDate,
-    MemoryOfCharacter, MemoryTowardCharacter, MemoryUntilDate,
+    Character, CharacterDateOfBirth, CharacterDateOfDeath, CharacterFaith, CharacterGold,
+    CharacterGoldYield, CharacterHasFather, CharacterHasHusband, CharacterHasMother,
+    CharacterIntrigue, CharacterIsAlive, CharacterLevy, CharacterMartial, CharacterName,
+    CharacterNextDeathEventDate, CharacterOfHouse, CharacterProwess, CharacterPrudence,
+    CharacterTreasury, Memory, MemoryCreatedDate, MemoryOfCharacter, MemoryTowardCharacter,
+    MemoryUntilDate,
 };
 use super::courtier::{Courtier, CourtierOfCharacter, CourtierOfKingdom};
 use super::house::{House, HouseName};
@@ -64,6 +66,7 @@ pub fn populate(world: &mut World, content: Content) {
 
     for (id, c) in content.characters.into_iter() {
         let house_e = world.resource::<Registry>().get(&c.house_id);
+        let skills = c.skills.clamped();
         let eid = {
             let mut ec = world.spawn((
                 StringId(id.clone()),
@@ -77,7 +80,15 @@ pub fn populate(world: &mut World, content: Content) {
                 CharacterLevy(c.levy),
                 CharacterGoldYield(c.gold_yield),
                 c.gender,
+                CharacterMartial(skills.martial),
+                CharacterProwess(skills.prowess),
+                CharacterTreasury(skills.treasury),
             ));
+            // The two remaining skills go in via `insert` so the initial bundle
+            // stays under Bevy's tuple-length limit (16).
+            ec.insert(CharacterPrudence(skills.prudence));
+            ec.insert(CharacterIntrigue(skills.intrigue));
+            ec.insert(CharacterFaith(skills.faith));
             if let Some(he) = house_e {
                 ec.insert(CharacterOfHouse(he));
             }

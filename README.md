@@ -55,6 +55,17 @@ dropped with a line in the chronicle rather than refused. Definitions are held
 to a stricter standard — a dangling reference there stops the game, because it
 means a mod is broken rather than merely old.
 
+One carve-out: characters are split by **alive / dead**, not by constant /
+state. Alive characters live entirely in `start.state.ron` (because the sim
+mutates them); dead characters live entirely in `characters.ron` (because
+nothing about them ever changes). `merge_state` inserts alive characters that
+no constants file defines, and overlays state fields onto existing entries
+otherwise.
+
+Family ties follow the same rule: a family that references any alive
+character lives in `start.state.ron` (the alive char is state-only); a
+family that references only dead characters stays in `families.ron`.
+
 The calendar and the clock speeds are data too. Every month is the same length
 and there are no leap days, so a year is just the two numbers multiplied.
 `speeds` is simulated days per real second — `+` and `-` step through the list,
@@ -135,8 +146,13 @@ their entry — no need to redeclare who they are:
 
 ```ron
 // mods/rich-arryn/start.state.ron
-(characters: [(id: "char-jorell", dob: (year: 1000, month: 1, day: 1), gold: 500)])
+(characters: [(id: "char-jorell", gold: 500)])
 ```
+
+A mod can also introduce a brand-new alive character by writing the full
+record into its own `start.state.ron` — name, house, gender, skills, dob,
+gold, and so on. `merge_state` inserts anything that doesn't already have
+an entry, so the constants file isn't required for a state-defined char.
 
 Use `rand()` rather than rolling your own randomness — it draws from the game's
 seeded RNG, so a campaign still replays exactly from its seed.

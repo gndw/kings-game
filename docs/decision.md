@@ -59,7 +59,8 @@ component. A system queries only the field it touches (payout needs gold
 `state`/`content` are merged into one struct per kind. Mods load in two
 passes: definitions merge first (`merge`, id-replace), then state overlays
 (`merge_state`, field-by-field). Two-pass so state can only fill entries
-the definitions established.
+the definitions established — except for alive characters, whose full
+record lives in state (see below).
 
 - **Overlay never clobbers definition data.** `merge_state` copies only
   the state fields onto the matching content entry, so a state entry may
@@ -71,6 +72,39 @@ the definitions established.
   the one struct.
 - **Dropped:** the old "dropped state for unknown …" notes. With state
   folded into content there is no separate state map to diff against.
+- **`validate` runs after both passes.** Originally it ran between
+  passes (so state could only fill known slots). Alive characters now
+  live entirely in state, so the entry must exist by the time we check
+  house_id / skills. `reconcile` still runs last, dropping dangling
+  state refs for the future save-loading path.
+
+## Characters split by alive/dead, not by def/state
+
+The old split — identity in `characters.ron`, mutable overlay in
+`start.state.ron` — left every alive character with parts in both files,
+which meant a save couldn't reconstruct one without the constants file.
+Now:
+
+- **`characters.ron` holds dead characters only.** Their data never
+  changes in play, so it belongs in the read-only constants file
+  (which a save file will never include).
+- **`start.state.ron` holds alive characters only**, with the full
+  record (name, house, gender, skills, dob, gold, next_death_event_date).
+  The sim mutates these fields; the save will write them.
+
+`merge_state` now inserts a character outright if no constants entry
+exists for that id (the alive case); otherwise it overlays state fields
+as before. Mods that want to introduce a new alive character write the
+full record into their own `start.state.ron`; mods that want to tweak an
+existing base character overlay the mutable fields they care about.
+
+The same split extends to `Family` entries: a family that references
+any alive character moves into `start.state.ron` (the alive char is
+state-only — putting the family in `families.ron` would dangle before
+state has loaded); a family that references only dead characters stays
+in `families.ron` (no state dependency, fully constant). `merge_state`
+treats `families` the same way it treats `buildings` — id-replace — since
+family entries have no mutable fields.
 
 ## Player commands are self-describing
 

@@ -3,9 +3,11 @@
 //!
 //! State is an overlay keyed by id. `Content::merge_state` fills the state
 //! fields onto the matching content entries and leaves every definition field
-//! alone. `reconcile` then repairs every reference that no longer resolves.
+//! alone. A character that's defined only in state (alive characters, in the
+//! base mod) is inserted fully — there's no constants entry to overlay onto.
+//! `reconcile` then repairs every state reference that no longer resolves.
 
-use crate::content::{Building, Character, Content, Courtier, EventDeckState, Kingdom, Memory};
+use crate::content::{Building, Character, Content, Courtier, EventDeckState, Family, Kingdom, Memory};
 use serde::Deserialize;
 
 /// The deserialization target for a `*.state.ron` file. State entries reuse
@@ -24,6 +26,12 @@ pub struct StateFile {
     pub characters: Vec<Character>,
     #[serde(default)]
     pub courtiers: Vec<Courtier>,
+    /// Family ties that reference alive characters. Family entries that
+    /// only reference dead characters stay in `families.ron` (the
+    /// constants file); entries that name any alive character live here
+    /// so they don't dangle before state has inserted the alive chars.
+    #[serde(default)]
+    pub families: Vec<Family>,
     #[serde(default)]
     pub memories: Vec<Memory>,
     /// Event popup state — read at startup, governs when the first popup
@@ -38,8 +46,10 @@ impl Content {
     /// Overlay one state file onto the merged content.
     /// - Kingdoms: id-replace.
     /// - Buildings (instances): id-replace — a save holds the full set of what's built.
-    /// - Characters: field by field onto the matching entry. Definition fields are never touched.
-    /// An id with no content entry is ignored.
+    /// - Characters: field by field onto the matching entry. If no entry
+    ///   exists (alive characters live entirely in state), insert the state
+    ///   record as-is — the subsequent `validate` checks its house_id and
+    ///   skills. Definition fields on existing entries are never touched.
     pub fn merge_state(&mut self, file: StateFile) {
         for k in file.kingdoms {
             self.kingdoms.insert(k.id.clone(), k);
@@ -55,10 +65,18 @@ impl Content {
                 existing.levy = c.levy;
                 existing.gold_yield = c.gold_yield;
                 existing.skills = c.skills;
+            } else {
+                // No constants entry — alive characters live entirely in state,
+                // so the state record IS the full character. Insert as-is; the
+                // subsequent `validate` will catch any bad house_id / skills.
+                self.characters.insert(c.id.clone(), c);
             }
         }
         for c in file.courtiers {
             self.courtiers.insert(c.id.clone(), c);
+        }
+        for f in file.families {
+            self.families.insert(f.id.clone(), f);
         }
         for m in file.memories {
             self.memories.insert(m.id.clone(), m);

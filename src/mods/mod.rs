@@ -66,16 +66,18 @@ pub fn load(dir: &Path) -> Result<Mods> {
             }
         }
     }
-    content::validate(&content).context("the merged mod data is inconsistent")?;
-
-    // Pass 2: state overlays onto the now-complete content. Repairs are
-    // chronicled rather than fatal — see `state::reconcile`.
+    // Pass 2: state overlays onto the now-complete content. State can
+    // introduce brand-new alive characters (their full record lives in
+    // start.state.ron), so validation runs *after* the overlay — every
+    // character's house_id and skills are checked together. Repairs of
+    // dangling state refs still happen in `state::reconcile` after.
     for file in state_files {
         let text = read_to_string(&file)?;
         let parsed = state::parse_file(&text)
             .with_context(|| format!("parsing {}", file.display()))?;
         content.merge_state(parsed);
     }
+    content::validate(&content).context("the merged mod data is inconsistent")?;
     for note in state::reconcile(&mut content) {
         eprintln!("state: {note}");
     }

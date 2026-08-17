@@ -1,99 +1,37 @@
-// Family ties between characters — parent/child links and spousal links. One
-// entry per relation: a child's parents produce one entry, a marriage produces
-// one. The ECS turns these into `CharacterHasFather` / `CharacterHasMother` /
-// `CharacterHasHusband` / `CharacterHasWife` and auto-maintained reverse Vecs
-// on the parents.
+// Constant family ties — entries that name ONLY dead characters. Their data
+// never changes in play, so it belongs in this read-only constants file
+// (which a save file will never include).
 //
-// A character not named here is unlinked — `validate` rejects any id this file
-// references that the loaded characters don't define.
+// Any family that names an alive character lives in start.state.ron instead,
+// because the alive char's identity is state-only — putting the family here
+// would make it dangle before state has loaded.
+//
+// Each entry is one relation: a child's parents produce one entry, a
+// marriage produces one. The ECS turns these into `CharacterHasFather` /
+// `CharacterHasMother` / `CharacterHasHusband` / `CharacterHasWife` and
+// auto-maintained reverse Vecs on the parents.
+//
+// A character not named here is unlinked — `validate` rejects any id this
+// file references that the loaded characters don't define.
 (
     families: [
-        // ----- House Cresswell: Aldric × Mara -----
-        // The ruling couple.
-        (id: "fam-mar-aldric-mara",     type: Marriage, husband_character_id: "char-aldric", wife_character_id: "char-mara"),
-        // Their four children.
-        (id: "fam-bors",                type: Family,   child_character_id: "char-bors",     father_character_id: "char-aldric", mother_character_id: "char-mara"),
-        (id: "fam-rhael",               type: Family,   child_character_id: "char-rhael",    father_character_id: "char-aldric", mother_character_id: "char-mara"),
-        (id: "fam-denyse",              type: Family,   child_character_id: "char-denyse",   father_character_id: "char-aldric", mother_character_id: "char-mara"),
-        (id: "fam-gunthor",             type: Family,   child_character_id: "char-gunthor",  father_character_id: "char-aldric", mother_character_id: "char-mara"),
-
-        // ----- House Aurelan: Tybalt × Josara -----
-        (id: "fam-mar-tybalt-josara",   type: Marriage, husband_character_id: "char-tybalt", wife_character_id: "char-josara"),
-        (id: "fam-joran",               type: Family,   child_character_id: "char-joran",    father_character_id: "char-tybalt", mother_character_id: "char-josara"),
-        (id: "fam-cerelia",             type: Family,   child_character_id: "char-cerelia",  father_character_id: "char-tybalt", mother_character_id: "char-josara"),
-        (id: "fam-tristam",             type: Family,   child_character_id: "char-tristam",  father_character_id: "char-tybalt", mother_character_id: "char-josara"),
-
-        // ----- House Selwyn: Jorell × Jeyne -----
-        (id: "fam-mar-jorell-jeyne",    type: Marriage, husband_character_id: "char-jorell", wife_character_id: "char-jeyne"),
-        (id: "fam-lysette",             type: Family,   child_character_id: "char-lysette", father_character_id: "char-jorell", mother_character_id: "char-jeyne"),
-        (id: "fam-elric",               type: Family,   child_character_id: "char-elric",   father_character_id: "char-jorell", mother_character_id: "char-jeyne"),
-        (id: "fam-aemma",               type: Family,   child_character_id: "char-aemma",   father_character_id: "char-jorell", mother_character_id: "char-jeyne"),
-
-        // ----- House Darrowmont: Halric × Maren -----
-        (id: "fam-mar-halric-maren",    type: Marriage, husband_character_id: "char-halric", wife_character_id: "char-maren"),
-        (id: "fam-edric",               type: Family,   child_character_id: "char-edric",   father_character_id: "char-halric", mother_character_id: "char-maren"),
-        (id: "fam-cassia",              type: Family,   child_character_id: "char-cassia",  father_character_id: "char-halric", mother_character_id: "char-maren"),
-        (id: "fam-lysara",              type: Family,   child_character_id: "char-lysara",  father_character_id: "char-halric", mother_character_id: "char-maren"),
-
-        // ----- House Margaux: Lorian × Olwen -----
-        (id: "fam-mar-lorian-olwen",    type: Marriage, husband_character_id: "char-lorian", wife_character_id: "char-olwen"),
-        (id: "fam-markel",              type: Family,   child_character_id: "char-markel",   father_character_id: "char-lorian", mother_character_id: "char-olwen"),
-        (id: "fam-wendell",             type: Family,   child_character_id: "char-wendell",  father_character_id: "char-lorian", mother_character_id: "char-olwen"),
-        (id: "fam-garrick",             type: Family,   child_character_id: "char-garrick",  father_character_id: "char-lorian", mother_character_id: "char-olwen"),
-        (id: "fam-mariel",              type: Family,   child_character_id: "char-mariel",   father_character_id: "char-lorian", mother_character_id: "char-olwen"),
-
-        // ----- House Corvin: Dorian × Melora -----
-        (id: "fam-mar-dorian-melora",   type: Marriage, husband_character_id: "char-dorian", wife_character_id: "char-melora"),
-        (id: "fam-ariel",               type: Family,   child_character_id: "char-ariel",    father_character_id: "char-dorian", mother_character_id: "char-melora"),
-        (id: "fam-quentin",             type: Family,   child_character_id: "char-quentin",  father_character_id: "char-dorian", mother_character_id: "char-melora"),
-        (id: "fam-torren",              type: Family,   child_character_id: "char-torren",   father_character_id: "char-dorian", mother_character_id: "char-melora"),
-
-        // ----- Cross-house marriage: Cresswell × Aurelan -----
-        (id: "fam-mar-bors-cerelia",    type: Marriage, husband_character_id: "char-bors", wife_character_id: "char-cerelia"),
-
-        // ----- Cross-house marriage: Margaux × Selwyn -----
-        (id: "fam-mar-wendell-aemma",   type: Marriage, husband_character_id: "char-wendell", wife_character_id: "char-aemma"),
-
-        // ----- House Cresswell: dead ancestors & dead descendant -----
-        // Bordan's marriage to Dalla produced Aldric. Aldric × Mara produced the
-        // late Braddon (dead in his teens), in addition to the four living children above.
+        // ----- Dead ancestor marriages (parents of the ruling generation) -----
+        // Bordan × Dalla (Cresswell) → produced Aldric.
         (id: "fam-mar-bordan-dalla",    type: Marriage, husband_character_id: "char-bordan", wife_character_id: "char-dalla"),
-        (id: "fam-aldric-anc",          type: Family,   child_character_id: "char-aldric",   father_character_id: "char-bordan",  mother_character_id: "char-dalla"),
-        (id: "fam-braddon",             type: Family,   child_character_id: "char-braddon",  father_character_id: "char-aldric",  mother_character_id: "char-mara"),
 
-        // ----- House Aurelan: dead ancestors & dead descendant -----
-        // Torin × Jeyne produced Tybalt. Tybalt × Josara produced the late
-        // Steff (dead of fever), in addition to the twins and Tristam above.
+        // Torin × Jeyne (Aurelan) → produced Tybalt.
         (id: "fam-mar-torin-jeyne-au",  type: Marriage, husband_character_id: "char-torin", wife_character_id: "char-jeyne-au"),
-        (id: "fam-tybalt-anc",          type: Family,   child_character_id: "char-tybalt",   father_character_id: "char-torin",   mother_character_id: "char-jeyne-au"),
-        (id: "fam-steff",               type: Family,   child_character_id: "char-steff",    father_character_id: "char-tybalt",  mother_character_id: "char-josara"),
 
-        // ----- House Selwyn: dead ancestors & dead descendant -----
-        // Ingrey × Alessia produced Jorell. Jorell × Jeyne produced the late
-        // Aldric (killed in a hunting accident), in addition to the three living children above.
+        // Ingrey × Alessia (Selwyn) → produced Jorell.
         (id: "fam-mar-ingrey-alessia",  type: Marriage, husband_character_id: "char-ingrey",  wife_character_id: "char-alessia"),
-        (id: "fam-jorell-anc",          type: Family,   child_character_id: "char-jorell",   father_character_id: "char-ingrey",  mother_character_id: "char-alessia"),
-        (id: "fam-aldric-selwyn",       type: Family,   child_character_id: "char-aldric-selwyn", father_character_id: "char-jorell",  mother_character_id: "char-jeyne"),
 
-        // ----- House Darrowmont: dead ancestors & dead descendant -----
-        // Edwyn × Elspeth produced Halric. Halric × Maren produced the late
-        // Leofric (drowned as a boy), in addition to Edric, Cassia, and Lysara above.
+        // Edwyn × Elspeth (Darrowmont) → produced Halric.
         (id: "fam-mar-edwyn-elspeth",   type: Marriage, husband_character_id: "char-edwyn",   wife_character_id: "char-elspeth"),
-        (id: "fam-halric-anc",          type: Family,   child_character_id: "char-halric",   father_character_id: "char-edwyn",   mother_character_id: "char-elspeth"),
-        (id: "fam-leofric",             type: Family,   child_character_id: "char-leofric",  father_character_id: "char-halric",  mother_character_id: "char-maren"),
 
-        // ----- House Margaux: dead ancestors & dead descendant -----
-        // Morian × Alanna produced Lorian. Lorian × Olwen produced the late
-        // Quent (killed in a tourney melee), in addition to Markel, Wendell, Garrick, and Mariel above.
+        // Morian × Alanna (Margaux) → produced Lorian.
         (id: "fam-mar-morian-alanna",   type: Marriage, husband_character_id: "char-morian",  wife_character_id: "char-alanna"),
-        (id: "fam-lorian-anc",          type: Family,   child_character_id: "char-lorian",   father_character_id: "char-morian",  mother_character_id: "char-alanna"),
-        (id: "fam-quent",               type: Family,   child_character_id: "char-quent",    father_character_id: "char-lorian",  mother_character_id: "char-olwen"),
 
-        // ----- House Corvin: dead ancestors & dead descendant -----
-        // Qorell × Meria produced Dorian. Dorian × Melora produced the late
-        // Olyvar (ambushed in the Boneway), in addition to Ariel, Quentin, and Torren above.
+        // Qorell × Meria (Corvin) → produced Dorian.
         (id: "fam-mar-qorell-meria",    type: Marriage, husband_character_id: "char-qorell",  wife_character_id: "char-meria"),
-        (id: "fam-dorian-anc",          type: Family,   child_character_id: "char-dorian",   father_character_id: "char-qorell",  mother_character_id: "char-meria"),
-        (id: "fam-olyvar",              type: Family,   child_character_id: "char-olyvar",   father_character_id: "char-dorian",  mother_character_id: "char-melora"),
     ],
 )

@@ -51,16 +51,24 @@ passes:
 2. **State** — every `*.state.ron` overlays the mutable half of the same
    structs field by field (`merge_state`).
 
-`validate` runs between passes (fatal on dangling refs — content is
-authored); `reconcile` runs after (repairs, drops notes — state is a save).
-Definition refs are fatal; state refs are repaired. Don't mix the two.
+State can introduce brand-new alive characters (their full record lives
+in `start.state.ron`, because the sim mutates them and a save has to
+write them), so `validate` runs **after** the state overlay — every
+character's house_id and skills are checked together. `reconcile` runs
+last and drops dangling state refs (a future save file may legitimately
+reference things the current mods no longer define).
 
 Every `*.ron` parses to the same optional-everywhere `ContentFile` —
 filename is human organisation, not schema. `IMPLICIT_SOME` so modders
 write `border: (...)` not `border: Some(...)`.
 
 The two halves share one struct per kind so `populate` reads everything
-off one place. `Kingdom` is state-only.
+off one place. `Kingdom` is state-only; alive `Character`s are
+state-only (inserted by `merge_state`); dead `Character`s are
+definition-only (because nothing about them ever changes). `Family`
+entries split the same way: a family that references any alive
+character lives in state (the alive char is state-only), and a family
+that only references dead characters lives in `families.ron`.
 
 ## The ECS world
 
@@ -236,7 +244,11 @@ Bevy flex tree + `Gizmos` line drawing; no asset sprites.
 ## Key invariants
 
 - **Two-pass load, in order.** State can only overlay entries the
-  definitions established.
+  definitions established — except for alive characters, whose full
+  record lives in state because the sim mutates them, and family
+  entries that reference any alive character (because the alive char
+  is state-only). `merge_state` inserts them; `validate` runs after
+  both passes to check everything.
 - **Leaves-first spawn order** in `populate`. A relationship must
   resolve to an entity that already exists.
 - **Every game entity carries a `StringId`**, and `Registry` is kept
@@ -244,8 +256,10 @@ Bevy flex tree + `Gizmos` line drawing; no asset sprites.
 - **Read order = archetype order = spawn order = content order.**
 - **Relationships are hook-maintained.** Set the source side; never
   hand-edit the reverse.
-- **Definition refs are fatal; state refs are repaired.** Don't move
-  `validate`'s checks into `reconcile` or vice versa.
+- **Refs to definitions are fatal; dangling state refs are repaired.**
+  `validate` (runs after both passes) catches bad refs in the modded
+  data; `reconcile` (runs last) drops state refs that no longer resolve
+  (the future save case).
 - **Three-pass load, in order.** Definitions first, state overlay second,
   event scripts third. A script that breaks (`compile` error, missing
   required function) is logged and skipped — events are pure data, one

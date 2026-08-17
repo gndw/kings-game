@@ -1,9 +1,20 @@
 // Where the world starts. Everything here changes in play — who rules what,
-// what stands in each land, what's in a treasury — so this is the half that a
+// what stands in each land, who's in a treasury — so this is the half that a
 // save file will hold, and the half the sim writes back into.
 //
 // Any `*.state.ron` in a mod folder is one of these. The other `*.ron` files
-// are definitions: read-only data, only ever added to.
+// are constants: read-only data the game only ever gains more of.
+//
+// **Alive characters live entirely here.** Their identity (name, house,
+// gender, skills) is here too, not in characters.ron — because the sim
+// mutates them during play, and the state file is the one place a save
+// writes them to. A state entry that names a character the constants don't
+// define is inserted fully; one that names a character the constants do
+// define (e.g. a dead character from a previous game version) is overlaid
+// field-by-field as before.
+//
+// Dead characters live in characters.ron — their data never changes, so it
+// belongs in the constants file rather than the state file.
 //
 // Entries are an overlay keyed by id. Anything the content defines and this
 // file doesn't mention gets a default, and anything here that names content
@@ -115,101 +126,169 @@
         (id: "courtier-ormond-saltmoor",   kingdom_id: "kingdom-riversmeet",  character_id: "char-ormond-saltmoor",   type: Courtier),
         (id: "courtier-joan-greycairn",    kingdom_id: "kingdom-greenfields", character_id: "char-joan-greycairn",    type: Courtier),
     ],
+    // Family ties that name at least one alive character. Families that
+    // reference only dead characters live in families.ron (constants); they
+    // don't depend on state having inserted anything.
+    families: [
+        // ----- House Cresswell: Aldric × Mara -----
+        // The ruling couple.
+        (id: "fam-mar-aldric-mara",     type: Marriage, husband_character_id: "char-aldric", wife_character_id: "char-mara"),
+        // Their four children.
+        (id: "fam-bors",                type: Family,   child_character_id: "char-bors",     father_character_id: "char-aldric", mother_character_id: "char-mara"),
+        (id: "fam-rhael",               type: Family,   child_character_id: "char-rhael",    father_character_id: "char-aldric", mother_character_id: "char-mara"),
+        (id: "fam-denyse",              type: Family,   child_character_id: "char-denyse",   father_character_id: "char-aldric", mother_character_id: "char-mara"),
+        (id: "fam-gunthor",             type: Family,   child_character_id: "char-gunthor",  father_character_id: "char-aldric", mother_character_id: "char-mara"),
+
+        // ----- House Cresswell: dead descendant of Aldric -----
+        // Aldric × Mara produced the late Braddon (dead in his teens) in addition
+        // to the four living children above. Braddon himself lives in characters.ron.
+        (id: "fam-braddon",             type: Family,   child_character_id: "char-braddon",  father_character_id: "char-aldric",  mother_character_id: "char-mara"),
+        // Bordan × Dalla (the dead ancestors in characters.ron) produced Aldric.
+        (id: "fam-aldric-anc",          type: Family,   child_character_id: "char-aldric",   father_character_id: "char-bordan",  mother_character_id: "char-dalla"),
+
+        // ----- House Aurelan: Tybalt × Josara -----
+        (id: "fam-mar-tybalt-josara",   type: Marriage, husband_character_id: "char-tybalt", wife_character_id: "char-josara"),
+        (id: "fam-joran",               type: Family,   child_character_id: "char-joran",    father_character_id: "char-tybalt", mother_character_id: "char-josara"),
+        (id: "fam-cerelia",             type: Family,   child_character_id: "char-cerelia",  father_character_id: "char-tybalt", mother_character_id: "char-josara"),
+        (id: "fam-tristam",             type: Family,   child_character_id: "char-tristam",  father_character_id: "char-tybalt", mother_character_id: "char-josara"),
+
+        // ----- House Aurelan: dead descendant of Tybalt -----
+        // Tybalt × Josara produced the late Steff (dead of fever) in addition
+        // to the twins and Tristam above. Steff himself lives in characters.ron.
+        (id: "fam-steff",               type: Family,   child_character_id: "char-steff",    father_character_id: "char-tybalt",  mother_character_id: "char-josara"),
+        // Torin × Jeyne-au (the dead ancestors in characters.ron) produced Tybalt.
+        (id: "fam-tybalt-anc",          type: Family,   child_character_id: "char-tybalt",   father_character_id: "char-torin",   mother_character_id: "char-jeyne-au"),
+
+        // ----- House Selwyn: Jorell × Jeyne -----
+        (id: "fam-mar-jorell-jeyne",    type: Marriage, husband_character_id: "char-jorell", wife_character_id: "char-jeyne"),
+        (id: "fam-lysette",             type: Family,   child_character_id: "char-lysette", father_character_id: "char-jorell", mother_character_id: "char-jeyne"),
+        (id: "fam-elric",               type: Family,   child_character_id: "char-elric",   father_character_id: "char-jorell", mother_character_id: "char-jeyne"),
+        (id: "fam-aemma",               type: Family,   child_character_id: "char-aemma",   father_character_id: "char-jorell", mother_character_id: "char-jeyne"),
+
+        // ----- House Selwyn: dead descendant of Jorell -----
+        // Jorell × Jeyne produced the late Aldric (killed in a hunting accident)
+        // in addition to the three living children above. Aldric-selwyn lives in characters.ron.
+        (id: "fam-aldric-selwyn",       type: Family,   child_character_id: "char-aldric-selwyn", father_character_id: "char-jorell",  mother_character_id: "char-jeyne"),
+        // Ingrey × Alessia (the dead ancestors in characters.ron) produced Jorell.
+        (id: "fam-jorell-anc",          type: Family,   child_character_id: "char-jorell",   father_character_id: "char-ingrey",  mother_character_id: "char-alessia"),
+
+        // ----- House Darrowmont: Halric × Maren -----
+        (id: "fam-mar-halric-maren",    type: Marriage, husband_character_id: "char-halric", wife_character_id: "char-maren"),
+        (id: "fam-edric",               type: Family,   child_character_id: "char-edric",   father_character_id: "char-halric", mother_character_id: "char-maren"),
+        (id: "fam-cassia",              type: Family,   child_character_id: "char-cassia",  father_character_id: "char-halric", mother_character_id: "char-maren"),
+        (id: "fam-lysara",              type: Family,   child_character_id: "char-lysara",  father_character_id: "char-halric", mother_character_id: "char-maren"),
+
+        // ----- House Darrowmont: dead descendant of Halric -----
+        // Halric × Maren produced the late Leofric (drowned as a boy) in
+        // addition to Edric, Cassia, and Lysara above. Leofric lives in characters.ron.
+        (id: "fam-leofric",             type: Family,   child_character_id: "char-leofric",  father_character_id: "char-halric",  mother_character_id: "char-maren"),
+        // Edwyn × Elspeth (the dead ancestors in characters.ron) produced Halric.
+        (id: "fam-halric-anc",          type: Family,   child_character_id: "char-halric",   father_character_id: "char-edwyn",   mother_character_id: "char-elspeth"),
+
+        // ----- House Margaux: Lorian × Olwen -----
+        (id: "fam-mar-lorian-olwen",    type: Marriage, husband_character_id: "char-lorian", wife_character_id: "char-olwen"),
+        (id: "fam-markel",              type: Family,   child_character_id: "char-markel",   father_character_id: "char-lorian", mother_character_id: "char-olwen"),
+        (id: "fam-wendell",             type: Family,   child_character_id: "char-wendell",  father_character_id: "char-lorian", mother_character_id: "char-olwen"),
+        (id: "fam-garrick",             type: Family,   child_character_id: "char-garrick",  father_character_id: "char-lorian", mother_character_id: "char-olwen"),
+        (id: "fam-mariel",              type: Family,   child_character_id: "char-mariel",   father_character_id: "char-lorian", mother_character_id: "char-olwen"),
+
+        // ----- House Margaux: dead descendant of Olwen -----
+        // Lorian × Olwen produced the late Quent (killed in a tourney melee) in
+        // addition to Markel, Wendell, Garrick, and Mariel above. Quent lives in characters.ron.
+        (id: "fam-quent",               type: Family,   child_character_id: "char-quent",    father_character_id: "char-lorian",  mother_character_id: "char-olwen"),
+        // Morian × Alanna (the dead ancestors in characters.ron) produced Lorian.
+        (id: "fam-lorian-anc",          type: Family,   child_character_id: "char-lorian",   father_character_id: "char-morian",  mother_character_id: "char-alanna"),
+
+        // ----- House Corvin: Dorian × Melora -----
+        (id: "fam-mar-dorian-melora",   type: Marriage, husband_character_id: "char-dorian", wife_character_id: "char-melora"),
+        (id: "fam-ariel",               type: Family,   child_character_id: "char-ariel",    father_character_id: "char-dorian", mother_character_id: "char-melora"),
+        (id: "fam-quentin",             type: Family,   child_character_id: "char-quentin",  father_character_id: "char-dorian", mother_character_id: "char-melora"),
+        (id: "fam-torren",              type: Family,   child_character_id: "char-torren",   father_character_id: "char-dorian", mother_character_id: "char-melora"),
+
+        // ----- House Corvin: dead descendant of Dorian -----
+        // Dorian × Melora produced the late Olyvar (ambushed in the Boneway) in
+        // addition to Ariel, Quentin, and Torren above. Olyvar lives in characters.ron.
+        (id: "fam-olyvar",              type: Family,   child_character_id: "char-olyvar",   father_character_id: "char-dorian",  mother_character_id: "char-melora"),
+        // Qorell × Meria (the dead ancestors in characters.ron) produced Dorian.
+        (id: "fam-dorian-anc",          type: Family,   child_character_id: "char-dorian",   father_character_id: "char-qorell",  mother_character_id: "char-meria"),
+
+        // ----- Cross-house marriages -----
+        (id: "fam-mar-bors-cerelia",    type: Marriage, husband_character_id: "char-bors", wife_character_id: "char-cerelia"),
+        (id: "fam-mar-wendell-aemma",   type: Marriage, husband_character_id: "char-wendell", wife_character_id: "char-aemma"),
+    ],
+    // Alive characters — full records here, including identity (name, house,
+    // gender, skills). The sim rewrites the mutable fields (gold, levy,
+    // death date, etc.) during play and will write them back into a save.
+    //
     // Levy and gold_yield are left out on purpose: the sim recomputes both at
     // `new_game`, so writing them here would only ever be wrong.
     // `dob` is the character's date of birth. The starting ages live here as
     // `calendar.start.year - dob.year`, so a mod that picks a different
     // opening year doesn't need to recompute anyone's birthday.
     characters: [
-        (id: "char-aldric", dob: (year: 1005, month: 1, day: 1), gold: 42, next_death_event_date: (year: 1066, month: 8, day: 7)),
-        (id: "char-mara",   dob: (year: 1032, month: 1, day: 1), gold: 8,  next_death_event_date: (year: 1067, month: 7, day: 30)),
-        (id: "char-bors",   dob: (year: 1029, month: 1, day: 1), gold: 18, next_death_event_date: (year: 1068, month: 7, day: 13)),
-        (id: "char-rhael",  dob: (year: 1032, month: 1, day: 1), gold: 9,  next_death_event_date: (year: 1067, month: 4, day: 25)),
-        (id: "char-denyse", dob: (year: 1035, month: 1, day: 1), gold: 7,  next_death_event_date: (year: 1068, month: 2, day: 17)),
-        (id: "char-gunthor",dob: (year: 1038, month: 1, day: 1), gold: 11, next_death_event_date: (year: 1068, month: 11, day: 3)),
-        (id: "char-tybalt", dob: (year: 1009, month: 1, day: 1), gold: 35, next_death_event_date: (year: 1066, month: 12, day: 18)),
-        (id: "char-joran",  dob: (year: 1037, month: 1, day: 1), gold: 13, next_death_event_date: (year: 1067, month: 6, day: 17)),
-        (id: "char-cerelia", dob: (year: 1038, month: 1, day: 1), gold: 12, next_death_event_date: (year: 1068, month: 3, day: 24)),
-        (id: "char-tristam",dob: (year: 1041, month: 1, day: 1), gold: 14, next_death_event_date: (year: 1068, month: 8, day: 20)),
-        (id: "char-josara", dob: (year: 1004, month: 1, day: 1), gold: 22, next_death_event_date: (year: 1066, month: 6, day: 4)),
-        (id: "char-laurent", dob: (year: 1049, month: 1, day: 1), gold: 5, next_death_event_date: (year: 1067, month: 3, day: 19)),
-        (id: "char-jorell", dob: (year: 1000, month: 1, day: 1), gold: 27, next_death_event_date: (year: 1066, month: 7, day: 19)),
-        (id: "char-lysette", dob: (year: 1034, month: 1, day: 1), gold: 6, next_death_event_date: (year: 1067, month: 10, day: 28)),
-        (id: "char-jeyne",  dob: (year: 1006, month: 1, day: 1), gold: 19, next_death_event_date: (year: 1067, month: 6, day: 2)),
-        (id: "char-elric",  dob: (year: 1028, month: 1, day: 1), gold: 16, next_death_event_date: (year: 1067, month: 9, day: 21)),
-        (id: "char-aemma",  dob: (year: 1036, month: 1, day: 1), gold: 8,  next_death_event_date: (year: 1068, month: 4, day: 30)),
-        (id: "char-alaric", dob: (year: 1054, month: 1, day: 1), gold: 4,  next_death_event_date: (year: 1077, month: 10, day: 21)),
-        (id: "char-maren",  dob: (year: 1016, month: 1, day: 1), gold: 20, next_death_event_date: (year: 1066, month: 11, day: 29)),
-        (id: "char-edric",  dob: (year: 1043, month: 1, day: 1), gold: 10, next_death_event_date: (year: 1068, month: 6, day: 7)),
-        (id: "char-halric", dob: (year: 1011, month: 1, day: 1), gold: 24, next_death_event_date: (year: 1067, month: 1, day: 24)),
-        (id: "char-brand",  dob: (year: 1014, month: 1, day: 1), gold: 17, next_death_event_date: (year: 1066, month: 10, day: 5)),
-        (id: "char-cassia", dob: (year: 1044, month: 1, day: 1), gold: 11, next_death_event_date: (year: 1068, month: 9, day: 27)),
-        (id: "char-lysara", dob: (year: 1047, month: 1, day: 1), gold: 8,  next_death_event_date: (year: 1067, month: 12, day: 5)),
-        (id: "char-olwen",  dob: (year:  991, month: 1, day: 1), gold: 30, next_death_event_date: (year: 1066, month: 6, day: 22)),
-        (id: "char-markel", dob: (year: 1026, month: 1, day: 1), gold: 15, next_death_event_date: (year: 1068, month: 2, day: 17)),
-        (id: "char-lorian", dob: (year:  996, month: 1, day: 1), gold: 26, next_death_event_date: (year: 1066, month: 5, day: 25)),
-        (id: "char-wendell", dob: (year: 1034, month: 1, day: 1), gold: 13, next_death_event_date: (year: 1067, month: 7, day: 30)),
-        (id: "char-garrick", dob: (year: 1037, month: 1, day: 1), gold: 11, next_death_event_date: (year: 1068, month: 6, day: 7)),
-        (id: "char-mariel", dob: (year: 1048, month: 1, day: 1), gold: 7, next_death_event_date: (year: 1068, month: 3, day: 24)),
-        (id: "char-dorian", dob: (year: 1011, month: 1, day: 1), gold: 25, next_death_event_date: (year: 1066, month: 11, day: 11)),
-        (id: "char-oryn",   dob: (year: 1028, month: 1, day: 1), gold: 12, next_death_event_date: (year: 1068, month: 2, day: 17)),
-        (id: "char-melora", dob: (year: 1016, month: 1, day: 1), gold: 18, next_death_event_date: (year: 1067, month: 4, day: 25)),
-        (id: "char-ariel",  dob: (year: 1042, month: 1, day: 1), gold: 10, next_death_event_date: (year: 1067, month: 10, day: 28)),
-        (id: "char-quentin",dob: (year: 1047, month: 1, day: 1), gold: 9,  next_death_event_date: (year: 1068, month: 7, day: 13)),
-        (id: "char-torren", dob: (year: 1051, month: 1, day: 1), gold: 6, next_death_event_date: (year: 1080, month: 8, day: 1)),
+        (id: "char-aldric", name: "Aldric", house_id: "house-cresswell", gender: m, skills: (martial:  8, prowess:  6, treasury: 14, prudence: 18, intrigue: 10, faith: 12), dob: (year: 1005, month: 1, day: 1), gold: 42, next_death_event_date: (year: 1066, month: 8, day: 7)),
+        (id: "char-mara",   name: "Mara",   house_id: "house-cresswell", gender: f, skills: (martial:  4, prowess:  4, treasury:  8, prudence: 12, intrigue:  8, faith: 14), dob: (year: 1032, month: 1, day: 1), gold: 8,  next_death_event_date: (year: 1067, month: 7, day: 30)),
+        (id: "char-bors",   name: "Bors",   house_id: "house-cresswell", gender: m, skills: (martial: 12, prowess: 14, treasury: 10, prudence: 10, intrigue:  8, faith: 10), dob: (year: 1029, month: 1, day: 1), gold: 18, next_death_event_date: (year: 1068, month: 7, day: 13)),
+        (id: "char-rhael",  name: "Rhael",  house_id: "house-cresswell", gender: f, skills: (martial:  6, prowess:  6, treasury:  8, prudence: 14, intrigue: 10, faith: 12), dob: (year: 1032, month: 1, day: 1), gold: 9,  next_death_event_date: (year: 1067, month: 4, day: 25)),
+        (id: "char-denyse", name: "Denyse", house_id: "house-cresswell", gender: f, skills: (martial:  4, prowess:  4, treasury:  6, prudence: 10, intrigue:  8, faith: 14), dob: (year: 1035, month: 1, day: 1), gold: 7,  next_death_event_date: (year: 1068, month: 2, day: 17)),
+        (id: "char-gunthor",name: "Gunthor",house_id: "house-cresswell", gender: m, skills: (martial: 10, prowess: 12, treasury:  8, prudence:  8, intrigue:  6, faith: 10), dob: (year: 1038, month: 1, day: 1), gold: 11, next_death_event_date: (year: 1068, month: 11, day: 3)),
+
+        (id: "char-tybalt", name: "Tybalt", house_id: "house-aurelan", gender: m, skills: (martial: 16, prowess: 12, treasury: 20, prudence: 12, intrigue: 14, faith: 10), dob: (year: 1009, month: 1, day: 1), gold: 35, next_death_event_date: (year: 1066, month: 12, day: 18)),
+        (id: "char-joran",  name: "Joran",  house_id: "house-aurelan", gender: m, skills: (martial: 14, prowess: 19, treasury: 10, prudence:  8, intrigue:  8, faith:  8), dob: (year: 1037, month: 1, day: 1), gold: 13, next_death_event_date: (year: 1067, month: 6, day: 17)),
+        (id: "char-cerelia",name: "Cerelia",house_id: "house-aurelan", gender: f, skills: (martial:  6, prowess:  6, treasury: 12, prudence: 14, intrigue: 14, faith: 10), dob: (year: 1038, month: 1, day: 1), gold: 12, next_death_event_date: (year: 1068, month: 3, day: 24)),
+        (id: "char-tristam",name: "Tristam",house_id: "house-aurelan", gender: m, skills: (martial: 10, prowess:  8, treasury: 16, prudence: 16, intrigue: 12, faith:  8), dob: (year: 1041, month: 1, day: 1), gold: 14, next_death_event_date: (year: 1068, month: 8, day: 20)),
+        (id: "char-josara", name: "Josara", house_id: "house-aurelan", gender: f, skills: (martial:  4, prowess:  4, treasury: 12, prudence: 14, intrigue: 12, faith: 14), dob: (year: 1004, month: 1, day: 1), gold: 22, next_death_event_date: (year: 1066, month: 6, day: 4)),
+        (id: "char-laurent",name: "Laurent",house_id: "house-aurelan", gender: m, skills: (martial:  6, prowess:  8, treasury:  6, prudence:  8, intrigue:  6, faith: 10), dob: (year: 1049, month: 1, day: 1), gold: 5,  next_death_event_date: (year: 1067, month: 3, day: 19)),
+
+        (id: "char-jorell", name: "Jorell", house_id: "house-selwyn",  gender: m, skills: (martial: 10, prowess:  8, treasury: 12, prudence: 19, intrigue: 12, faith: 14), dob: (year: 1000, month: 1, day: 1), gold: 27, next_death_event_date: (year: 1066, month: 7, day: 19)),
+        (id: "char-lysette",name: "Lysette",house_id: "house-selwyn",  gender: f, skills: (martial:  6, prowess:  6, treasury:  8, prudence: 12, intrigue: 10, faith: 10), dob: (year: 1034, month: 1, day: 1), gold: 6,  next_death_event_date: (year: 1067, month: 10, day: 28)),
+        (id: "char-jeyne",  name: "Jeyne",  house_id: "house-selwyn",  gender: f, skills: (martial:  4, prowess:  4, treasury: 10, prudence: 12, intrigue: 10, faith: 12), dob: (year: 1006, month: 1, day: 1), gold: 19, next_death_event_date: (year: 1067, month: 6, day: 2)),
+        (id: "char-elric",  name: "Elric",  house_id: "house-selwyn",  gender: m, skills: (martial: 12, prowess: 10, treasury: 10, prudence: 12, intrigue:  8, faith: 12), dob: (year: 1028, month: 1, day: 1), gold: 16, next_death_event_date: (year: 1067, month: 9, day: 21)),
+        (id: "char-aemma",  name: "Aemma",  house_id: "house-selwyn",  gender: f, skills: (martial:  4, prowess:  4, treasury:  8, prudence: 12, intrigue: 12, faith: 14), dob: (year: 1036, month: 1, day: 1), gold: 8,  next_death_event_date: (year: 1068, month: 4, day: 30)),
+        (id: "char-alaric", name: "Alaric", house_id: "house-selwyn",  gender: m, skills: (martial:  2, prowess:  2, treasury:  4, prudence:  6, intrigue:  4, faith:  6), dob: (year: 1054, month: 1, day: 1), gold: 4,  next_death_event_date: (year: 1077, month: 10, day: 21)),
+
+        (id: "char-maren",  name: "Maren",  house_id: "house-darrowmont", gender: f, skills: (martial:  6, prowess:  4, treasury: 12, prudence: 18, intrigue: 10, faith: 12), dob: (year: 1016, month: 1, day: 1), gold: 20, next_death_event_date: (year: 1066, month: 11, day: 29)),
+        (id: "char-edric",  name: "Edric",  house_id: "house-darrowmont", gender: m, skills: (martial: 10, prowess: 10, treasury:  8, prudence: 10, intrigue:  8, faith: 10), dob: (year: 1043, month: 1, day: 1), gold: 10, next_death_event_date: (year: 1068, month: 6, day: 7)),
+        (id: "char-halric", name: "Halric", house_id: "house-darrowmont", gender: m, skills: (martial:  8, prowess:  6, treasury: 10, prudence: 14, intrigue: 10, faith: 10), dob: (year: 1011, month: 1, day: 1), gold: 24, next_death_event_date: (year: 1067, month: 1, day: 24)),
+        (id: "char-brand",  name: "Brand",  house_id: "house-darrowmont", gender: m, skills: (martial: 14, prowess: 10, treasury:  8, prudence: 12, intrigue: 14, faith:  8), dob: (year: 1014, month: 1, day: 1), gold: 17, next_death_event_date: (year: 1066, month: 10, day: 5)),
+        (id: "char-cassia", name: "Cassia", house_id: "house-darrowmont", gender: f, skills: (martial:  6, prowess:  6, treasury: 10, prudence: 14, intrigue: 10, faith: 12), dob: (year: 1044, month: 1, day: 1), gold: 11, next_death_event_date: (year: 1068, month: 9, day: 27)),
+        (id: "char-lysara", name: "Lysara", house_id: "house-darrowmont", gender: f, skills: (martial:  4, prowess:  4, treasury:  6, prudence: 10, intrigue:  8, faith: 12), dob: (year: 1047, month: 1, day: 1), gold: 8,  next_death_event_date: (year: 1067, month: 12, day: 5)),
+
+        (id: "char-olwen",  name: "Olwen",  house_id: "house-margaux", gender: f, skills: (martial:  4, prowess:  4, treasury: 14, prudence: 19, intrigue: 20, faith:  8), dob: (year:  991, month: 1, day: 1), gold: 30, next_death_event_date: (year: 1066, month: 6, day: 22)),
+        (id: "char-markel", name: "Markel", house_id: "house-margaux", gender: m, skills: (martial: 10, prowess:  8, treasury: 12, prudence: 14, intrigue: 10, faith: 10), dob: (year: 1026, month: 1, day: 1), gold: 15, next_death_event_date: (year: 1068, month: 2, day: 17)),
+        (id: "char-lorian", name: "Lorian", house_id: "house-margaux", gender: m, skills: (martial: 10, prowess:  8, treasury: 12, prudence: 14, intrigue: 10, faith: 12), dob: (year:  996, month: 1, day: 1), gold: 26, next_death_event_date: (year: 1066, month: 5, day: 25)),
+        (id: "char-wendell",name: "Wendell",house_id: "house-margaux", gender: m, skills: (martial: 12, prowess:  8, treasury: 10, prudence: 12, intrigue: 12, faith: 10), dob: (year: 1034, month: 1, day: 1), gold: 13, next_death_event_date: (year: 1067, month: 7, day: 30)),
+        (id: "char-garrick",name: "Garrick",house_id: "house-margaux", gender: m, skills: (martial: 19, prowess: 18, treasury: 10, prudence: 10, intrigue:  8, faith:  8), dob: (year: 1037, month: 1, day: 1), gold: 11, next_death_event_date: (year: 1068, month: 6, day: 7)),
+        (id: "char-mariel", name: "Mariel", house_id: "house-margaux", gender: f, skills: (martial:  6, prowess:  6, treasury: 10, prudence: 16, intrigue: 20, faith: 10), dob: (year: 1048, month: 1, day: 1), gold: 7,  next_death_event_date: (year: 1068, month: 3, day: 24)),
+
+        (id: "char-dorian", name: "Dorian", house_id: "house-corvin", gender: m, skills: (martial:  8, prowess:  6, treasury: 12, prudence: 20, intrigue: 16, faith:  8), dob: (year: 1011, month: 1, day: 1), gold: 25, next_death_event_date: (year: 1066, month: 11, day: 11)),
+        (id: "char-oryn",   name: "Oryn",   house_id: "house-corvin", gender: m, skills: (martial: 14, prowess: 19, treasury:  8, prudence: 10, intrigue: 10, faith:  6), dob: (year: 1028, month: 1, day: 1), gold: 12, next_death_event_date: (year: 1068, month: 2, day: 17)),
+        (id: "char-melora", name: "Melora", house_id: "house-corvin", gender: f, skills: (martial:  4, prowess:  4, treasury: 10, prudence: 14, intrigue: 10, faith: 10), dob: (year: 1016, month: 1, day: 1), gold: 18, next_death_event_date: (year: 1067, month: 4, day: 25)),
+        (id: "char-ariel",  name: "Ariel",  house_id: "house-corvin", gender: f, skills: (martial: 10, prowess:  8, treasury: 12, prudence: 16, intrigue: 14, faith:  8), dob: (year: 1042, month: 1, day: 1), gold: 10, next_death_event_date: (year: 1067, month: 10, day: 28)),
+        (id: "char-quentin",name: "Quentin",house_id: "house-corvin", gender: m, skills: (martial:  8, prowess:  8, treasury:  8, prudence: 10, intrigue:  8, faith:  8), dob: (year: 1047, month: 1, day: 1), gold: 9,  next_death_event_date: (year: 1068, month: 7, day: 13)),
+        (id: "char-torren", name: "Torren", house_id: "house-corvin", gender: m, skills: (martial:  4, prowess:  4, treasury:  6, prudence:  8, intrigue:  6, faith:  8), dob: (year: 1051, month: 1, day: 1), gold: 6, next_death_event_date: (year: 1080, month: 8, day: 1)),
 
         // New minor-house characters.
-        (id: "char-lyra-brackenwell",  dob: (year: 1048, month: 1, day: 1), gold: 9,  next_death_event_date: (year: 1074, month: 2, day: 12)),
-        (id: "char-ronan-brackenwell", dob: (year: 1042, month: 1, day: 1), gold: 14, next_death_event_date: (year: 1068, month: 9, day: 4)),
-        (id: "char-elda-hollowfield",  dob: (year: 1037, month: 1, day: 1), gold: 11, next_death_event_date: (year: 1070, month: 11, day: 19)),
-        (id: "char-lucan-hollowfield", dob: (year: 1030, month: 1, day: 1), gold: 18, next_death_event_date: (year: 1069, month: 4, day: 3)),
-        (id: "char-emma-marfield",     dob: (year: 1050, month: 1, day: 1), gold: 6,  next_death_event_date: (year: 1076, month: 6, day: 22)),
-        (id: "char-rolf-marfield",     dob: (year: 1044, month: 1, day: 1), gold: 12, next_death_event_date: (year: 1071, month: 8, day: 30)),
-        (id: "char-lyonel-stonedale",  dob: (year: 1024, month: 1, day: 1), gold: 21, next_death_event_date: (year: 1067, month: 12, day: 10)),
-        (id: "char-sara-stonedale",    dob: (year: 1047, month: 1, day: 1), gold: 8,  next_death_event_date: (year: 1073, month: 3, day: 15)),
-        (id: "char-cassana-greenmere", dob: (year: 1031, month: 1, day: 1), gold: 16, next_death_event_date: (year: 1068, month: 1, day: 28)),
-        (id: "char-balar-greenmere",   dob: (year: 1039, month: 1, day: 1), gold: 10, next_death_event_date: (year: 1072, month: 5, day: 9)),
-        (id: "char-elian-wyndham",     dob: (year: 1046, month: 1, day: 1), gold: 13, next_death_event_date: (year: 1070, month: 7, day: 21)),
-        (id: "char-lyenna-wyndham",    dob: (year: 1052, month: 1, day: 1), gold: 7,  next_death_event_date: (year: 1078, month: 10, day: 2)),
-        (id: "char-brian-greycairn",   dob: (year: 1019, month: 1, day: 1), gold: 24, next_death_event_date: (year: 1067, month: 2, day: 14)),
-        (id: "char-joan-greycairn",    dob: (year: 1049, month: 1, day: 1), gold: 10, next_death_event_date: (year: 1075, month: 11, day: 6)),
-        (id: "char-rolland-rookswood", dob: (year: 1027, month: 1, day: 1), gold: 17, next_death_event_date: (year: 1066, month: 10, day: 23)),
-        (id: "char-melisande-rookswood", dob: (year: 1041, month: 1, day: 1), gold: 8, next_death_event_date: (year: 1069, month: 6, day: 17)),
-        (id: "char-harbert-thornkeep", dob: (year: 1016, month: 1, day: 1), gold: 19, next_death_event_date: (year: 1067, month: 8, day: 5)),
-        (id: "char-jeyne-thornkeep",   dob: (year: 1045, month: 1, day: 1), gold: 9,  next_death_event_date: (year: 1071, month: 1, day: 12)),
-        (id: "char-ormond-saltmoor",   dob: (year: 1022, month: 1, day: 1), gold: 15, next_death_event_date: (year: 1066, month: 12, day: 30)),
-        (id: "char-ysara-saltmoor",    dob: (year: 1053, month: 1, day: 1), gold: 6,  next_death_event_date: (year: 1080, month: 4, day: 18)),
-
-        // ----- Dead characters: dob recorded so ages come out right (gold left at 0; they're dead). -----
-        // House Cresswell: dead ancestors of Aldric, plus dead son Braddon.
-        (id: "char-bordan",    dob: (year:  984, month: 1, day: 1)),
-        (id: "char-dalla",     dob: (year:  987, month: 1, day: 1)),
-        (id: "char-braddon",   dob: (year: 1042, month: 1, day: 1)),
-
-        // House Aurelan: dead ancestors of Tybalt, plus dead son Steff.
-        (id: "char-torin",     dob: (year:  977, month: 1, day: 1)),
-        (id: "char-jeyne-au",  dob: (year:  984, month: 1, day: 1)),
-        (id: "char-steff",     dob: (year: 1043, month: 1, day: 1)),
-
-        // House Selwyn: dead ancestors of Jorell, plus dead son Aldric.
-        (id: "char-ingrey",    dob: (year:  968, month: 1, day: 1)),
-        (id: "char-alessia",   dob: (year:  973, month: 1, day: 1)),
-        (id: "char-aldric-selwyn",    dob: (year: 1050, month: 1, day: 1)),
-
-        // House Darrowmont: dead ancestors of Halric, plus dead son Leofric.
-        (id: "char-edwyn",     dob: (year:  974, month: 1, day: 1)),
-        (id: "char-elspeth",   dob: (year:  979, month: 1, day: 1)),
-        (id: "char-leofric",   dob: (year: 1034, month: 1, day: 1)),
-
-        // House Margaux: dead ancestors of Lorian, plus dead son Quent.
-        (id: "char-morian",    dob: (year:  958, month: 1, day: 1)),
-        (id: "char-alanna",    dob: (year:  964, month: 1, day: 1)),
-        (id: "char-quent",     dob: (year: 1038, month: 1, day: 1)),
-
-        // House Corvin: dead ancestors of Dorian, plus dead son Olyvar.
-        (id: "char-qorell",    dob: (year:  978, month: 1, day: 1)),
-        (id: "char-meria",     dob: (year:  984, month: 1, day: 1)),
-        (id: "char-olyvar",    dob: (year: 1045, month: 1, day: 1)),
+        (id: "char-lyra-brackenwell",  name: "Lyra",  house_id: "house-brackenwell", gender: f, skills: (martial:  6, prowess:  6, treasury: 10, prudence: 10, intrigue:  8, faith: 10), dob: (year: 1048, month: 1, day: 1), gold: 9,  next_death_event_date: (year: 1074, month: 2, day: 12)),
+        (id: "char-ronan-brackenwell", name: "Ronan", house_id: "house-brackenwell", gender: m, skills: (martial: 10, prowess: 10, treasury:  8, prudence:  8, intrigue:  6, faith:  8), dob: (year: 1042, month: 1, day: 1), gold: 14, next_death_event_date: (year: 1068, month: 9, day: 4)),
+        (id: "char-elda-hollowfield",  name: "Elda",  house_id: "house-hollowfield", gender: f, skills: (martial:  4, prowess:  4, treasury:  8, prudence: 10, intrigue:  8, faith: 10), dob: (year: 1037, month: 1, day: 1), gold: 11, next_death_event_date: (year: 1070, month: 11, day: 19)),
+        (id: "char-lucan-hollowfield", name: "Lucan", house_id: "house-hollowfield", gender: m, skills: (martial: 10, prowess:  8, treasury: 10, prudence: 10, intrigue:  8, faith: 10), dob: (year: 1030, month: 1, day: 1), gold: 18, next_death_event_date: (year: 1069, month: 4, day: 3)),
+        (id: "char-emma-marfield",     name: "Emma",  house_id: "house-marfield",     gender: f, skills: (martial:  4, prowess:  4, treasury:  6, prudence:  8, intrigue:  6, faith: 10), dob: (year: 1050, month: 1, day: 1), gold: 6,  next_death_event_date: (year: 1076, month: 6, day: 22)),
+        (id: "char-rolf-marfield",     name: "Rolf",  house_id: "house-marfield",     gender: m, skills: (martial: 12, prowess: 12, treasury:  8, prudence:  8, intrigue:  6, faith:  8), dob: (year: 1044, month: 1, day: 1), gold: 12, next_death_event_date: (year: 1071, month: 8, day: 30)),
+        (id: "char-lyonel-stonedale",  name: "Lyonel",house_id: "house-stonedale",    gender: m, skills: (martial: 10, prowess: 10, treasury: 12, prudence: 10, intrigue:  8, faith: 10), dob: (year: 1024, month: 1, day: 1), gold: 21, next_death_event_date: (year: 1067, month: 12, day: 10)),
+        (id: "char-sara-stonedale",    name: "Sara",  house_id: "house-stonedale",    gender: f, skills: (martial:  4, prowess:  4, treasury:  8, prudence: 10, intrigue:  8, faith: 10), dob: (year: 1047, month: 1, day: 1), gold: 8,  next_death_event_date: (year: 1073, month: 3, day: 15)),
+        (id: "char-cassana-greenmere", name: "Cassana",house_id:"house-greenmere",    gender: f, skills: (martial:  6, prowess:  6, treasury: 10, prudence: 12, intrigue:  8, faith: 10), dob: (year: 1031, month: 1, day: 1), gold: 16, next_death_event_date: (year: 1068, month: 1, day: 28)),
+        (id: "char-balar-greenmere",   name: "Balar", house_id: "house-greenmere",    gender: m, skills: (martial: 12, prowess: 12, treasury:  8, prudence:  8, intrigue:  6, faith:  8), dob: (year: 1039, month: 1, day: 1), gold: 10, next_death_event_date: (year: 1072, month: 5, day: 9)),
+        (id: "char-elian-wyndham",     name: "Elian", house_id: "house-wyndham",      gender: m, skills: (martial: 10, prowess: 10, treasury: 10, prudence:  8, intrigue:  8, faith:  8), dob: (year: 1046, month: 1, day: 1), gold: 13, next_death_event_date: (year: 1070, month: 7, day: 21)),
+        (id: "char-lyenna-wyndham",    name: "Lyenna",house_id: "house-wyndham",      gender: f, skills: (martial:  4, prowess:  4, treasury:  6, prudence:  8, intrigue:  6, faith: 10), dob: (year: 1052, month: 1, day: 1), gold: 7,  next_death_event_date: (year: 1078, month: 10, day: 2)),
+        (id: "char-brian-greycairn",   name: "Brian", house_id: "house-greycairn",    gender: m, skills: (martial: 12, prowess: 10, treasury: 12, prudence: 10, intrigue:  8, faith: 10), dob: (year: 1019, month: 1, day: 1), gold: 24, next_death_event_date: (year: 1067, month: 2, day: 14)),
+        (id: "char-joan-greycairn",    name: "Joan",  house_id: "house-greycairn",    gender: f, skills: (martial:  6, prowess:  6, treasury:  8, prudence: 10, intrigue:  8, faith: 10), dob: (year: 1049, month: 1, day: 1), gold: 10, next_death_event_date: (year: 1075, month: 11, day: 6)),
+        (id: "char-rolland-rookswood", name: "Rolland",house_id:"house-rookswood",    gender: m, skills: (martial: 12, prowess: 10, treasury: 10, prudence: 10, intrigue:  8, faith:  8), dob: (year: 1027, month: 1, day: 1), gold: 17, next_death_event_date: (year: 1066, month: 10, day: 23)),
+        (id: "char-melisande-rookswood",name:"Melisande",house_id:"house-rookswood",  gender: f, skills: (martial:  6, prowess:  6, treasury: 10, prudence: 12, intrigue: 10, faith: 10), dob: (year: 1041, month: 1, day: 1), gold: 8,  next_death_event_date: (year: 1069, month: 6, day: 17)),
+        (id: "char-harbert-thornkeep", name: "Harbert",house_id: "house-thornkeep",    gender: m, skills: (martial: 10, prowess: 10, treasury: 12, prudence: 12, intrigue:  8, faith: 10), dob: (year: 1016, month: 1, day: 1), gold: 19, next_death_event_date: (year: 1067, month: 8, day: 5)),
+        (id: "char-jeyne-thornkeep",   name: "Jeyne", house_id: "house-thornkeep",    gender: f, skills: (martial:  6, prowess:  6, treasury:  8, prudence: 10, intrigue: 10, faith: 10), dob: (year: 1045, month: 1, day: 1), gold: 9,  next_death_event_date: (year: 1071, month: 1, day: 12)),
+        (id: "char-ormond-saltmoor",   name: "Ormond",house_id: "house-saltmoor",      gender: m, skills: (martial: 12, prowess: 10, treasury: 10, prudence: 10, intrigue:  8, faith: 10), dob: (year: 1022, month: 1, day: 1), gold: 15, next_death_event_date: (year: 1066, month: 12, day: 30)),
+        (id: "char-ysara-saltmoor",    name: "Ysara", house_id: "house-saltmoor",      gender: f, skills: (martial:  2, prowess:  2, treasury:  6, prudence:  6, intrigue:  6, faith:  8), dob: (year: 1053, month: 1, day: 1), gold: 6,  next_death_event_date: (year: 1080, month: 4, day: 18)),
     ],
 
     // Pre-existing memories. These describe gifts the recipient already

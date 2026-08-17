@@ -1,6 +1,6 @@
 SEED ?= 12648430
 # Who to play as. The binary requires it; this is the only default there is.
-PLAYER ?= char-tywin
+PLAYER ?= char-tybalt
 
 # ponytail: WSLg puts its wayland socket outside XDG_RUNTIME_DIR, so winit falls
 # back to a broken X11 and no window ever appears. Point it at the real one.

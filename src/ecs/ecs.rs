@@ -18,7 +18,7 @@ use super::character::{
 };
 use super::courtier::{Courtier, CourtierOfCharacter, CourtierOfKingdom};
 use super::house::{House, HouseName};
-use super::kingdom::{Kingdom, KingdomHold, KingdomLedBy};
+use super::kingdom::{Kingdom, KingdomHold, KingdomLedBy, KingdomName};
 use super::land::{Land, LandBorders, LandHolding, LandName};
 use super::road::{Road, RoadBetweenLands, RoadDistanceDays, RoadPoints};
 
@@ -166,8 +166,17 @@ pub fn populate(world: &mut World, content: Content) {
     for (id, k) in content.kingdoms.into_iter() {
         let leader = world.resource::<Registry>().get(&k.leader_character_id);
         let land = world.resource::<Registry>().get(&k.land_id);
+        // Resolve the kingdom's display name BEFORE spawning — once `ec`
+        // holds the mutable borrow, we can't read `LandName` off the world.
+        let display_name = if !k.name.is_empty() {
+            k.name
+        } else {
+            land.and_then(|le| world.get::<LandName>(le))
+                .map(|ln| format!("Kingdom of {}", ln.0))
+                .unwrap_or_else(|| "Unnamed Realm".to_string())
+        };
         let eid = {
-            let mut ec = world.spawn((StringId(id.clone()), Kingdom));
+            let mut ec = world.spawn((StringId(id.clone()), Kingdom, KingdomName(display_name)));
             if let Some(le) = leader {
                 ec.insert(KingdomLedBy(le));
             }

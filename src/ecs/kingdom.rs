@@ -11,6 +11,11 @@ use bevy::prelude::Component;
 #[derive(Component, Debug, Clone, Copy)]
 pub struct Kingdom;
 
+/// A kingdom's display name. Seeded at populate from `Kingdom::name` (with
+/// a `"Kingdom of <land>"` fallback) and rendered by the info panel.
+#[derive(Component, Debug, Clone)]
+pub struct KingdomName(pub String);
+
 /// The character who rules a kingdom. Bevy relationship; auto-maintains `CharacterLeads`.
 #[derive(Component, Debug, Clone, Copy)]
 #[relationship(relationship_target = CharacterLeads)]

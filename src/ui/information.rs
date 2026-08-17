@@ -6,7 +6,7 @@ use crate::app::Game;
 use crate::ecs::{
     CharacterDateOfBirth, CharacterGender, CharacterHasFather, CharacterHasHusband,
     CharacterHasMother, CharacterName, CharacterOfHouse, HouseName, KingdomHold, KingdomLedBy,
-    LandName, Registry,
+    KingdomName, LandName, Registry,
 };
 use crate::helper::age_helper::age;
 use crate::helper::opinion_helper::{opinion_color, opinion_of};
@@ -53,7 +53,7 @@ pub fn update(
     info: Single<Entity, With<LegendInfo>>,
     mut commands: Commands,
     lands: Query<&LandName>,
-    kingdoms: Query<(&KingdomHold, Option<&KingdomLedBy>)>,
+    kingdoms: Query<(&KingdomHold, Option<&KingdomLedBy>, Option<&KingdomName>)>,
     chars: Query<(&CharacterName, &CharacterDateOfBirth, &CharacterGender)>,
     character_of_house: Query<&CharacterOfHouse>,
     houses: Query<&HouseName>,
@@ -83,11 +83,13 @@ pub fn update(
         return;
     };
 
-    // Optional ruler detail (kingdom might exist without a king).
-    let ruler = kingdoms
+    // Pull the kingdom (if any) holding this land: name + optional ruler.
+    let kingdom_row = kingdoms
         .iter()
-        .find(|(kingdom_hold, _)| kingdom_hold.0 == land_e)
-        .and_then(|(_, kingdom_led_by)| kingdom_led_by.copied())
+        .find(|(hold, _, _)| hold.0 == land_e);
+    let kingdom_name = kingdom_row.and_then(|(_, _, n)| n.map(|n| n.0.clone()));
+    let ruler = kingdom_row
+        .and_then(|(_, led_by, _)| led_by.copied())
         .and_then(|kingdom_led_by| {
             let (character_name, character_dob, character_gender) =
                 chars.get(kingdom_led_by.0).ok()?;
@@ -112,9 +114,13 @@ pub fn update(
         });
 
     // Rebuild the line as `TextSpan` children so the opinion value can be
-    // coloured independently of the surrounding text.
+    // coloured independently of the surrounding text. Kingdom name sits on
+    // top (when one exists), then the land, then the ruler.
     commands.entity(info_e).despawn_children();
     commands.entity(info_e).with_children(|p| {
+        if let Some(kingdom_name) = kingdom_name {
+            spawn_span(p, format!("{}\n", kingdom_name), TITLE);
+        }
         spawn_span(p, format!("name:{}\n", land_name.0), Color::WHITE);
         if let Some((ruler_e, ruler_name, house, age, gender_marker)) = ruler {
             spawn_span(p, "ruler: ", Color::WHITE);

@@ -1,15 +1,16 @@
-//! The flex layout holding the text panels and the two full-width bars.
+//! The flex layout holding the two full-width bars and an empty middle row
+//! where the camera draws the map.
 
-use super::{GAP, army, buildings, chronicle, courts, information, resource, status, wars};
+use super::{resource, status};
 use bevy::prelude::*;
 
-pub(crate) const RIGHT_BAR: f32 = 0.3;
-
-/// The two text panels.
+/// The two bars.
 pub fn startup(mut commands: Commands) {
-    // The old terminal layout, as a flex tree: the resource bar on top, a row
-    // holding the map and the right-hand column (information / courts /
-    // buildings / chronicle), the status bar underneath.
+    // Layout: resource bar at top, an empty middle row that fills the
+    // remaining vertical space (the map is gizmo-rendered on top of it via
+    // the camera), status bar at the bottom. The right-side info panels
+    // (information / courts / buildings / chronicle / wars / army) are
+    // hidden for now — the `col` node that used to hold them is gone.
     let panel = Color::srgba(0.1, 0.1, 0.1, 1.0);
     commands
         .spawn(Node {
@@ -19,36 +20,11 @@ pub fn startup(mut commands: Commands) {
             ..default()
         })
         .with_children(|root| {
-            // Resource bar top, map row in the middle, status bar bottom.
             resource::spawn(root, panel);
             root.spawn(Node {
                 width: percent(100),
                 flex_grow: 1.0,
-                flex_direction: FlexDirection::Row,
-                justify_content: JustifyContent::End,
                 ..default()
-            })
-            .with_children(|row| {
-                // Legend on top taking what the chronicle leaves, chronicle
-                // pinned to 30%, a gap between so they read as two panels.
-                row.spawn(Node {
-                    width: percent(RIGHT_BAR * 100.0),
-                    height: percent(100),
-                    flex_direction: FlexDirection::Column,
-                    row_gap: px(GAP),
-                    ..default()
-                })
-                .with_children(|col| {
-                    // WARS + ARMIES sit above INFORMATION and hide themselves
-                    // (Display::None) when the player has none, so they leave
-                    // no gap in the column.
-                    wars::spawn(col, panel);
-                    army::spawn(col, panel);
-                    information::spawn(col, panel);
-                    courts::spawn(col, panel);
-                    buildings::spawn(col, panel);
-                    chronicle::spawn(col, panel);
-                });
             });
             status::spawn(root, panel);
         });

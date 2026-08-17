@@ -1,6 +1,5 @@
 //! The camera: spawn, framing, and the tween between zoomed/unzoomed views.
 
-use super::startup::RIGHT_BAR;
 use crate::app::Game;
 use crate::ecs::{LandBorders, LandHolding, Registry};
 use crate::resources::border::Border;
@@ -42,12 +41,13 @@ fn ease_in_out(t: f32) -> f32 {
 
 /// Camera framed on the whole map. `update_camera` rewrites the projection
 /// every frame to follow `Game::zoomed`; the tween starts settled so the
-/// first frame doesn't kick an unintended transition.
+/// first frame doesn't kick an unintended transition. The viewport is
+/// centered horizontally — no right-side panels reserve space.
 pub fn startup(mut commands: Commands, border: Res<Border>) {
     let (x0, x1, y0, y1) = border.bounds();
     let default_view = CameraView {
         translation: Vec2::new(((x0 + x1) / 2.0) as f32, ((y0 + y1) / 2.0) as f32),
-        min_w: ((x1 - x0) * 1.05) as f32 / (1.0 - RIGHT_BAR),
+        min_w: ((x1 - x0) * 1.05) as f32,
         min_h: ((y1 - y0) * 1.05) as f32,
     };
     commands.spawn((
@@ -57,7 +57,7 @@ pub fn startup(mut commands: Commands, border: Res<Border>) {
                 min_width: default_view.min_w,
                 min_height: default_view.min_h,
             },
-            viewport_origin: Vec2::new((1.0 - RIGHT_BAR) / 2.0, 0.5),
+            viewport_origin: Vec2::new(0.5, 0.5),
             scale: CAMERA_SCALE,
             ..OrthographicProjection::default_2d()
         }),
@@ -81,7 +81,7 @@ fn compute_target(
     let (x0, x1, y0, y1) = border.bounds();
     let mut target = CameraView {
         translation: Vec2::new(((x0 + x1) / 2.0) as f32, ((y0 + y1) / 2.0) as f32),
-        min_w: ((x1 - x0) * 1.05) as f32 / (1.0 - RIGHT_BAR),
+        min_w: ((x1 - x0) * 1.05) as f32,
         min_h: ((y1 - y0) * 1.05) as f32,
     };
     if game.zoomed
@@ -105,7 +105,7 @@ fn compute_target(
             ((lx0 + lx1) / 2.0) as f32,
             ((ly0 + ly1) / 2.0) as f32,
         );
-        target.min_w = (((lx1 - lx0) * ZOOM_MARGIN) as f32 / (1.0 - RIGHT_BAR)).max(MIN_ZOOM);
+        target.min_w = (((lx1 - lx0) * ZOOM_MARGIN) as f32).max(MIN_ZOOM);
         target.min_h = (((ly1 - ly0) * ZOOM_MARGIN) as f32).max(MIN_ZOOM);
     }
     target
@@ -146,7 +146,7 @@ pub fn update_camera(
         min_height: interp.min_h,
     };
     ortho.scale = CAMERA_SCALE;
-    ortho.viewport_origin = Vec2::new((1.0 - RIGHT_BAR) / 2.0, 0.5);
+    ortho.viewport_origin = Vec2::new(0.5, 0.5);
     transform.translation = Vec3::new(interp.translation.x, interp.translation.y, 0.0);
     **view = interp;
 }

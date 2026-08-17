@@ -472,7 +472,18 @@ pub fn on_event_resolved(
     trigger: On<OnEventResolved>,
     deck: Res<EventDeck>,
     scripts: Res<EventScripts>,
-    world: &World,
+    // ponytail: a `&World` here would force `read_all` access and collide
+    // with the `ResMut<Chronicles>` below. Use a query that names the
+    // specific components we read off each character instead.
+    characters: Query<(
+        &crate::ecs::StringId,
+        &crate::ecs::CharacterName,
+        Option<&crate::ecs::CharacterOfHouse>,
+        &crate::ecs::CharacterLevy,
+        &crate::ecs::CharacterGold,
+        &crate::ecs::CharacterIsAlive,
+    )>,
+    house_string_ids: Query<&crate::ecs::StringId>,
     mut chronicles: ResMut<Chronicles>,
 ) {
     let event = trigger.event();
@@ -486,7 +497,7 @@ pub fn on_event_resolved(
     let character_views: Vec<rhai::Map> = pending
         .characters
         .iter()
-        .map(|e| crate::script_ctx::character_view_from_world(world, *e))
+        .map(|e| crate::script_ctx::character_view_from_queries(*e, &characters, &house_string_ids))
         .collect();
     let first_name = character_views
         .first()

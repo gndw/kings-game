@@ -339,6 +339,41 @@ pub fn character_view_from_world(world: &World, entity: Entity) -> Map {
     m
 }
 
+/// Same shape as [`character_view_from_world`], but read through `Query`s
+/// instead of `&World`. Use this from systems that also take a `ResMut`
+/// — `&World` would force `read_all` and collide with the writer at
+/// `init_access` time.
+pub fn character_view_from_queries(
+    entity: Entity,
+    characters: &Query<(
+        &crate::ecs::StringId,
+        &CharacterName,
+        Option<&CharacterOfHouse>,
+        &CharacterLevy,
+        &CharacterGold,
+        &CharacterIsAlive,
+    )>,
+    house_string_ids: &Query<&crate::ecs::StringId>,
+) -> Map {
+    let mut m = Map::new();
+    m.insert("entity".into(), Dynamic::from(entity.to_bits() as INT));
+    let (id, name, house, levy, gold, is_alive) = match characters.get(entity) {
+        Ok(parts) => parts,
+        Err(_) => return m,
+    };
+    let house_id = house
+        .and_then(|h| house_string_ids.get(h.0).ok())
+        .map(|s| s.0.clone())
+        .unwrap_or_default();
+    m.insert("id".into(), id.0.clone().into());
+    m.insert("name".into(), name.0.clone().into());
+    m.insert("house_id".into(), house_id.into());
+    m.insert("levy".into(), Dynamic::from(levy.0 as INT));
+    m.insert("gold".into(), Dynamic::from(gold.0 as INT));
+    m.insert("is_alive".into(), is_alive.0.into());
+    m
+}
+
 /// Resolve a script-side character arg to an `Entity`. Accepts a map
 /// (character view with an `entity` int) or a string id (resolved through
 /// the registry).

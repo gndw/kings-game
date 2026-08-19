@@ -103,6 +103,7 @@ fn main() -> Result<()> {
         .insert_resource(border)
         .insert_resource(InputLayer::default())
         .insert_resource(CommandMenuUiContext::default())
+        .insert_resource(kings_game::ui::kingdom::KingdomUiContext::default())
         .insert_resource(kings_game::ui::wiki::WikiUiContext::default())
         .insert_resource(kings_game::ui::event_popup::EventPopupUiContext::default())
         .insert_resource(initial_event_deck(&event_deck_state))
@@ -117,6 +118,7 @@ fn main() -> Result<()> {
                 ui::command_menu::startup,
                 ui::error::startup,
                 ui::event_popup::startup,
+                ui::kingdom::startup,
                 ui::wiki::startup,
                 commands::startup,
                 game::yielding::recompute_yields,
@@ -176,6 +178,16 @@ fn main() -> Result<()> {
                 ui::army::update,
                 ui::status::update,
                 kings_game::debug::dump_characters,
+            ),
+        )
+        // Split into a second `add_systems` so the kingdom panel is registered
+        // past the 16-system tuple ceiling on the first. Cheap two-line add;
+        // collapse back into the main tuple if the schedule ever shrinks below 16.
+        .add_systems(
+            Update,
+            (
+                ui::kingdom::input.run_if(ui::kingdom::root_layer_active),
+                ui::kingdom::update,
             ),
         )
         .add_systems(

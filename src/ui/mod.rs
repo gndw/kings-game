@@ -17,6 +17,7 @@ pub mod event_popup;
 pub mod flag;
 pub mod information;
 pub mod input;
+pub mod kingdom;
 pub mod resource;
 pub mod startup;
 pub mod status;

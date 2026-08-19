@@ -175,7 +175,9 @@ the same way — the menu is command-agnostic.
 digit speed, `Z` zoom); yields to the palette while it's open.
 `ui::map::update_input` (exclusive) — arrow keys move the selection,
 yields to the palette. `ui::command_menu::input` (exclusive) — `c`
-opens the palette, drives the active command's steps. `ui::wiki::input`
+opens the palette, drives the active command's steps. `ui::kingdom::input`
+(exclusive, root layer only) — `Enter` toggles the kingdom panel for the
+currently selected land's kingdom. `ui::wiki::input`
 (exclusive) — `w` toggles the wiki; arrow keys navigate the visible wiki tree
 and expand or collapse the Houses node, `Esc` closes it. `ui::error::input`
 (Update) — `esc` closes the error popup, gated to the popup layer.
@@ -240,6 +242,14 @@ Bevy flex tree + `Gizmos` line drawing; no asset sprites.
   while the right `WikiBody` shows the selected item (currently a house and
   its members). `Esc` closes it, and an `InputLayer::Wiki` gates root-layer
   keys while it's open.
+- **Kingdom panel** — an `Enter`-toggled right-docked panel (`ui::kingdom`,
+  `KingdomUiContext.pinned_kingdom_id`) that pins a single kingdom's
+  details (ruler / land / courtiers / wars / armies / buildings) as the
+  map selection moves. Enter on the same kingdom closes, Enter on a
+  different one switches, Enter when nothing's pinned opens on the
+  selected land's kingdom. Visually anchored to the right edge via
+  `position_type: Absolute` so it overlays the map area while showing.
+  Root-layer only — it coexists with arrow-key selection.
 
 ## Key invariants
 

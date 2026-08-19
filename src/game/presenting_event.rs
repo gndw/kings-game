@@ -218,7 +218,11 @@ fn resolve_choice(world: &mut World, choice: Option<usize>) {
         // hold exclusively for the duration of this function. No other code
         // path can remove or replace the resource while we hold `&mut World`.
         let engine: &rhai::Engine = unsafe { &*engine_ptr };
+        // Scope carries the `None` constant — same fresh_scope as the
+        // read-side call_* helpers. Re-creating it inline avoids the
+        // round-trip if `fresh_scope` ever moves modules.
         let mut scope = Scope::new();
+        scope.push_constant("None", ());
         let map = build_world_view(world, player_e, &characters, choice_idx);
         let map = attach_ctx(map, ScriptCtx::new(world));
         let _ = engine.call_fn::<()>(&mut scope, &ast, "effect", (map,));

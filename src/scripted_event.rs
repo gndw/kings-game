@@ -79,7 +79,7 @@ impl ScriptedEvent {
 
     /// `title()` — required. Caller treats errors as load-failures.
     pub fn call_title(&self, engine: &Engine) -> Result<String> {
-        let mut scope = Scope::new();
+        let mut scope = fresh_scope();
         engine
             .call_fn::<String>(&mut scope, &self.ast, "title", ())
             .with_context(|| format!("event:{}::title", self.id))
@@ -87,7 +87,7 @@ impl ScriptedEvent {
 
     /// `narration()` — required.
     pub fn call_narration(&self, engine: &Engine) -> Result<String> {
-        let mut scope = Scope::new();
+        let mut scope = fresh_scope();
         engine
             .call_fn::<String>(&mut scope, &self.ast, "narration", ())
             .with_context(|| format!("event:{}::narration", self.id))
@@ -96,7 +96,7 @@ impl ScriptedEvent {
     /// `weight()` — required. Returns `u32` for the draw; the script returns
     /// `i64` because Rhai doesn't distinguish.
     pub fn call_weight(&self, engine: &Engine) -> Result<u32> {
-        let mut scope = Scope::new();
+        let mut scope = fresh_scope();
         let n: i64 = engine
             .call_fn(&mut scope, &self.ast, "weight", ())
             .with_context(|| format!("event:{}::weight", self.id))?;
@@ -109,7 +109,7 @@ impl ScriptedEvent {
     /// `choices()` — required. Each element is a record with `text: String`
     /// and an optional `chronicle: String`.
     pub fn call_choices(&self, engine: &Engine) -> Result<Vec<ChoiceRow>> {
-        let mut scope = Scope::new();
+        let mut scope = fresh_scope();
         let arr: rhai::Array = engine
             .call_fn(&mut scope, &self.ast, "choices", ())
             .with_context(|| format!("event:{}::choices", self.id))?;
@@ -140,7 +140,7 @@ impl ScriptedEvent {
         if !self.has_decline {
             return None;
         }
-        let mut scope = Scope::new();
+        let mut scope = fresh_scope();
         engine
             .call_fn::<String>(&mut scope, &self.ast, "decline", ())
             .ok()
@@ -154,7 +154,7 @@ impl ScriptedEvent {
         if !self.has_can_trigger {
             return true;
         }
-        let mut scope = Scope::new();
+        let mut scope = fresh_scope();
         engine
             .call_fn::<bool>(&mut scope, &self.ast, "can_trigger", (world,))
             .unwrap_or_else(|e| {
@@ -175,7 +175,7 @@ impl ScriptedEvent {
         if !self.has_characters {
             return Vec::new();
         }
-        let mut scope = Scope::new();
+        let mut scope = fresh_scope();
         let arr: rhai::Array = engine
             .call_fn(&mut scope, &self.ast, "characters", (world,))
             .unwrap_or_else(|e| {
@@ -210,6 +210,18 @@ impl ScriptedEvent {
             eprintln!("event:{}::effect: {e}", self.id);
         }
     }
+}
+
+/// Build a fresh [`Scope`] with the engine-level pre-defined constants
+/// (currently just `None`) so modders can write Rust-style
+/// `#{ chronicle: None }` in map literals alongside `Some(...)`. Pairs
+/// with the `Some` / `None` function registrations in
+/// `script_ctx::register_api`, which cover the `Some(x)` and `None()`
+/// call-style; the constant here covers the bare-identifier style.
+fn fresh_scope() -> Scope<'static> {
+    let mut scope = Scope::new();
+    scope.push_constant("None", ());
+    scope
 }
 
 /// Extract `<id>` from a filename like `event-<id>.rhai`. The `event-` prefix

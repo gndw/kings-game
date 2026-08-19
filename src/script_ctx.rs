@@ -295,6 +295,14 @@ pub fn register_api(engine: &mut Engine) {
     engine.register_fn("log", ScriptCtx::log);
     // RNG — kept deterministic by routing through SimRng.
     engine.register_fn("rng", ScriptCtx::rng);
+    // Rust-style Option syntax (`Some(x)` / `None`) so modders can write
+    // `#{ text: "...", chronicle: Some("...") }` / `None` in their maps.
+    // `Some(x)` returns its argument as-is; `None()` returns unit. The
+    // runtime's `call_choices` reads `chronicle` via `into_string().ok()`
+    // which yields `None` for unit / missing — matches the Rust
+    // `Option<String>` reading the script_ctx asks for.
+    engine.register_fn("Some", |x: rhai::Dynamic| x);
+    engine.register_fn("None", || rhai::Dynamic::UNIT);
 }
 
 // ---- helpers ---------------------------------------------------------------

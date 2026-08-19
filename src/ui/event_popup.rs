@@ -339,17 +339,17 @@ pub fn input(
     if deck.pending.is_none() {
         return;
     }
+    // Choice navigation needs at least one row. Esc-to-close still works
+    // when the script came back empty (e.g. compiled but failed at runtime):
+    // a zero-choice popup must still be dismissable.
     let n = ui_ctx.choice_count;
-    if n == 0 {
-        return;
-    }
 
     let up = keys.just_pressed(KeyCode::ArrowUp);
     let down = keys.just_pressed(KeyCode::ArrowDown);
     let enter = keys.just_pressed(KeyCode::Enter);
     let esc = keys.just_pressed(KeyCode::Escape);
 
-    if up {
+    if n > 0 && up {
         ui_ctx.cursor = if ui_ctx.cursor == 0 {
             n - 1
         } else {
@@ -357,11 +357,11 @@ pub fn input(
         };
         return;
     }
-    if down {
+    if n > 0 && down {
         ui_ctx.cursor = (ui_ctx.cursor + 1) % n;
         return;
     }
-    if enter {
+    if n > 0 && enter {
         let pick = ui_ctx.cursor;
         commands.queue(move |world: &mut World| {
             world.trigger(OnEventResolved { choice: Some(pick) });

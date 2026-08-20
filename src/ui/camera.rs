@@ -3,6 +3,7 @@
 use crate::app::Game;
 use crate::ecs::{LandBorders, LandHolding, Registry};
 use crate::resources::border::Border;
+use crate::ui::character::CharacterUiContext;
 use crate::ui::kingdom::KingdomUiContext;
 use bevy::camera::ScalingMode;
 use bevy::prelude::*;
@@ -101,9 +102,13 @@ fn compute_target(
     registry: &Registry,
     lands: &Query<(&LandBorders, &LandHolding)>,
     kingdom_ui: &KingdomUiContext,
+    character_ui: &CharacterUiContext,
 ) -> CameraView {
     let (x0, x1, y0, y1) = border.bounds();
-    let panel_open = kingdom_ui.pinned_kingdom_id.is_some();
+    // Either right-docked panel (kingdom or character) shifts the map left.
+    // Both panels share the same 35% slot, so the camera should hold its
+    // shifted state across the entire drill-down.
+    let panel_open = kingdom_ui.pinned_kingdom_id.is_some() || character_ui.character_id.is_some();
     // Right-docked panel takes the right `KINGDOM_PANEL_WIDTH` of the window,
     // so the visible region runs from x=0 to x=(1 - KINGDOM_PANEL_WIDTH).
     // Its midpoint is at `(1 - KINGDOM_PANEL_WIDTH) / 2` viewport-x, shifted
@@ -149,12 +154,14 @@ fn compute_target(
 /// Drive the camera from `Game::zoomed`, the current selection, and the
 /// kingdom panel state. Re-tweens whenever the destination moves; otherwise
 /// just advances the tween.
+#[allow(clippy::too_many_arguments)] // Bevy system params; the alternative is the same function moved to compute_target.
 pub fn update_camera(
     game: Res<Game>,
     border: Res<Border>,
     registry: Res<Registry>,
     lands: Query<(&LandBorders, &LandHolding)>,
     kingdom_ui: Res<KingdomUiContext>,
+    character_ui: Res<CharacterUiContext>,
     time: Res<Time>,
     mut camera: Single<
         (&mut Projection, &mut Transform, &mut CameraView, &mut CameraTween),
@@ -162,7 +169,7 @@ pub fn update_camera(
     >,
 ) {
     let (ref mut proj, ref mut transform, ref mut view, ref mut tween) = *camera;
-    let target = compute_target(&game, &border, &registry, &lands, &kingdom_ui);
+    let target = compute_target(&game, &border, &registry, &lands, &kingdom_ui, &character_ui);
     if tween.to != target {
         tween.from = **view;
         tween.to = target;

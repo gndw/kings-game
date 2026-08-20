@@ -104,6 +104,7 @@ fn main() -> Result<()> {
         .insert_resource(InputLayer::default())
         .insert_resource(CommandMenuUiContext::default())
         .insert_resource(kings_game::ui::kingdom::KingdomUiContext::default())
+        .insert_resource(kings_game::ui::character::CharacterUiContext::default())
         .insert_resource(kings_game::ui::wiki::WikiUiContext::default())
         .insert_resource(kings_game::ui::event_popup::EventPopupUiContext::default())
         .insert_resource(initial_event_deck(&event_deck_state))
@@ -119,6 +120,7 @@ fn main() -> Result<()> {
                 ui::error::startup,
                 ui::event_popup::startup,
                 ui::kingdom::startup,
+                ui::character::startup,
                 ui::wiki::startup,
                 commands::startup,
                 game::yielding::recompute_yields,
@@ -188,6 +190,8 @@ fn main() -> Result<()> {
             (
                 ui::kingdom::input.run_if(ui::kingdom::root_layer_active),
                 ui::kingdom::update,
+                ui::character::input.run_if(ui::input::root_layer_active),
+                ui::character::update,
             ),
         )
         .add_systems(

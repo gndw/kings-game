@@ -1,15 +1,7 @@
-//! The character panel: a right-docked panel that *replaces* the kingdom
-//! panel while the player drills into a character. Opened with **R** while
-//! the kingdom panel is pinned (resolves to the kingdom's ruler); **Enter**
-//! closes both panels, **Backspace** pops back to the still-pinned kingdom
-//! panel.
-//!
-//! Rendered sections (one line each, matching the kingdom panel style):
-//! `name house [gender] (age) [opinion]`, `ruler of: <kingdom>` (when the
-//! character leads a kingdom), `gold`, `gold/m`, `levy`, and the six
-//! skills. Opinion is suppressed when the character is the player.
+//! Character panel core: types, resources, the shell spawner, the input
+//! handler, and the per-frame renderer. Each rendered section lives in its
+//! own submodule; this file owns the orchestrator (`render_character_spans`).
 
-use super::{FONT, TITLE, spawn_span};
 use crate::app::Game;
 use crate::ecs::character::{
     CharacterDateOfBirth, CharacterFaith, CharacterGender, CharacterGold, CharacterGoldYield,
@@ -17,15 +9,19 @@ use crate::ecs::character::{
     CharacterOfHouse, CharacterProwess, CharacterPrudence, CharacterTreasury,
 };
 use crate::ecs::house::HouseName;
-use crate::ecs::kingdom::KingdomName;
+use crate::ecs::kingdom::{KingdomLedBy, KingdomName};
 use crate::ecs::{Registry, StringId};
 use crate::helper::age_helper::age;
-use crate::helper::opinion_helper::{opinion_color, opinion_of_via_world};
+use crate::helper::opinion_helper::opinion_of_via_world;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
 use crate::resources::input_layer::InputLayer;
-use bevy::color::palettes::css;
 use bevy::prelude::*;
+
+use super::super::{FONT, TITLE, spawn_span};
+use super::character_detail::render_detail_spans;
+use super::character_skills::render_skills_spans;
+use super::character_stats::render_stats_spans;
 
 /// The full panel shell (root node). Hidden by default; flipped open by
 /// `input` when the player presses R on the pinned kingdom's ruler.
@@ -49,13 +45,6 @@ pub struct CharacterUiContext {
 const PANEL_BG: Color = Color::srgb(0.10, 0.10, 0.12);
 const BORDER: Color = Color::srgba(0.6, 0.6, 0.65, 0.5);
 const Z_INDEX: i32 = 50;
-
-const LEVY_GREEN: Color = Color::Srgba(css::GREEN);
-const LOSS_RED: Color = Color::Srgba(css::RED);
-const SKILL_GRAY: Color = Color::srgb(0.55, 0.55, 0.55);
-const SKILL_WHITE: Color = Color::WHITE;
-const SKILL_GREEN: Color = Color::Srgba(css::GREEN);
-const GOLD_COLOR: Color = Color::Srgba(css::GOLD);
 
 /// Spawn the panel shell once, hidden. Same right-docked 35% width as the
 /// kingdom panel so they visually replace each other and the camera shift
@@ -146,7 +135,7 @@ fn open_ruler(world: &mut World) {
     let Some(kingdom_e) = world.resource::<Registry>().get(&kingdom_id) else {
         return;
     };
-    let Some(ruler_e) = world.get::<crate::ecs::kingdom::KingdomLedBy>(kingdom_e).map(|k| k.0) else {
+    let Some(ruler_e) = world.get::<KingdomLedBy>(kingdom_e).map(|k| k.0) else {
         return;
     };
     let Some(char_id) = world.get::<StringId>(ruler_e).map(|s| s.0.clone()) else {
@@ -281,94 +270,23 @@ fn render_character_spans(
         (name, house, gender, char_age, kingdom_name, gold, gold_yield, levy, skills)
     };
 
-    let marker = match gender {
-        CharacterGender::Male => "m",
-        CharacterGender::Female => "f",
-    };
+    // Opinion needs &mut World (opinion_of_via_world does); compute after
+    // the immutable borrow of `world.entity(char_e)` is dropped.
+    let opinion = player_e.filter(|p| *p != char_e).map(|player| {
+        let date = world.resource::<Date>().clone();
+        opinion_of_via_world(world, char_e, player, &date)
+    });
 
     let mut spans: Vec<(String, Color)> = Vec::new();
-    // Header line: name house [gender] (age) [+opinion]
-    spans.push((format!("{} {}", name, house), Color::WHITE));
-    spans.push((format!(" [{}] ({})", marker, char_age), Color::WHITE));
-    if let Some(player) = player_e.filter(|p| *p != char_e) {
-        let date = world.resource::<Date>().clone();
-        let op = opinion_of_via_world(world, char_e, player, &date);
-        spans.push((" [".to_string(), Color::WHITE));
-        spans.push((format!("{:+}", op), opinion_color(op)));
-        spans.push(("]".to_string(), Color::WHITE));
-    }
-    spans.push(("\n".to_string(), Color::WHITE));
-
-    if let Some(kn) = kingdom_name {
-        spans.push(("ruler of: ".to_string(), Color::WHITE));
-        spans.push((format!("{}\n", kn), TITLE));
-    }
-
-    spans.push((format!("gold: {}\n", format_signed(gold)), Color::WHITE));
-    let yield_color = if gold_yield >= 0 { GOLD_COLOR } else { LOSS_RED };
-    spans.push((
-        format!("gold/m: {}\n", format_signed(gold_yield)),
-        yield_color,
+    spans.extend(render_detail_spans(
+        &name,
+        &house,
+        gender,
+        char_age,
+        kingdom_name.as_deref(),
+        opinion,
     ));
-    spans.push((format!("levy: {}\n", levy), LEVY_GREEN));
-
-    // Six skills: martial, prowess, treasury, prudence, intrigue, faith.
-    spans.push(("skill: ".to_string(), Color::WHITE));
-    spans.extend(skill_pairs(skills));
-    spans.push(("\n".to_string(), Color::WHITE));
-
+    spans.extend(render_stats_spans(gold, gold_yield, levy));
+    spans.extend(render_skills_spans(skills));
     spans
-}
-
-/// Format the six skill values as `m:N p:N t:N pr:N i:N f:N` with
-/// tier-coloured cells. Colour tiers match the kingdom panel's levy scheme:
-/// green ≥ 15, white 10..=14, gray otherwise.
-fn skill_pairs(skills: (i32, i32, i32, i32, i32, i32)) -> Vec<(String, Color)> {
-    let pairs = [
-        ("m:", skills.0),
-        (" p:", skills.1),
-        (" t:", skills.2),
-        (" pr:", skills.3),
-        (" i:", skills.4),
-        (" f:", skills.5),
-    ];
-    pairs
-        .into_iter()
-        .map(|(label, val)| (format!("{}{}", label, val), skill_color(val)))
-        .collect()
-}
-
-/// Skill colour tier: ≥15 green, 10..=14 white, else gray. Matches the
-/// levy scheme in [`crate::ui::kingdom`] (red raised, yellow partial,
-/// green max, gray idle) for visual consistency.
-fn skill_color(value: i32) -> Color {
-    if value >= 15 {
-        SKILL_GREEN
-    } else if value >= 10 {
-        SKILL_WHITE
-    } else {
-        SKILL_GRAY
-    }
-}
-
-/// `+123` / `-45` with thousands separators and a sign so the panel reads
-/// cleanly across the gold and yield rows.
-fn format_signed(value: i64) -> String {
-    if value >= 0 {
-        format!("+{}", format_int(value as u64))
-    } else {
-        format!("-{}", format_int(value.unsigned_abs()))
-    }
-}
-
-fn format_int(value: u64) -> String {
-    let s = value.to_string();
-    let mut out = String::with_capacity(s.len() + s.len() / 3);
-    for (i, c) in s.chars().rev().enumerate() {
-        if i > 0 && i % 3 == 0 {
-            out.push(',');
-        }
-        out.push(c);
-    }
-    out.chars().rev().collect()
 }

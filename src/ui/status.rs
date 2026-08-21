@@ -1,7 +1,6 @@
 //! The status bar along the bottom: run state, date, speed, keys.
 
 use super::FONT;
-use super::chronicle::Chronicle;
 use crate::app::{Game, speed};
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
@@ -36,7 +35,7 @@ pub fn update(
     game: Res<Game>,
     date: Res<Date>,
     calendar: Res<Calendar>,
-    mut status: Single<(&mut Text, &mut TextColor), (With<Status>, Without<Chronicle>)>,
+    mut status: Single<(&mut Text, &mut TextColor), With<Status>>,
     mut status_rest: Single<&mut TextSpan, With<Status>>,
 ) {
     let (state, colour) = if game.paused {

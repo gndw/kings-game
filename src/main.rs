@@ -172,7 +172,6 @@ fn main() -> Result<()> {
                 ui::event_popup::update
                     .run_if(ui::event_popup::event_popup_layer_active),
                 ui::resource::update,
-                ui::chronicle::update,
                 ui::status::update,
                 kings_game::debug::dump_characters,
             ),

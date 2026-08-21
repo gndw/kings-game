@@ -8,7 +8,6 @@ use bevy::prelude::*;
 
 pub mod camera;
 pub mod character;
-pub mod chronicle;
 pub mod command_menu;
 pub mod error;
 pub mod event_popup;

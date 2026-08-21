@@ -119,8 +119,6 @@ fn main() -> Result<()> {
                 ui::command_menu::startup,
                 ui::error::startup,
                 ui::event_popup::startup,
-                ui::kingdom::startup,
-                ui::character::startup,
                 ui::wiki::startup,
                 commands::startup,
                 game::yielding::recompute_yields,

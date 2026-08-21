@@ -7,7 +7,7 @@ use crate::ecs::{KingdomHold, KingdomLedBy, KingdomName, LandHeldBy, Registry, S
 use crate::resources::input_layer::InputLayer;
 use bevy::prelude::*;
 
-use super::super::{FONT, TITLE, spawn_span};
+use super::super::spawn_span;
 use super::kingdom_army::render_armies_spans;
 use super::kingdom_buildings::render_buildings_spans;
 use super::kingdom_courts::render_courtiers_spans;
@@ -29,50 +29,6 @@ pub struct KingdomUIBody;
 #[derive(Resource, Default)]
 pub struct KingdomUiContext {
     pub pinned_kingdom_id: Option<String>,
-}
-
-const PANEL_BG: Color = Color::srgb(0.10, 0.10, 0.12);
-const BORDER: Color = Color::srgba(0.6, 0.6, 0.65, 0.5);
-const Z_INDEX: i32 = 50;
-
-/// Spawn the panel shell once, hidden. Right-docked so the map keeps its
-/// area; width is a fixed percent rather than a flex sibling so the panel
-/// doesn't compete with the camera for layout space.
-pub fn startup(mut commands: Commands) {
-    commands
-        .spawn((
-            KingdomUIRoot,
-            Node {
-                position_type: PositionType::Absolute,
-                right: px(0),
-                top: px(0),
-                bottom: px(0),
-                width: percent(35),
-                flex_direction: FlexDirection::Column,
-                padding: UiRect::all(px(8)),
-                row_gap: px(4),
-                border: UiRect::all(px(1)),
-                overflow: Overflow::clip(),
-                display: Display::None,
-                ..default()
-            },
-            BackgroundColor(PANEL_BG),
-            BorderColor::all(BORDER),
-            GlobalZIndex(Z_INDEX),
-        ))
-        .with_children(|win| {
-            win.spawn((
-                Text::new("KINGDOM"),
-                TextFont::from_font_size(FONT + 2.0),
-                TextColor(TITLE),
-            ));
-            win.spawn((
-                KingdomUIBody,
-                Text::new(""),
-                TextFont::from_font_size(FONT),
-                TextColor(Color::WHITE),
-            ));
-        });
 }
 
 /// Run condition: the root input layer is active (no modal in the way).

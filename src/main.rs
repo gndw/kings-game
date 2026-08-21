@@ -171,13 +171,8 @@ fn main() -> Result<()> {
                     .run_if(ui::event_popup::input_layer_active),
                 ui::event_popup::update
                     .run_if(ui::event_popup::event_popup_layer_active),
-                ui::courts::update,
                 ui::resource::update,
-                ui::information::update,
-                ui::buildings::update,
                 ui::chronicle::update,
-                ui::wars::update,
-                ui::army::update,
                 ui::status::update,
                 kings_game::debug::dump_characters,
             ),

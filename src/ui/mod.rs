@@ -6,23 +6,17 @@
 
 use bevy::prelude::*;
 
-pub mod army;
-pub mod buildings;
 pub mod camera;
 pub mod character;
 pub mod chronicle;
 pub mod command_menu;
-pub mod courts;
 pub mod error;
 pub mod event_popup;
-pub mod flag;
-pub mod information;
 pub mod input;
 pub mod kingdom;
 pub mod resource;
 pub mod startup;
 pub mod status;
-pub mod wars;
 pub mod wiki;
 
 const FONT: f32 = 14.0;

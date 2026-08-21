@@ -11,9 +11,7 @@
 use super::{FONT, TITLE, spawn_span};
 use crate::app::Game;
 use crate::ecs::character::{
-    CharacterDateOfBirth, CharacterGender, CharacterHasFather, CharacterHasHusband,
-    CharacterHasMother, CharacterName, CharacterOfHouse, MemoryKind, MemoryOfCharacter,
-    MemoryTowardCharacter, MemoryUntilDate,
+    CharacterDateOfBirth, CharacterGender, CharacterName, CharacterOfHouse,
 };
 use crate::ecs::house::HouseName;
 use crate::ecs::courtier::CourtierOfCharacter;
@@ -36,7 +34,7 @@ use crate::ecs::road::RoadDistanceDays;
 use crate::ecs::siege::SiegeProgress;
 use crate::ecs::war::{WarBeginDate, WarName};
 use crate::helper::age_helper::age;
-use crate::helper::opinion_helper::opinion_color;
+use crate::helper::opinion_helper::{opinion_color, opinion_of_via_world};
 use crate::resources::buildings::BuildingDefs;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
@@ -172,7 +170,11 @@ fn apply_toggle(world: &mut World, action: Toggle) {
     }
 }
 
-fn set_visible(world: &mut World, visible: bool) {
+/// Toggle the kingdom panel shell's visibility. `pub(crate)` so the
+/// character panel can hide this shell while its drill-down replaces the
+/// slot — both panels occupy the same right-docked 35% area and only one
+/// should be on-screen at a time.
+pub(crate) fn set_visible(world: &mut World, visible: bool) {
     let Some(root) = world
         .query_filtered::<Entity, With<KingdomUIRoot>>()
         .iter(world)
@@ -203,6 +205,16 @@ fn selected_kingdom(world: &World) -> Option<Entity> {
 /// Exclusive because 30+ system parameters would exceed Bevy's 16-tuple
 /// param ceiling; helpers fetch data via `&World` instead.
 pub fn update(world: &mut World) {
+    // Skip while the character drill-down is replacing this panel. The
+    // character panel's `input` flips our shell to `display: None` so the
+    // body is invisible anyway; rebuilding it would be wasted work.
+    if world
+        .resource::<super::character::CharacterUiContext>()
+        .character_id
+        .is_some()
+    {
+        return;
+    }
     let Some(body_e) = world
         .query_filtered::<Entity, With<KingdomUIBody>>()
         .iter(world)
@@ -321,58 +333,6 @@ fn render_ruler_spans(
         spans.push(("\n".to_string(), Color::WHITE));
     }
     spans
-}
-
-/// Inlined `opinion_of` for callers that hold `&mut World` rather than a
-/// Bevy `Query` system param. Same rules as `helper::opinion_helper::opinion_of`.
-fn opinion_of_via_world(world: &mut World, observer: Entity, target: Entity, today: &Date) -> i32 {
-    let mut v: i32 = 0;
-    let o_house = world.get::<CharacterOfHouse>(observer).map(|c| c.0);
-    let t_house = world.get::<CharacterOfHouse>(target).map(|c| c.0);
-    if o_house.is_some() && o_house == t_house {
-        v += 10;
-    }
-    let o_husband = world
-        .get::<CharacterHasHusband>(observer)
-        .map(|c| c.0);
-    let t_husband = world
-        .get::<CharacterHasHusband>(target)
-        .map(|c| c.0);
-    if o_husband == Some(target) || t_husband == Some(observer) {
-        v += 50;
-    }
-    let fo = world.get::<CharacterHasFather>(observer).map(|c| c.0);
-    let mo = world.get::<CharacterHasMother>(observer).map(|c| c.0);
-    let ft = world.get::<CharacterHasFather>(target).map(|c| c.0);
-    let mt = world.get::<CharacterHasMother>(target).map(|c| c.0);
-    let parent_child = fo == Some(target)
-        || mo == Some(target)
-        || ft == Some(observer)
-        || mt == Some(observer);
-    let sibling = (fo.is_some() && fo == ft) || (mo.is_some() && mo == mt);
-    if parent_child || sibling {
-        v += 20;
-    }
-    // Memory contribution — scan once via a fresh QueryState (the helper is
-    // called per-ruler/courtier, so a per-call state cache would be heavier).
-    let mut mem_q = world.query::<(
-        &MemoryOfCharacter,
-        &MemoryTowardCharacter,
-        &MemoryUntilDate,
-        &MemoryKind,
-    )>();
-    for (of, toward, until, kind) in mem_q.iter(world) {
-        if of.0 != observer || toward.0 != target {
-            continue;
-        }
-        if until.0 <= *today {
-            continue;
-        }
-        match kind {
-            MemoryKind::ReceivedGold { amount } => v += *amount as i32,
-        }
-    }
-    v
 }
 
 fn render_courtiers_spans(

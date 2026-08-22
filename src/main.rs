@@ -126,6 +126,7 @@ fn main() -> Result<()> {
                 holding_icon::startup,
                 land_graphic::startup,
                 road_graphic::startup,
+                kings_game::debug::startup_log_loaded,
             ),
         )
         .add_observer(game::yielding::on_building_updated)

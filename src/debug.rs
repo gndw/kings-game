@@ -6,6 +6,15 @@ use crate::ecs::{
 };
 use bevy::prelude::*;
 
+/// Startup marker: prints a single terminal line once every other startup
+/// system has run. The line's appearance is the signal that `cargo run`
+/// reached steady state — Bevy, plugins, ECS, all `Startup` systems —
+/// without panicking on init. Agents checking compileability watch for
+/// this exact string in stderr and stop the process afterwards.
+pub fn startup_log_loaded() {
+    eprintln!("kings-game: loaded properly");
+}
+
 /// Debug: on **I** press, list every kingdom's name, treasury (`gold`),
 /// monthly `gold_yield`, and `levy`. Helpful for verifying that the
 /// `On<Insert, BuildingOnLand>` / `On<Remove, BuildingOnLand>` observers in

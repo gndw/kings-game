@@ -36,5 +36,25 @@ non-visual smoke checks prefer `cargo check`; reach for `cargo run` only
 when you genuinely need to confirm the program boots and behaves as
 expected, and stop the process when you've seen enough.
 
+### Verifying the app loads via `cargo run`
+
+When you need a stronger guarantee than `cargo check` — i.e. that Bevy,
+its plugins, the ECS world, and every `Startup` system run without
+panicking — launch the app with a timeout and watch stderr for the
+boot-completed marker. On Windows / PowerShell:
+
+```powershell
+cargo run --release -- 0 --player-character-id char-tybalt; if ($?) { "loaded" } else { "failed: $LASTEXITCODE" }
+```
+
+Concretely: run `cargo run` (cold compile is fine, no need to pre-build
+with `cargo build`), give it long enough for the window to open and the
+Startups to drain — a few seconds is plenty after the first build — then
+stop the process. `src/debug.rs` registers `startup_log_loaded` as the
+last system in the `Startup` schedule, so if stderr shows
+`kings-game: loaded properly`, every prior startup system ran cleanly
+and the world is alive. If you don't see that line, the boot hung or
+panicked somewhere earlier; the stderr above it will name the offender.
+
 Make the edits, say what changed, and stop. If a change is unverified because
 check failed or couldn't be run, say so plainly instead of implying it works.

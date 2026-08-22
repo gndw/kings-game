@@ -26,8 +26,15 @@ user explicitly asks for them.
 ## Building and running
 
 You may run `cargo check` after making changes to confirm syntax and types
-are correct. Do not run `cargo build`, `cargo run`, `cargo test`, or `make`
-— the user builds, runs, and tests the project themselves.
+are correct, and `cargo run` to verify the project actually works (it
+implies a build, which is fine — but don't invoke `cargo build` on its
+own). Do not run `cargo test` or `make` — the user handles testing and
+other build tooling themselves.
+
+Be mindful that `cargo run` on a bevy app will open a window and block. For
+non-visual smoke checks prefer `cargo check`; reach for `cargo run` only
+when you genuinely need to confirm the program boots and behaves as
+expected, and stop the process when you've seen enough.
 
 Make the edits, say what changed, and stop. If a change is unverified because
 check failed or couldn't be run, say so plainly instead of implying it works.

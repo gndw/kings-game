@@ -9,16 +9,15 @@ use std::collections::HashMap;
 
 use super::building::{Building, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand};
 use super::character::{
-    Character, CharacterDateOfBirth, CharacterDateOfDeath, CharacterFaith, CharacterGold,
-    CharacterGoldYield, CharacterHasFather, CharacterHasHusband, CharacterHasMother,
-    CharacterIntrigue, CharacterIsAlive, CharacterLevy, CharacterMartial, CharacterName,
-    CharacterNextDeathEventDate, CharacterOfHouse, CharacterProwess, CharacterPrudence,
-    CharacterTreasury, Memory, MemoryCreatedDate, MemoryOfCharacter, MemoryTowardCharacter,
-    MemoryUntilDate,
+    Character, CharacterDateOfBirth, CharacterDateOfDeath, CharacterFaith, CharacterHasFather,
+    CharacterHasHusband, CharacterHasMother, CharacterIntrigue, CharacterIsAlive, CharacterMartial,
+    CharacterName, CharacterNextDeathEventDate, CharacterOfHouse, CharacterProwess,
+    CharacterPrudence, CharacterTreasury, Memory, MemoryCreatedDate, MemoryOfCharacter,
+    MemoryTowardCharacter, MemoryUntilDate,
 };
 use super::courtier::{Courtier, CourtierOfCharacter, CourtierOfKingdom};
 use super::house::{House, HouseName};
-use super::kingdom::{Kingdom, KingdomHold, KingdomName};
+use super::kingdom::{Kingdom, KingdomGold, KingdomGoldYield, KingdomHold, KingdomLevy, KingdomName};
 use super::land::{Land, LandBorders, LandHolding, LandName};
 use super::road::{Road, RoadBetweenLands, RoadDistanceDays, RoadPoints};
 
@@ -76,9 +75,6 @@ pub fn populate(world: &mut World, content: Content) {
                 CharacterIsAlive(c.is_alive),
                 CharacterDateOfDeath(c.death_date),
                 CharacterNextDeathEventDate(c.next_death_event_date),
-                CharacterGold(c.gold),
-                CharacterLevy(c.levy),
-                CharacterGoldYield(c.gold_yield),
                 c.gender,
                 CharacterMartial(skills.martial),
                 CharacterProwess(skills.prowess),
@@ -175,7 +171,14 @@ pub fn populate(world: &mut World, content: Content) {
                 .unwrap_or_else(|| "Unnamed Realm".to_string())
         };
         let eid = {
-            let mut ec = world.spawn((StringId(id.clone()), Kingdom, KingdomName(display_name)));
+            let mut ec = world.spawn((
+                StringId(id.clone()),
+                Kingdom,
+                KingdomName(display_name),
+                KingdomGold(k.gold),
+                KingdomGoldYield(k.gold_yield),
+                KingdomLevy(k.levy),
+            ));
             if let Some(le) = land {
                 ec.insert(KingdomHold(le));
             }

@@ -15,8 +15,8 @@ use crate::commands::raise_army::RaiseArmy;
 use crate::commands::declare_war::DeclareWar;
 use crate::commands::destroy_building::DestroyBuilding;
 use crate::ecs::{
-    BuildingIsRaised, BuildingLevy, BuildingOf, BuildingStatus, CharacterGold,
-    KingdomHold, LandHasBuildings, LandName, Registry, StringId,
+    BuildingIsRaised, BuildingLevy, BuildingOf, BuildingStatus, KingdomGold, KingdomHold,
+    LandHasBuildings, LandName, Registry, StringId,
 };
 use crate::helper::kingdom_helper::get_character_ruled_kingdoms;
 use crate::ecs::character::{
@@ -459,14 +459,15 @@ pub(super) fn picker_row(
 // --- shared gold transfer helper --------------------------------------------
 // Phase 2 (mutate) and phase 3 (spawn memory) of `gift_gold::gift`; the event
 // resolver uses the same dance. Callers do their own validation (sufficient
-// gold on `from_e`, no active `ReceivedGold` memory on `to_e`) and pass the
-// computed memory-expiry `until`.
-
-/// Transfer `amount` gold from `from_e` to `to_e` and spawn a `ReceivedGold`
-/// memory on `to_e` (the recipient) whose owner is `to_e` and whose
-/// `MemoryTowardCharacter` is `from_e` — so [`crate::helper::opinion_helper`]
-/// credits the recipient's opinion of `from_e` by `amount` for the memory's
-/// lifetime. Fires [`OnGoldGifted`] so the chronicle observer writes a line.
+/// gold on `from_e`'s primary kingdom, no active `ReceivedGold` memory on
+/// `to_e`) and pass the computed memory-expiry `until`.
+///
+/// Gold is a realm treasury. A personal gift debits the giver's primary
+/// kingdom and *does not credit the recipient's kingdom* — a coin handed to
+/// a stranger leaves the giver's treasury and isn't re-booked anywhere. The
+/// recipient gains a memory of the gift (which boosts their opinion of the
+/// giver for the memory's lifetime), but no tracked gold lands on them.
+/// Fires [`OnGoldGifted`] so the chronicle observer writes a line.
 ///
 /// Validation is the caller's job; this helper assumes `from_e` can afford
 /// `amount` and `to_e` has no active `ReceivedGold` memory (matching
@@ -485,14 +486,13 @@ pub(crate) fn transfer_with_gold_memory(
     amount: i64,
     until: Date,
 ) {
-    // Phase 2: move the gold. `from_e` is allowed to go negative — debt is
-    // real (matches `CharacterGold`'s signed semantics).
-    if let Some(mut from_g) = world.get_mut::<CharacterGold>(from_e) {
+    // Phase 2: debit the giver's primary kingdom. Debt is real.
+    if let Some(mut from_g) = world
+        .get_mut::<KingdomGold>(get_character_primary_kingdom(world, from_e))
+    {
         from_g.0 -= amount;
     }
-    if let Some(mut to_g) = world.get_mut::<CharacterGold>(to_e) {
-        to_g.0 += amount;
-    }
+    // No credit side — see the doc comment above.
 
     // Phase 3: spawn the memory and register it for `from_e → to_e` lookup.
     let today = *world.resource::<Date>();
@@ -520,6 +520,15 @@ pub(crate) fn transfer_with_gold_memory(
         to: to_e,
         amount,
     });
+}
+
+/// The first kingdom `character_e` rules, or `character_e` itself as a
+/// fallback when none exists (debit becomes a no-op via `get_mut`).
+fn get_character_primary_kingdom(world: &World, character_e: Entity) -> Entity {
+    get_character_ruled_kingdoms(world, character_e)
+        .first()
+        .copied()
+        .unwrap_or(character_e)
 }
 
 /// StringId lookup with a stable fallback so memory ids remain unique even

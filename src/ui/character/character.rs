@@ -4,12 +4,11 @@
 
 use crate::app::Game;
 use crate::ecs::character::{
-    CharacterDateOfBirth, CharacterFaith, CharacterGender, CharacterGold, CharacterGoldYield,
-    CharacterIntrigue, CharacterLevy, CharacterMartial, CharacterName,
-    CharacterOfHouse, CharacterProwess, CharacterPrudence, CharacterTreasury,
+    CharacterDateOfBirth, CharacterFaith, CharacterGender, CharacterIntrigue, CharacterMartial,
+    CharacterName, CharacterOfHouse, CharacterProwess, CharacterPrudence, CharacterTreasury,
 };
 use crate::ecs::house::HouseName;
-use crate::ecs::kingdom::KingdomName;
+use crate::ecs::kingdom::{KingdomGold, KingdomGoldYield, KingdomLevy, KingdomName};
 use crate::ecs::{Registry, StringId};
 use crate::helper::age_helper::get_age;
 use crate::helper::kingdom_helper::{get_character_ruled_kingdoms, get_kingdom_ruler};
@@ -209,14 +208,25 @@ fn render_character_spans(
             .map(|hn| hn.0.clone())
             .unwrap_or_default();
         let char_age = get_age(&dob.0, world.resource::<Date>(), world.resource::<Calendar>());
-        let kingdom_name = get_character_ruled_kingdoms(world, char_e)
-            .first()
-            .copied()
+        // Gold/yield/levy now live on the character's ruled kingdom, not the
+        // character. A character ruling several kingdoms shows the first's
+        // snapshot here; the resource bar sums them all.
+        let primary_kingdom = get_character_ruled_kingdoms(world, char_e).first().copied();
+        let kingdom_name = primary_kingdom
             .and_then(|k_e| world.entity(k_e).get::<KingdomName>())
             .map(|kn| kn.0.clone());
-        let gold = ent.get::<CharacterGold>().copied().unwrap_or_default().0;
-        let gold_yield = ent.get::<CharacterGoldYield>().copied().unwrap_or_default().0;
-        let levy = ent.get::<CharacterLevy>().copied().unwrap_or_default().0;
+        let gold = primary_kingdom
+            .and_then(|k_e| world.get::<KingdomGold>(k_e))
+            .map(|g| g.0)
+            .unwrap_or(0);
+        let gold_yield = primary_kingdom
+            .and_then(|k_e| world.get::<KingdomGoldYield>(k_e))
+            .map(|g| g.0)
+            .unwrap_or(0);
+        let levy = primary_kingdom
+            .and_then(|k_e| world.get::<KingdomLevy>(k_e))
+            .map(|l| l.0)
+            .unwrap_or(0);
         let skills = (
             ent.get::<CharacterMartial>().copied().unwrap_or_default().0,
             ent.get::<CharacterProwess>().copied().unwrap_or_default().0,

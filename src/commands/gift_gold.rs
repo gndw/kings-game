@@ -15,10 +15,10 @@ use super::core::{
 };
 use crate::app::Game;
 use crate::ecs::character::{
-    Character, CharacterGold, CharacterIsAlive, CharacterName, Memory, MemoryKind,
-    MemoryOfCharacter,
+    Character, CharacterIsAlive, CharacterName, Memory, MemoryKind, MemoryOfCharacter,
 };
-use crate::ecs::{Registry, StringId};
+use crate::ecs::{KingdomGold, Registry, StringId};
+use crate::helper::kingdom_helper::get_character_ruled_kingdoms;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;
@@ -184,11 +184,24 @@ fn actor_gold(world: &World, actor: &str) -> i64 {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return 0;
     };
-    world.get::<CharacterGold>(actor_e).map(|g| g.0).unwrap_or(0)
+    primary_kingdom_gold(world, actor_e)
 }
 
-/// Move `amount` gold from `actor` to `target_id` and spawn a memory on the
-/// recipient. Validates actor's gold and target's eligibility.
+/// The actor's first ruled kingdom's gold, or 0 if they don't rule one.
+fn primary_kingdom_gold(world: &World, character_e: Entity) -> i64 {
+    get_character_ruled_kingdoms(world, character_e)
+        .first()
+        .and_then(|ke| world.get::<KingdomGold>(*ke))
+        .map(|kg| kg.0)
+        .unwrap_or(0)
+}
+
+/// Move `amount` gold from `actor`'s primary kingdom to a personal gift for
+/// `target_id`, and spawn a memory on the recipient. The gold leaves the
+/// realm's treasury — it doesn't credit the target's kingdom, even if they
+/// rule one. A personal gift to a person is not a treasury transfer.
+///
+/// Validates actor's gold (their primary kingdom's) and target's eligibility.
 fn gift(world: &mut World, actor: &str, target_id: &str, amount: i64) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return error(world, format!("cannot gift `{target_id}`: unknown actor"));
@@ -201,7 +214,7 @@ fn gift(world: &mut World, actor: &str, target_id: &str, amount: i64) {
     }
 
     // Phase 1 (no borrows held). Eligibility + actor gold check + snapshot.
-    let actor_gold = world.get::<CharacterGold>(actor_e).map(|g| g.0).unwrap_or(0);
+    let actor_gold = primary_kingdom_gold(world, actor_e);
     if actor_gold < amount {
         return error(world, format!(
             "cannot gift `{target_id}`: need {amount} gold, have {actor_gold}"

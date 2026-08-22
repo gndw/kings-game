@@ -32,7 +32,10 @@ fn characters(world) {
     let p = world.player;
     let alive = world.ctx.alive_characters(p);
     let is_other_house = |c| c.house_id != p.house_id;
-    let minor_pool = alive.filter(|c| is_other_house(c) && c.levy == 0);
+    // After gold became a realm treasury, levy lives on `c.realm`. A
+    // wayfaring stranger is a minor character — no realm, or a realm
+    // without levy.
+    let minor_pool = alive.filter(|c| is_other_house(c) && (c.realm == () || c.realm.levy == 0));
     let candidates = if minor_pool.len() == 0 {
         alive.filter(is_other_house)
     } else {

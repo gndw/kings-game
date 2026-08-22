@@ -61,9 +61,6 @@ impl Content {
             if let Some(existing) = self.characters.get_mut(&c.id) {
                 existing.dob = c.dob;
                 existing.next_death_event_date = c.next_death_event_date;
-                existing.gold = c.gold;
-                existing.levy = c.levy;
-                existing.gold_yield = c.gold_yield;
                 existing.skills = c.skills;
             } else {
                 // No constants entry — alive characters live entirely in state,

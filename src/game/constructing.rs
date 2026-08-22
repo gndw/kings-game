@@ -20,7 +20,7 @@ use bevy::ecs::world::World;
 /// Walk every `BUILDING` building whose date has been reached, flip it to
 /// `ACTIVE`, drop the now-stale `BuildingConstructionDate`, append a
 /// chronicle line, and fire the per-kingdom yield observer so the realm's
-/// `CharacterGoldYield` / `CharacterLevy` pick up the new contribution.
+/// `KingdomGoldYield` / `KingdomLevy` pick up the new contribution.
 pub fn on_day(world: &mut World) {
     let (calendar, today) = {
         let c = world.resource::<Calendar>();

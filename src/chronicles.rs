@@ -474,13 +474,13 @@ pub fn on_event_resolved(
     scripts: Res<EventScripts>,
     // ponytail: a `&World` here would force `read_all` access and collide
     // with the `ResMut<Chronicles>` below. Use a query that names the
-    // specific components we read off each character instead.
+    // specific components we read off each character instead. The `realm`
+    // field on the resulting view is left as `()` here (this observer
+    // only substitutes `{N.name}`, never realm fields).
     characters: Query<(
         &crate::ecs::StringId,
         &crate::ecs::CharacterName,
         Option<&crate::ecs::CharacterOfHouse>,
-        &crate::ecs::CharacterLevy,
-        &crate::ecs::CharacterGold,
         &crate::ecs::CharacterIsAlive,
     )>,
     house_string_ids: Query<&crate::ecs::StringId>,

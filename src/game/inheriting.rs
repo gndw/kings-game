@@ -18,13 +18,9 @@
 //!
 //! Each succession (with or without an heir) fires [`OnKingdomSucceeded`].
 //!
-//! When the dead leader has a heir, their `CharacterGold` transfers to the
-//! heir of their first successor kingdom (the "primary heir" — i.e. the first
-//! kingdom in `get_character_ruled_kingdoms` order that resolves to a heir).
-//! If no kingdom yields an heir, the gold is cleared from the dead character
-//! and otherwise evaporates. Multi-kingdom leaders where every kingdom goes
-//! to a different heir still funnel the dead's treasury into the primary
-//! heir; the others inherit empty pots.
+//! Gold is a realm treasury, not a leader's purse. When the leader changes,
+//! the kingdom's `KingdomGold` stays with the kingdom — the new leader
+//! inherits the realm's existing treasury unchanged.
 //!
 //! If the dead character is the player's character, `Ctx::player_character_id`
 //! is reassigned to the primary heir's `StringId`, or set to `None` if no
@@ -40,7 +36,7 @@
 
 use crate::app::Game;
 use crate::ecs::{
-    Character, CharacterDateOfBirth, CharacterGender, CharacterGold, CharacterHasFather,
+    Character, CharacterDateOfBirth, CharacterGender, CharacterHasFather,
     CharacterHasFatheredChildren, CharacterHasMother, CharacterIsAlive, CharacterOfHouse,
     Courtier, CourtierOfCharacter, CourtierOfKingdom, CourtierType, KingdomHasCourtiers,
     Registry, StringId,
@@ -65,7 +61,6 @@ pub fn on_character_died(trigger: On<OnCharacterDied>, mut commands: Commands) {
             &CharacterIsAlive,
             &CharacterDateOfBirth,
         ), With<Character>>();
-        let mut character_golds = world.query_filtered::<&mut CharacterGold, With<Character>>();
         let mut string_ids = world.query_filtered::<(Entity, &StringId), With<Character>>();
         let mut fathered = world.query::<&CharacterHasFatheredChildren>();
         let mut fathers = world.query::<&CharacterHasFather>();
@@ -79,24 +74,10 @@ pub fn on_character_died(trigger: On<OnCharacterDied>, mut commands: Commands) {
             .find_map(|&_k| pick_heir(dead, world, &mut characters, &mut fathered, &mut fathers, &mut mothers))
             .map(|(e, _)| e);
 
-        let mut gold_settled = false;
         for kingdom in kingdoms {
             let pick = pick_heir(dead, world, &mut characters, &mut fathered, &mut fathers, &mut mothers);
             match pick {
                 Some((new_leader, relation)) => {
-                    // Gold transfer: once, to the primary heir only.
-                    if Some(new_leader) == primary_heir && !gold_settled {
-                        let dead_amount = character_golds.get(world, dead).ok().map(|g| g.0);
-                        if let Some(dead_amount) = dead_amount
-                            && let Ok(mut heir_gold) = character_golds.get_mut(world, new_leader)
-                        {
-                            heir_gold.0 += dead_amount;
-                        }
-                        if let Ok(mut dead_gold) = character_golds.get_mut(world, dead) {
-                            dead_gold.0 = 0;
-                        }
-                        gold_settled = true;
-                    }
                     set_ruler(
                         world,
                         &mut kingdom_has_courtiers,
@@ -129,13 +110,6 @@ pub fn on_character_died(trigger: On<OnCharacterDied>, mut commands: Commands) {
                     });
                 }
             }
-        }
-
-        // All kingdoms went leaderless — clear the dead's gold for hygiene.
-        if primary_heir.is_none()
-            && let Ok(mut dead_gold) = character_golds.get_mut(world, dead)
-        {
-            dead_gold.0 = 0;
         }
 
         // Player swap: if the dead was the player, hand the seat to the

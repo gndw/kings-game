@@ -31,8 +31,12 @@ fn can_trigger(_world) { true }
 
 fn characters(world) {
     let p = world.player;
+    // After gold became a realm treasury, levy lives on `c.realm`. A foreign
+    // knight is a levy-bearing other-house character.
+    let is_other_house = |c| c.house_id != p.house_id;
+    let has_levy = |c| c.realm != () && c.realm.levy > 0;
     let pool = world.ctx.alive_characters(p)
-        .filter(|c| c.house_id != p.house_id && c.levy > 0);
+        .filter(|c| is_other_house(c) && has_levy(c));
     if pool.len() == 0 { return []; }
     let idx = world.ctx.rng(0, pool.len() - 1);
     [pool[idx]]

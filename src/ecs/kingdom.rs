@@ -56,3 +56,17 @@ impl KingdomHasWarsDefending {
         &self.0
     }
 }
+
+/// The realm's treasury. Signed: a kingdom can run at a loss and owe gold.
+/// Paid into monthly by `KingdomGoldYield` via `game::paying_out::on_month`.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct KingdomGold(pub i64);
+
+/// The realm's net monthly gold (profit less upkeep across its lands). Signed.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct KingdomGoldYield(pub i64);
+
+/// The realm's currently available levy — sum of every active building's
+/// `BuildingLevy` pool across the kingdom's lands.
+#[derive(Component, Debug, Clone, Copy, Default)]
+pub struct KingdomLevy(pub u64);

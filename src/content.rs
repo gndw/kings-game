@@ -204,15 +204,6 @@ pub struct Character {
     /// State: date of birth.
     #[serde(default)]
     pub dob: Date,
-    /// State: treasury. Signed, so a script may spend past zero.
-    #[serde(default)]
-    pub gold: i64,
-    /// State: troops currently raised.
-    #[serde(default)]
-    pub levy: u64,
-    /// State: gold per month — profit less upkeep. Signed. Recomputed on load.
-    #[serde(default)]
-    pub gold_yield: i64,
     /// State: whether the character is still alive. Defaults to `true`; flips to `false` on death.
     #[serde(default = "default_alive")]
     pub is_alive: bool,
@@ -328,6 +319,8 @@ pub struct Building {
 /// The ruler is defined by a `Courtier` with `type: Ruler` serving this
 /// kingdom — see [`crate::ecs::courtier::CourtierType::Ruler`] and
 /// [`crate::helper::kingdom_helper`]. State files carry no leader id here.
+/// The realm owns its own treasury, monthly yield, and available levy —
+/// the leader is the steward, not the owner (see `docs/decision.md`).
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Kingdom {
@@ -337,6 +330,15 @@ pub struct Kingdom {
     /// time when the state file leaves it blank — see `ecs::populate`.
     #[serde(default)]
     pub name: String,
+    /// State: realm treasury. Signed, so a kingdom may run at a loss.
+    #[serde(default)]
+    pub gold: i64,
+    /// State: troops currently raised across the realm. Recomputed on load.
+    #[serde(default)]
+    pub levy: u64,
+    /// State: gold per month — profit less upkeep. Signed. Recomputed on load.
+    #[serde(default)]
+    pub gold_yield: i64,
 }
 
 /// A kingdom court appointment.

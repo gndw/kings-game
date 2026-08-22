@@ -1,12 +1,14 @@
-//! The daily economy: every ruler's gold yield and levy recomputed from their
-//! holdings, scheduled by the ECS rather than called by hand from `Ctx::tick`.
+//! The daily economy: every kingdom's gold yield and levy recomputed from
+//! its holdings, scheduled by the ECS rather than called by hand from
+//! `Ctx::tick`. Gold is a realm treasury — each kingdom owns its own gold,
+//! yield, and levy.
 
 use crate::app::Game;
 use crate::ecs::{
-    BuildingOf, BuildingStatus, Character, CharacterGoldYield, CharacterLevy, KingdomHold,
-    LandHasBuildings, LandHeldBy,
+    BuildingOf, BuildingStatus, KingdomGoldYield, KingdomHold, KingdomLevy, LandHasBuildings,
+    LandHeldBy,
 };
-use crate::helper::kingdom_helper::{get_character_ruled_kingdoms, get_kingdom_ruler};
+use crate::helper::kingdom_helper::get_kingdom_ruler;
 use crate::resources::buildings::BuildingDefs;
 use crate::observers::OnBuildingUpdated;
 use bevy::prelude::*;
@@ -68,41 +70,37 @@ pub fn sum_land_yield_q(
     (gold, levy)
 }
 
-/// Recompute every character's `gold_yield` and `levy` from their holdings: a leader's
-/// realm summed across every kingdom they lead; everyone else zeroed. Runs in `Startup`.
+/// Recompute every kingdom's `gold_yield` and `levy` from its land's
+/// holdings. Runs in `Startup`. Each kingdom is independent — a leader
+/// ruling several kingdoms has access to each kingdom's own gold/levy, not
+/// a summed purse.
 ///
-/// Two passes: first collect (entity, gold, levy) per character (immutable borrows),
-/// then write the values (mutable borrow). Same trick as [`paying_out::on_month`].
+/// Two passes: first compute (immutable borrows), then write (mutable).
+/// Same trick as [`paying_out::on_month`].
 pub fn recompute_yields(world: &mut World) {
     // Pass 1: compute.
     let computed: Vec<(Entity, i64, u64)> = {
-        let mut kingdom_holds = world.query::<&KingdomHold>();
-        let mut characters = world.query_filtered::<Entity, With<Character>>();
+        let mut kingdom_q = world.query::<(Entity, &KingdomHold)>();
         let mut out: Vec<(Entity, i64, u64)> = Vec::new();
-        for char_e in characters.iter(world) {
-            let (mut g, mut l) = (0i64, 0u64);
-            for kingdom_e in get_character_ruled_kingdoms(world, char_e) {
-                let Ok(kingdom_hold) = kingdom_holds.get(world, kingdom_e) else { continue };
-                let (dg, dl) = sum_land_yield(kingdom_hold.0, world);
-                g += dg;
-                l += dl;
-            }
-            out.push((char_e, g, l));
+        for (k_e, kh) in kingdom_q.iter(world) {
+            let (g, l) = sum_land_yield(kh.0, world);
+            out.push((k_e, g, l));
         }
         out
     };
     // Pass 2: apply.
-    let mut characters = world.query_filtered::<(&mut CharacterGoldYield, &mut CharacterLevy), With<Character>>();
-    for (char_e, g, l) in computed {
-        if let Ok((mut yg, mut lv)) = characters.get_mut(world, char_e) {
+    let mut kingdoms = world.query::<(&mut KingdomGoldYield, &mut KingdomLevy)>();
+    for (k_e, g, l) in computed {
+        if let Ok((mut yg, mut lv)) = kingdoms.get_mut(world, k_e) {
             yg.0 = g;
             lv.0 = l;
         }
     }
 }
 
-/// Re-sum every kingdom the affected-land's leader rules and write that one leader's yield + levy.
-/// The leader's full realm is re-summed, so any change to one of the leader's lands refreshes all.
+/// Re-sum the affected kingdom's yield + levy after a building changes.
+/// Each kingdom is independent — only the one whose land holds the changed
+/// building is recomputed.
 ///
 /// All real work happens inside a queued `move |world: &mut World|` closure —
 /// Bevy 0.19 forbids observers from taking `&World` alongside `Query<&mut T>` (read-all
@@ -120,18 +118,15 @@ pub fn on_building_updated(
         }
         let Some(land_held_by) = world.get::<LandHeldBy>(land_e) else { return };
         let kingdom_e = land_held_by.kingdom();
-        let Some(leader_e) = get_kingdom_ruler(world, kingdom_e) else { return };
+        // The leader is no longer needed for the calculation — the kingdom
+        // is its own economic unit. Kept as a sanity read so a kingdom
+        // without a leader still has its yield updated.
+        let _ = get_kingdom_ruler(world, kingdom_e);
 
-        let (mut g, mut l) = (0i64, 0u64);
-        for k in get_character_ruled_kingdoms(world, leader_e) {
-            let Some(kingdom_hold) = world.get::<KingdomHold>(k) else { continue };
-            let (dg, dl) = sum_land_yield(kingdom_hold.0, world);
-            g += dg;
-            l += dl;
-        }
+        let (g, l) = sum_land_yield(land_e, world);
         if let Ok((mut yg, mut lv)) = world
-            .query::<(&mut CharacterGoldYield, &mut CharacterLevy)>()
-            .get_mut(world, leader_e)
+            .query::<(&mut KingdomGoldYield, &mut KingdomLevy)>()
+            .get_mut(world, kingdom_e)
         {
             yg.0 = g;
             lv.0 = l;

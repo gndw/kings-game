@@ -9,7 +9,7 @@ use crate::app::Game;
 use crate::resources::buildings::BuildingDefs;
 use crate::ecs::{
     Building, BuildingConstructionDate, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand,
-    BuildingStatus, CharacterGold, LandHeldBy, Registry, StringId,
+    BuildingStatus, KingdomGold, LandHeldBy, Registry, StringId,
 };
 use crate::helper::kingdom_helper::get_character_ruled_kingdoms;
 use crate::resources::calendar::Calendar;
@@ -69,12 +69,14 @@ impl BaseCommand for ConstructBuilding {
 
         // Step 2: land picked, no building yet → render one row per def.
         if building_pick.is_none() {
-            let actor = world.resource::<Game>().ctx.player_character_id.clone().unwrap_or_default();
-            let gold = world
-                .resource::<Registry>()
-                .get(&actor)
-                .and_then(|actor_e| world.get::<CharacterGold>(actor_e))
-                .map(|character_gold| character_gold.0)
+            // The land's kingdom pays; look it up via LandHeldBy.
+            let gold = land_pick
+                .as_deref()
+                .and_then(|lid| world.resource::<Registry>().get(lid))
+                .and_then(|le| world.get::<LandHeldBy>(le))
+                .map(|lh| lh.kingdom())
+                .and_then(|ke| world.get::<KingdomGold>(ke))
+                .map(|kg| kg.0)
                 .unwrap_or(0);
             let snapshot: Vec<(String, crate::resources::buildings::BuildingDef)> = {
                 let defs = world.resource::<BuildingDefs>();
@@ -149,7 +151,6 @@ pub(super) fn building_effect_summary(def: &crate::resources::buildings::Buildin
 
 /// The validated go-ahead: the entities and numbers `construct` mutates with.
 struct Go {
-    actor_e: Entity,
     land_e: Entity,
     price: u32,
     def_id: String,
@@ -157,7 +158,7 @@ struct Go {
     def_levy: u32,
 }
 
-/// Check the rules against a snapshot: the def exists, the actor rules the land, they can afford the price.
+/// Check the rules against a snapshot: the def exists, the actor rules the land, the land's kingdom can afford the price.
 fn validate(world: &World, actor: &str, land_id: &str, def_id: &str) -> Result<Go, String> {
     let registry = world.resource::<Registry>();
     let defs = world.resource::<BuildingDefs>();
@@ -173,15 +174,15 @@ fn validate(world: &World, actor: &str, land_id: &str, def_id: &str) -> Result<G
     }
 
     let gold = world
-        .get::<CharacterGold>(actor_e)
-        .map(|character_gold| character_gold.0)
+        .get::<LandHeldBy>(land_e)
+        .and_then(|lh| world.get::<KingdomGold>(lh.kingdom()))
+        .map(|kg| kg.0)
         .unwrap_or(0);
     if gold < def.construction_price as i64 {
         return Err(format!("need {} gold", def.construction_price));
     }
 
     Ok(Go {
-        actor_e,
         land_e,
         price: def.construction_price,
         def_id: def_id.to_string(),
@@ -197,8 +198,11 @@ fn construct(world: &mut World, actor: &str, land_id: &str, def_id: &str) {
         Err(msg) => return error(world, format!("cannot build on {land_id}: {msg}")),
     };
 
-    if let Some(mut character_gold) = world.get_mut::<CharacterGold>(go.actor_e) {
-        character_gold.0 -= go.price as i64;
+    // Pay from the land's kingdom (the realm treasury).
+    if let Some(land_held_by) = world.get::<LandHeldBy>(go.land_e)
+        && let Some(mut kingdom_gold) = world.get_mut::<KingdomGold>(land_held_by.kingdom())
+    {
+        kingdom_gold.0 -= go.price as i64;
     }
 
     let finish_date = {

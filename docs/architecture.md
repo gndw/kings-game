@@ -80,8 +80,10 @@ state-only), and a family that only references dead characters lives in
   what it touches. `Character` carries six skill components
   (`CharacterMartial` / `CharacterProwess` / `CharacterTreasury` /
   `CharacterPrudence` / `CharacterIntrigue` / `CharacterFaith`, each
-  `i32` 0..=20) alongside the family / wealth components; they are the
-  medieval-genuine ruler stat set and replace no existing component.
+  `i32` 0..=20) alongside the family components. `Kingdom` carries the
+  realm's economic triple — `KingdomGold` / `KingdomGoldYield` /
+  `KingdomLevy` — because gold is a realm treasury, not a leader's purse
+  (see `docs/decision.md`).
 - **Bevy-native relationships** (`#[relationship]` / `#[relationship_target]`)
   for every link except the kingdom→leader. Naming convention:
   `<On-entity><Verb-or-preposition><Target>` so the component name tells
@@ -144,10 +146,10 @@ state-only), and a family that only references dead characters lives in
   month rollover also runs `OnMonth`. `FixedUpdate` rate is set by `input`
   from `Calendar::speeds[speed_idx]`.
 - **The economy is Rust, not a script.** `OnBuildingUpdated` event fires
-  on construct/destroy/raise/dismiss; an observer walks the realm's
-  holdings and recomputes the leader's yield + levy. `payout` runs in
-  `OnMonth` and pays every leader their yield into gold. Debt is real
-  (signed).
+  on construct/destroy/raise/dismiss; an observer walks the affected
+  kingdom's holdings and recomputes its yield + levy. `payout` runs in
+  `OnMonth` and pays every kingdom its `KingdomGoldYield` into
+  `KingdomGold`. Debt is real (signed).
 - **Events are Rhai scripts.** Each `event-<id>.rhai` file in a mod folder
   is compiled once at load into a `ScriptedEvent` (the AST + a cache of
   which optional functions are present). The tick calls each event's

@@ -171,7 +171,7 @@ fn main() -> Result<()> {
                     .run_if(ui::event_popup::event_popup_layer_active),
                 ui::resource::update,
                 ui::status::update,
-                kings_game::debug::dump_characters,
+                kings_game::debug::dump_kingdoms,
             ),
         )
         // Split into a second `add_systems` so the kingdom panel is registered

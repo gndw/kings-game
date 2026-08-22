@@ -13,8 +13,9 @@ use crate::app::Game;
 use crate::commands::core::{alive_characters_excluding, transfer_with_gold_memory};
 use crate::ecs::Registry;
 use crate::ecs::character::{
-    CharacterGold, CharacterIsAlive, CharacterLevy, CharacterName, CharacterOfHouse,
+    CharacterIsAlive, CharacterName, CharacterOfHouse,
 };
+use crate::ecs::kingdom::{KingdomGold, KingdomGoldYield, KingdomLevy, KingdomName};
 use crate::resources::chronicle::Chronicles;
 use crate::resources::date::Date;
 use bevy::prelude::*;
@@ -306,6 +307,11 @@ pub fn register_api(engine: &mut Engine) {
 /// A character-view map — the shape modders see for `world.player`, each
 /// element of `world.characters`, and each element of
 /// `world.ctx.alive_characters()`.
+///
+/// `realm` is the character's first ruled kingdom's view, or `()` when they
+/// don't rule one. It carries the realm's `gold`, `levy`, `gold_yield`, and
+/// `name`. Modders can use `c.realm != ()` as "is a ruler" or filter by
+/// `c.realm.levy > 0` etc.
 pub fn character_view_from_world(world: &World, entity: Entity) -> Map {
     let mut m = Map::new();
     m.insert("entity".into(), Dynamic::from(entity.to_bits() as INT));
@@ -322,14 +328,6 @@ pub fn character_view_from_world(world: &World, entity: Entity) -> Map {
         .and_then(|c| world.get::<crate::ecs::StringId>(c.0))
         .map(|s| s.0.clone())
         .unwrap_or_default();
-    let levy = world
-        .get::<CharacterLevy>(entity)
-        .map(|l| l.0)
-        .unwrap_or(0);
-    let gold = world
-        .get::<CharacterGold>(entity)
-        .map(|g| g.0)
-        .unwrap_or(0);
     let is_alive = world
         .get::<CharacterIsAlive>(entity)
         .map(|a| a.0)
@@ -337,31 +335,54 @@ pub fn character_view_from_world(world: &World, entity: Entity) -> Map {
     m.insert("id".into(), id.into());
     m.insert("name".into(), name.into());
     m.insert("house_id".into(), house_id.into());
-    m.insert("levy".into(), Dynamic::from(levy as INT));
-    m.insert("gold".into(), Dynamic::from(gold as INT));
     m.insert("is_alive".into(), is_alive.into());
+    m.insert("realm".into(), realm_view(world, entity));
     m
+}
+
+/// The character's first ruled kingdom as a small map, or `()` if none.
+/// Carries `name`, `gold`, `gold_yield`, `levy` for the realm. See the
+/// `realm` field on character views.
+fn realm_view(world: &World, character_e: Entity) -> Dynamic {
+    use crate::helper::kingdom_helper::get_character_ruled_kingdoms;
+    let Some(ke) = get_character_ruled_kingdoms(world, character_e).first().copied() else {
+        return Dynamic::UNIT;
+    };
+    let mut m = Map::new();
+    if let Some(n) = world.get::<KingdomName>(ke) {
+        m.insert("name".into(), n.0.clone().into());
+    }
+    let gold = world.get::<KingdomGold>(ke).map(|g| g.0).unwrap_or(0);
+    let gold_yield = world.get::<KingdomGoldYield>(ke).map(|g| g.0).unwrap_or(0);
+    let levy = world.get::<KingdomLevy>(ke).map(|l| l.0).unwrap_or(0);
+    m.insert("gold".into(), Dynamic::from(gold as INT));
+    m.insert("gold_yield".into(), Dynamic::from(gold_yield as INT));
+    m.insert("levy".into(), Dynamic::from(levy as INT));
+    m.into()
 }
 
 /// Same shape as [`character_view_from_world`], but read through `Query`s
 /// instead of `&World`. Use this from systems that also take a `ResMut`
 /// — `&World` would force `read_all` and collide with the writer at
 /// `init_access` time.
+///
+/// The `realm` field is left as `()` here — populating it needs
+/// `get_character_ruled_kingdoms → KingdomGold` lookups that this query
+/// path doesn't carry. The chronicle observer that uses this function
+/// only substitutes `{N.name}`, so an empty realm is harmless.
 pub fn character_view_from_queries(
     entity: Entity,
     characters: &Query<(
         &crate::ecs::StringId,
         &CharacterName,
         Option<&CharacterOfHouse>,
-        &CharacterLevy,
-        &CharacterGold,
         &CharacterIsAlive,
     )>,
     house_string_ids: &Query<&crate::ecs::StringId>,
 ) -> Map {
     let mut m = Map::new();
     m.insert("entity".into(), Dynamic::from(entity.to_bits() as INT));
-    let (id, name, house, levy, gold, is_alive) = match characters.get(entity) {
+    let (id, name, house, is_alive) = match characters.get(entity) {
         Ok(parts) => parts,
         Err(_) => return m,
     };
@@ -372,9 +393,8 @@ pub fn character_view_from_queries(
     m.insert("id".into(), id.0.clone().into());
     m.insert("name".into(), name.0.clone().into());
     m.insert("house_id".into(), house_id.into());
-    m.insert("levy".into(), Dynamic::from(levy.0 as INT));
-    m.insert("gold".into(), Dynamic::from(gold.0 as INT));
     m.insert("is_alive".into(), is_alive.0.into());
+    m.insert("realm".into(), Dynamic::UNIT);
     m
 }
 

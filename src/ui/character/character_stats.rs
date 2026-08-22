@@ -1,4 +1,6 @@
-//! Character stats: gold, gold yield, levy.
+//! Character stats: realm treasury (gold, gold yield, levy). Gold is a
+//! realm treasury — the values shown here are the character's first ruled
+//! kingdom's snapshot.
 
 use bevy::color::palettes::css;
 use bevy::prelude::*;

@@ -254,3 +254,56 @@ the same `On<PastTense>` shape. `OnEventResolved.choice: Option<usize>`
 encodes both the picked-choice path (`Some(idx)`) and the forfeit path
 (`None` for `Esc`) — the resolver interprets `None` as "no effect, just
 clear pending and reschedule".
+
+## Gold is a realm treasury, not a leader's purse
+
+The kingdom owns its gold. `KingdomGold` (signed) is the realm treasury;
+`KingdomGoldYield` is the realm's net monthly income; `KingdomLevy` is
+the realm's available troops. `Character` carries none of these — the
+leader is the steward of an existing treasury, not its owner.
+
+- **Why:** keeping the gold with the realm means it survives leadership
+  change. When a ruler dies, the realm's existing treasury passes to
+  the heir unchanged — the new leader inherits a pre-existing war
+  chest, not an empty pot. The old model (a "personal purse" on the
+  character that was transferred to the heir on succession) was a
+  bookkeeping fiction: it was the same number moved across an entity
+  boundary, with no game effect. Folding the gold into the kingdom
+  drops the transfer step and the loss-on-no-heir step in one go.
+- **Each kingdom is independent.** A character ruling several kingdoms
+  has access to each kingdom's own treasury. Commands route the gold
+  move to the kingdom that owns the resource: `construct_building` pays
+  from the land's kingdom; `gift_gold` debits the source's primary
+  kingdom. The resource bar at the top of the screen sums the player's
+  realms into one number (the "how rich am I" reading); the kingdom
+  panel drills into one realm.
+- **Personal gifts don't credit the target's kingdom.** When the player
+  gifts gold to another character, the realm treasury is debited; the
+  gold leaves the giver's books and is *not* re-booked to the
+  recipient. A coin handed to a stranger in the hall doesn't go into
+  the stranger's realm's treasury — it just leaves. The recipient
+  still gains a `ReceivedGold` memory that boosts their opinion of the
+  giver. The same rule applies to script-driven `transfer_gold`: debit
+  the giver, no credit. This keeps the script API compatible (it's
+  still "from this person to that person") while staying honest about
+  the medieval-economic reading.
+- **Replacing the model required moving the levy too.** The character
+  previously held `levy` and `gold_yield` too — summed across all
+  ruled kingdoms. After the move each kingdom has its own, computed
+  from its own land, so a multi-kingdom leader no longer needs the
+  sum-on-read in their own entity. The resource bar still sums for
+  display; the per-kingdom values are what the sim writes.
+- **Script view: `c.realm`.** The character view exposed to Rhai events
+  drops the old `c.gold` and `c.levy` fields. They become `c.realm`
+  — a map carrying the character's first ruled kingdom's `name`,
+  `gold`, `gold_yield`, and `levy`, or `()` if the character doesn't
+  rule one. Modders can use `c.realm != ()` as "is a ruler" or filter
+  by `c.realm.levy > 0` for "has troops". The base mod's events use
+  this — the foreign knight filters `c.realm != () && c.realm.levy > 0`,
+  the wayfaring stranger filters the inverse.
+- **Migration in RON.** The starting `gold: N` field moves from each
+  alive ruler's character entry to the matching kingdom entry. Non-ruler
+  characters' starting gold is dropped (they have no realm). `levy` and
+  `gold_yield` were never authored in the RON — the sim has always
+  recomputed them at startup — and remain unreferenced from the data
+  file, now at the kingdom level.

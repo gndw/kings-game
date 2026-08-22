@@ -48,18 +48,6 @@ pub struct CharacterDateOfDeath(pub Option<Date>);
 #[derive(Component, Debug, Clone, Copy)]
 pub struct CharacterNextDeathEventDate(pub Date);
 
-/// A character's treasury. Signed: a ruler can be in debt.
-#[derive(Component, Debug, Clone, Copy, Default)]
-pub struct CharacterGold(pub i64);
-
-/// A character's available troops.
-#[derive(Component, Debug, Clone, Copy, Default)]
-pub struct CharacterLevy(pub u64);
-
-/// A character's monthly gold yield (income less upkeep). Signed: a realm can run at a loss.
-#[derive(Component, Debug, Clone, Copy, Default)]
-pub struct CharacterGoldYield(pub i64);
-
 /// A character's martial skill (0..=20) — field command, battle tactics,
 /// siegecraft. Folded with logistics: drives monthly levy replenishment,
 /// march distance, and army combat power.

@@ -21,7 +21,7 @@ pub enum CourtierType {
     Courtier,
     /// The character who rules the kingdom they serve — defines
     /// "who leads this kingdom" at the data layer. Looked up via
-    /// [`crate::helper::kingdom_helper::kingdom_ruler`].
+    /// [`crate::helper::kingdom_helper::get_kingdom_ruler`].
     Ruler,
 }
 

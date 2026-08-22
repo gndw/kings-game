@@ -6,7 +6,7 @@ use crate::ecs::{
     BuildingOf, BuildingStatus, Character, CharacterGoldYield, CharacterLevy, KingdomHold,
     LandHasBuildings, LandHeldBy,
 };
-use crate::helper::kingdom_helper::{character_ruled_kingdoms, kingdom_ruler};
+use crate::helper::kingdom_helper::{get_character_ruled_kingdoms, get_kingdom_ruler};
 use crate::resources::buildings::BuildingDefs;
 use crate::observers::OnBuildingUpdated;
 use bevy::prelude::*;
@@ -81,7 +81,7 @@ pub fn recompute_yields(world: &mut World) {
         let mut out: Vec<(Entity, i64, u64)> = Vec::new();
         for char_e in characters.iter(world) {
             let (mut g, mut l) = (0i64, 0u64);
-            for kingdom_e in character_ruled_kingdoms(world, char_e) {
+            for kingdom_e in get_character_ruled_kingdoms(world, char_e) {
                 let Ok(kingdom_hold) = kingdom_holds.get(world, kingdom_e) else { continue };
                 let (dg, dl) = sum_land_yield(kingdom_hold.0, world);
                 g += dg;
@@ -120,10 +120,10 @@ pub fn on_building_updated(
         }
         let Some(land_held_by) = world.get::<LandHeldBy>(land_e) else { return };
         let kingdom_e = land_held_by.kingdom();
-        let Some(leader_e) = kingdom_ruler(world, kingdom_e) else { return };
+        let Some(leader_e) = get_kingdom_ruler(world, kingdom_e) else { return };
 
         let (mut g, mut l) = (0i64, 0u64);
-        for k in character_ruled_kingdoms(world, leader_e) {
+        for k in get_character_ruled_kingdoms(world, leader_e) {
             let Some(kingdom_hold) = world.get::<KingdomHold>(k) else { continue };
             let (dg, dl) = sum_land_yield(kingdom_hold.0, world);
             g += dg;

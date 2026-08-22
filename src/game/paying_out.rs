@@ -2,7 +2,7 @@
 //! treasury.
 
 use crate::ecs::{Character, CharacterGold, CharacterGoldYield};
-use crate::helper::kingdom_helper::character_ruled_kingdoms;
+use crate::helper::kingdom_helper::get_character_ruled_kingdoms;
 use bevy::prelude::*;
 
 /// Pay every character that leads a kingdom their monthly gold yield. Only
@@ -13,7 +13,7 @@ use bevy::prelude::*;
 ///
 /// Two passes — first collect the leader entities (immutable borrow of world),
 /// then pay them (mutable borrow). The split dodges a borrow conflict between
-/// `Query::iter_mut` and `character_ruled_kingdoms`.
+/// `Query::iter_mut` and `get_character_ruled_kingdoms`.
 pub fn on_month(world: &mut World) {
     // Pass 1: collect every leader's entity. Uses two immutable borrows —
     // the character set and the courtier scan — neither mutates.
@@ -21,7 +21,7 @@ pub fn on_month(world: &mut World) {
         let mut characters = world.query_filtered::<Entity, With<Character>>();
         let mut out: Vec<Entity> = Vec::new();
         for char_e in characters.iter(world) {
-            if character_ruled_kingdoms(world, char_e).is_empty() {
+            if get_character_ruled_kingdoms(world, char_e).is_empty() {
                 continue;
             }
             out.push(char_e);

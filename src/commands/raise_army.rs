@@ -18,7 +18,7 @@ use crate::ecs::{
     CharacterOfHouse, HouseName, LandHasArmies, LandHeldBy, LandHasBuildings,
     Registry, StringId,
 };
-use crate::helper::kingdom_helper::character_ruled_kingdoms;
+use crate::helper::kingdom_helper::get_character_ruled_kingdoms;
 use crate::observers::OnArmyRaised;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
@@ -104,7 +104,7 @@ fn raise(world: &mut World, actor: &str, land_id: &str) {
         return error(world, format!("cannot raise on {land_id}: no such land"));
     };
 
-    let actor_kingdoms = character_ruled_kingdoms(world, actor_e);
+    let actor_kingdoms = get_character_ruled_kingdoms(world, actor_e);
     let land_kingdom = world
         .get::<LandHeldBy>(land_e)
         .map(|land_held_by| land_held_by.kingdom());

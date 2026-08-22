@@ -20,7 +20,7 @@ use crate::ecs::marching::{
 };
 use crate::ecs::road::{Road, RoadBetweenLands};
 use crate::ecs::{CharacterOfHouse, Land, LandHeldBy, LandName, Registry, StringId};
-use crate::helper::kingdom_helper::{character_ruled_kingdoms, kingdom_ruler};
+use crate::helper::kingdom_helper::{get_character_ruled_kingdoms, get_kingdom_ruler};
 use crate::observers::OnMarchingOrdered;
 use crate::ui::command_menu::CommandMenuUiContext;
 use crate::app::Game;
@@ -111,7 +111,7 @@ impl MarchingOrder {
         let own_kingdoms: std::collections::HashSet<Entity> = world
             .resource::<Registry>()
             .get(&actor)
-            .map(|actor_e| character_ruled_kingdoms(world, actor_e).into_iter().collect())
+            .map(|actor_e| get_character_ruled_kingdoms(world, actor_e).into_iter().collect())
             .unwrap_or_default();
         let army_land_e = world
             .resource::<Registry>()
@@ -158,7 +158,7 @@ fn armies_under(
     let calendar = world.resource::<Calendar>();
     let date = world.resource::<Date>();
     let mut out = Vec::new();
-    for kingdom_e in character_ruled_kingdoms(world, actor_e) {
+    for kingdom_e in get_character_ruled_kingdoms(world, actor_e) {
         let Some(kingdom_has_armies) = world.get::<KingdomHasArmies>(kingdom_e) else {
             continue;
         };
@@ -256,7 +256,7 @@ fn ruler_text(world: &World, land_held_by: Option<&LandHeldBy>) -> (String, Colo
     let Some(kingdom_e) = land_held_by.map(|land_held_by| land_held_by.kingdom()) else {
         return (String::new(), STAT_DIM);
     };
-    let Some(leader_e) = kingdom_ruler(world, kingdom_e) else {
+    let Some(leader_e) = get_kingdom_ruler(world, kingdom_e) else {
         return (String::new(), STAT_DIM);
     };
     let Some(character_name) = world.get::<CharacterName>(leader_e) else {
@@ -338,7 +338,7 @@ fn march(world: &mut World, actor: &str, army_id: &str, target_id: &str) {
         return error(world, format!("cannot march to `{target_id}`: no such land"));
     };
 
-    let actor_kingdoms = character_ruled_kingdoms(world, actor_e);
+    let actor_kingdoms = get_character_ruled_kingdoms(world, actor_e);
     let army_kingdom = world
         .get::<ArmyBelongsToKingdom>(army_e)
         .map(|army_belongs_to_kingdom| army_belongs_to_kingdom.0);

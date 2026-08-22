@@ -12,7 +12,7 @@ use crate::ecs::{
     WarAttackerKingdom, WarBeginDate, WarCasusBelliType, WarDefenderKingdom, WarDemand,
     WarDemandType, WarDemands, WarName,
 };
-use crate::helper::kingdom_helper::{character_ruled_kingdoms, kingdom_ruler};
+use crate::helper::kingdom_helper::{get_character_ruled_kingdoms, get_kingdom_ruler};
 use crate::app::Game;
 use crate::observers::OnWarDeclared;
 use crate::resources::date::Date;
@@ -120,7 +120,7 @@ fn defender_rows(world: &World, actor: &str) -> Vec<DefenderRowData> {
     let own_kingdoms: std::collections::HashSet<bevy::ecs::entity::Entity> = world
         .resource::<Registry>()
         .get(actor)
-        .map(|actor_e| character_ruled_kingdoms(world, actor_e))
+        .map(|actor_e| get_character_ruled_kingdoms(world, actor_e))
         .unwrap_or_default()
         .into_iter()
         .collect();
@@ -141,7 +141,7 @@ fn defender_rows(world: &World, actor: &str) -> Vec<DefenderRowData> {
             .map(|land_name| land_name.0.clone())
             .unwrap_or_else(|| string_id.0.clone());
 
-        let ruler_e = kingdom_ruler(world, kingdom_e);
+        let ruler_e = get_kingdom_ruler(world, kingdom_e);
         let ruler = ruler_e
             .and_then(|e| world.get::<CharacterName>(e))
             .map(|character_name| character_name.0.clone())
@@ -210,7 +210,7 @@ fn declare(world: &mut World, actor: &str, defender_id: &str, cb_id: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return error(world, "cannot declare war: unknown actor".into());
     };
-    let Some(attacker_kingdom_e) = character_ruled_kingdoms(world, actor_e).first().copied()
+    let Some(attacker_kingdom_e) = get_character_ruled_kingdoms(world, actor_e).first().copied()
     else {
         return error(world, "cannot declare war: you rule no kingdom".into());
     };

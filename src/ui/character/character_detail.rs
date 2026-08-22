@@ -2,7 +2,7 @@
 //! link (when the character leads one).
 
 use crate::ecs::character::CharacterGender;
-use crate::helper::opinion_helper::opinion_color;
+use crate::helper::opinion_helper::get_opinion_color;
 use bevy::prelude::*;
 
 use super::super::TITLE;
@@ -27,7 +27,7 @@ pub(super) fn render_detail_spans(
     spans.push((format!(" [{}] ({})", marker, char_age), Color::WHITE));
     if let Some(op) = opinion {
         spans.push((" [".to_string(), Color::WHITE));
-        spans.push((format!("{:+}", op), opinion_color(op)));
+        spans.push((format!("{:+}", op), get_opinion_color(op)));
         spans.push(("]".to_string(), Color::WHITE));
     }
     spans.push(("\n".to_string(), Color::WHITE));

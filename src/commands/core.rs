@@ -18,7 +18,7 @@ use crate::ecs::{
     BuildingIsRaised, BuildingLevy, BuildingOf, BuildingStatus, CharacterGold,
     KingdomHold, LandHasBuildings, LandName, Registry, StringId,
 };
-use crate::helper::kingdom_helper::character_ruled_kingdoms;
+use crate::helper::kingdom_helper::get_character_ruled_kingdoms;
 use crate::ecs::character::{
     Memory, MemoryCreatedDate, MemoryKind, MemoryOfCharacter, MemoryTowardCharacter,
     MemoryUntilDate,
@@ -130,14 +130,14 @@ pub fn update(entity: Entity, is_selected: bool, world: &mut World) {
     }
 }
 
-/// The lands `actor` rules: walks `actor → character_ruled_kingdoms → KingdomHold`,
+/// The lands `actor` rules: walks `actor → get_character_ruled_kingdoms → KingdomHold`,
 /// collecting every ruled land across every kingdom the actor leads.
 pub(super) fn ruled_lands(world: &World, actor: &str) -> Vec<(String, String)> {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return Vec::new();
     };
     let mut out = Vec::new();
-    for kingdom_e in character_ruled_kingdoms(world, actor_e) {
+    for kingdom_e in get_character_ruled_kingdoms(world, actor_e) {
         let Some(kingdom_hold) = world.get::<KingdomHold>(kingdom_e) else {
             continue;
         };

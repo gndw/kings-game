@@ -11,7 +11,7 @@ use crate::ecs::land::{Land, LandHasBuildings, LandHeldBy, LandHolding, LandName
 use crate::ecs::{
     CharacterHasCourtiers, CourtierOfKingdom, CourtierType, Registry,
 };
-use crate::helper::kingdom_helper::character_ruled_kingdoms_q;
+use crate::helper::kingdom_helper::get_character_ruled_kingdoms_q;
 use crate::resources::buildings::BuildingDefs;
 use bevy::color::Srgba;
 use bevy::color::palettes::css;
@@ -182,7 +182,7 @@ pub fn update(
         .as_deref()
         .and_then(|id| registry.get(id))
         .map(|pe| {
-            character_ruled_kingdoms_q(
+            get_character_ruled_kingdoms_q(
                 &character_has_courtiers,
                 &courtier_types,
                 &courtier_of_kingdoms,

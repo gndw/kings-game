@@ -5,8 +5,8 @@ use crate::ecs::character::{
 };
 use crate::ecs::house::HouseName;
 use crate::ecs::LandName;
-use crate::helper::age_helper::age;
-use crate::helper::opinion_helper::{opinion_color, opinion_of_via_world};
+use crate::helper::age_helper::get_age;
+use crate::helper::opinion_helper::{get_opinion_color, get_opinion_of};
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
 use bevy::prelude::*;
@@ -44,7 +44,7 @@ pub(super) fn render_ruler_spans(
         .and_then(|cof| world.entity(cof.0).get::<HouseName>())
         .map(|hn| hn.0.clone())
         .unwrap_or_default();
-    let ruler_age = age(&dob.0, world.resource::<Date>(), world.resource::<Calendar>());
+    let ruler_age = get_age(&dob.0, world.resource::<Date>(), world.resource::<Calendar>());
     let marker = match gender {
         CharacterGender::Male => "m",
         CharacterGender::Female => "f",
@@ -57,9 +57,9 @@ pub(super) fn render_ruler_spans(
     ];
     if let Some(player) = player_e.filter(|p| *p != ruler_e) {
         let date = world.resource::<Date>().clone();
-        let op = opinion_of_via_world(world, ruler_e, player, &date);
+        let op = get_opinion_of(world, ruler_e, player, &date);
         spans.push((" [".to_string(), Color::WHITE));
-        spans.push((format!("{:+}", op), opinion_color(op)));
+        spans.push((format!("{:+}", op), get_opinion_color(op)));
         spans.push(("]\n".to_string(), Color::WHITE));
     } else {
         spans.push(("\n".to_string(), Color::WHITE));

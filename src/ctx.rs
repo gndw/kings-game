@@ -6,7 +6,7 @@ use crate::ecs::{
     CharacterHasCourtiers, CourtierOfKingdom, CourtierType, KingdomHold, LandHolding,
     Registry, StringId,
 };
-use crate::helper::kingdom_helper::character_ruled_kingdoms_q;
+use crate::helper::kingdom_helper::get_character_ruled_kingdoms_q;
 use crate::rng::SimRng;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
@@ -55,7 +55,7 @@ impl Ctx {
         let Some(player_e) = registry.get(player_id) else {
             return;
         };
-        game.ctx.selected_land_id = character_ruled_kingdoms_q(
+        game.ctx.selected_land_id = get_character_ruled_kingdoms_q(
             &character_has_courtiers,
             &courtier_types,
             &courtier_of_kingdoms,

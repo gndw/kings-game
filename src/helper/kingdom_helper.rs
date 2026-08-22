@@ -22,7 +22,7 @@ use bevy::prelude::{Query, RelationshipTarget};
 /// The character that rules `kingdom_e` — the courtier of `type: Ruler`
 /// serving that kingdom. `None` when the kingdom is leaderless (no Ruler
 /// courtier, or the kingdom is torn between rulers and none is `Ruler`).
-pub fn kingdom_ruler(world: &World, kingdom_e: Entity) -> Option<Entity> {
+pub fn get_kingdom_ruler(world: &World, kingdom_e: Entity) -> Option<Entity> {
     let khc = world.get::<KingdomHasCourtiers>(kingdom_e)?;
     khc.iter().find_map(|c| {
         if matches!(world.get::<CourtierType>(c), Some(CourtierType::Ruler)) {
@@ -36,7 +36,7 @@ pub fn kingdom_ruler(world: &World, kingdom_e: Entity) -> Option<Entity> {
 /// The kingdoms `character_e` rules — every kingdom where `character_e` is
 /// the Ruler courtier. A character can lead several kingdoms (conquest
 /// transfer); the result is in `KingdomHasCourtiers` insertion order.
-pub fn character_ruled_kingdoms(world: &World, character_e: Entity) -> Vec<Entity> {
+pub fn get_character_ruled_kingdoms(world: &World, character_e: Entity) -> Vec<Entity> {
     let Some(chc) = world.get::<CharacterHasCourtiers>(character_e) else {
         return Vec::new();
     };
@@ -46,11 +46,11 @@ pub fn character_ruled_kingdoms(world: &World, character_e: Entity) -> Vec<Entit
         .collect()
 }
 
-/// Same lookup as [`character_ruled_kingdoms`] but driven by `Query` system
+/// Same lookup as [`get_character_ruled_kingdoms`] but driven by `Query` system
 /// params. Used by Bevy systems that already hold other SystemParams —
 /// `&World` cannot coexist with `Gizmos` / `ResMut<T>` / mut `Query` because
 /// Bevy panics on conflicting access (`B0001`).
-pub fn character_ruled_kingdoms_q(
+pub fn get_character_ruled_kingdoms_q(
     character_has_courtiers: &Query<&CharacterHasCourtiers>,
     courtier_types: &Query<&CourtierType>,
     courtier_of_kingdoms: &Query<&CourtierOfKingdom>,
@@ -65,10 +65,10 @@ pub fn character_ruled_kingdoms_q(
         .collect()
 }
 
-/// Same lookup as [`kingdom_ruler`] but driven by `Query` system params —
-/// see [`character_ruled_kingdoms_q`] for why the `&World` variant doesn't
+/// Same lookup as [`get_kingdom_ruler`] but driven by `Query` system params —
+/// see [`get_character_ruled_kingdoms_q`] for why the `&World` variant doesn't
 /// compose with other system params.
-pub fn kingdom_ruler_q(
+pub fn get_kingdom_ruler_q(
     kingdom_has_courtiers: &Query<&KingdomHasCourtiers>,
     courtier_types: &Query<&CourtierType>,
     courtier_of_characters: &Query<&CourtierOfCharacter>,

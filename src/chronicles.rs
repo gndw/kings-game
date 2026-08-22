@@ -20,7 +20,7 @@ use crate::observers::{
     OnCharacterDied, OnDemandEnforced, OnEventResolved, OnGoldGifted, OnKingdomSucceeded,
     OnMarchingOrdered, OnSiegeLaid, OnSiegeWon, OnWarDeclared, OnWarEnded,
 };
-use crate::helper::age_helper::age;
+use crate::helper::age_helper::get_age;
 use crate::game::presenting_event::EventDeck;
 use crate::resources::buildings::BuildingDefs;
 use crate::resources::event_scripts::EventScripts;
@@ -297,7 +297,7 @@ pub fn on_character_died(
     let Ok((name, dob)) = character_names.get(event.character) else {
         return;
     };
-    let age_at_death = age(&dob.0, &event.on_date, &calendar);
+    let age_at_death = get_age(&dob.0, &event.on_date, &calendar);
     let year = event.on_date.year;
     chronicles.0.push(format!(
         "{} died at the age of {age_at_death} in year {year}",

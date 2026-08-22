@@ -20,7 +20,7 @@
 //!
 //! When the dead leader has a heir, their `CharacterGold` transfers to the
 //! heir of their first successor kingdom (the "primary heir" — i.e. the first
-//! kingdom in `character_ruled_kingdoms` order that resolves to a heir).
+//! kingdom in `get_character_ruled_kingdoms` order that resolves to a heir).
 //! If no kingdom yields an heir, the gold is cleared from the dead character
 //! and otherwise evaporates. Multi-kingdom leaders where every kingdom goes
 //! to a different heir still funnel the dead's treasury into the primary
@@ -45,7 +45,7 @@ use crate::ecs::{
     Courtier, CourtierOfCharacter, CourtierOfKingdom, CourtierType, KingdomHasCourtiers,
     Registry, StringId,
 };
-use crate::helper::kingdom_helper::character_ruled_kingdoms;
+use crate::helper::kingdom_helper::get_character_ruled_kingdoms;
 use crate::observers::{OnCharacterDied, OnKingdomSucceeded, SuccessionRelation};
 use crate::resources::date::Date;
 use bevy::prelude::*;
@@ -53,7 +53,7 @@ use bevy::prelude::*;
 pub fn on_character_died(trigger: On<OnCharacterDied>, mut commands: Commands) {
     let dead = trigger.event().character;
     commands.queue(move |world: &mut World| {
-        let kingdoms: Vec<Entity> = character_ruled_kingdoms(world, dead);
+        let kingdoms: Vec<Entity> = get_character_ruled_kingdoms(world, dead);
 
         // Build the per-character query states we need. They borrow world
         // mutably; calls below happen inside a `commands.queue` closure so

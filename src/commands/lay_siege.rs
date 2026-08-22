@@ -13,7 +13,7 @@ use crate::ecs::{
     CharacterName, CharacterOfHouse, HouseName, KingdomHasArmies, LandHeldBy, LandName, Registry,
     Siege, SiegeAttackerArmy, SiegeDefenderLand, SiegeNextEventDate, SiegeProgress, StringId,
 };
-use crate::helper::kingdom_helper::{character_ruled_kingdoms, kingdom_ruler};
+use crate::helper::kingdom_helper::{get_character_ruled_kingdoms, get_kingdom_ruler};
 use crate::observers::OnSiegeLaid;
 use crate::ui::command_menu::CommandMenuUiContext;
 use bevy::ecs::entity::Entity;
@@ -105,7 +105,7 @@ fn foreign_army_rows(world: &World, actor: &str) -> Vec<SiegeArmyRow> {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return Vec::new();
     };
-    let actor_kingdoms = character_ruled_kingdoms(world, actor_e);
+    let actor_kingdoms = get_character_ruled_kingdoms(world, actor_e);
     let actor_kingdoms_set: std::collections::HashSet<Entity> = actor_kingdoms.iter().copied().collect();
     let mut out = Vec::new();
     for kingdom_e in actor_kingdoms {
@@ -125,7 +125,7 @@ fn foreign_army_rows(world: &World, actor: &str) -> Vec<SiegeArmyRow> {
             let land_label = world.get::<LandName>(aol).map(|ln| ln.0.clone()).unwrap_or_else(|| "?".into());
             let target_text = world
                 .get::<LandHeldBy>(aol)
-                .and_then(|lhb| kingdom_ruler(world, lhb.kingdom()))
+                .and_then(|lhb| get_kingdom_ruler(world, lhb.kingdom()))
                 .map(|leader| {
                     let leader_name = world
                         .get::<CharacterName>(leader)
@@ -165,7 +165,7 @@ fn begin_siege(world: &mut World, actor: &str, army_id: &str) {
 
     let (actor_kingdoms, army_land_e, is_foreign) = {
         let actor_kingdoms: std::collections::HashSet<Entity> =
-            character_ruled_kingdoms(world, actor_e).into_iter().collect();
+            get_character_ruled_kingdoms(world, actor_e).into_iter().collect();
         let Some(army_on_land) = world.get::<ArmyOnLand>(army_e) else { return };
         let is_foreign = world
             .get::<LandHeldBy>(army_on_land.0)

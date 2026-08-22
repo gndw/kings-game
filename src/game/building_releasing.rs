@@ -30,7 +30,7 @@ use crate::ecs::{
     ArmyBelongsToKingdom, Building, BuildingStatus, KingdomHold,
     LandControlledByArmy, LandHasBuildings, WarDemandType,
 };
-use crate::helper::kingdom_helper::kingdom_ruler;
+use crate::helper::kingdom_helper::get_kingdom_ruler;
 use crate::observers::OnDemandEnforced;
 use bevy::ecs::entity::Entity;
 use bevy::prelude::*;
@@ -55,7 +55,7 @@ pub fn on_demand_enforced(
         // The new leader of the target kingdom — `enforce_take` swaps the
         // Ruler courtier via `set_ruler` BEFORE firing `OnDemandEnforced`,
         // so the new ruler is already in place when this observer runs.
-        let Some(player_e) = kingdom_ruler(world, target_kingdom) else {
+        let Some(player_e) = get_kingdom_ruler(world, target_kingdom) else {
             return;
         };
         let Some(KingdomHold(target_land)) = world.get::<KingdomHold>(target_kingdom).copied() else {
@@ -65,13 +65,13 @@ pub fn on_demand_enforced(
         // Enemy check: if the controlling army (if any) belongs to a
         // kingdom NOT led by the new ruler, the land is still contested —
         // skip. The new ruler's other kingdoms count as friendly
-        // (`ArmyBelongsToKingdom` → `kingdom_ruler == player_e`).
+        // (`ArmyBelongsToKingdom` → `get_kingdom_ruler == player_e`).
         let enemy_holds = world
             .get::<LandControlledByArmy>(target_land)
             .and_then(|lca| world.get::<ArmyBelongsToKingdom>(lca.army()))
             .map(|abtk| abtk.0)
             .map(|army_kingdom| {
-                kingdom_ruler(world, army_kingdom)
+                get_kingdom_ruler(world, army_kingdom)
                     .map(|leader| leader != player_e)
                     .unwrap_or(true)
             })

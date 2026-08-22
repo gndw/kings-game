@@ -12,7 +12,7 @@ use crate::ecs::{
     LandControlledByArmy, LandName, Registry, WarBeginDate, WarDefenderKingdom, WarDemandType,
     WarDemands, WarName,
 };
-use crate::helper::kingdom_helper::{character_ruled_kingdoms, set_ruler};
+use crate::helper::kingdom_helper::{get_character_ruled_kingdoms, set_ruler};
 use crate::observers::{OnDemandEnforced, OnWarEnded};
 use crate::app::Game;
 use crate::ui::command_menu::CommandMenuUiContext;
@@ -144,7 +144,7 @@ fn player_war_rows(
         return Vec::new();
     };
     let mut out = Vec::new();
-    for kingdom_e in character_ruled_kingdoms(world, actor_e) {
+    for kingdom_e in get_character_ruled_kingdoms(world, actor_e) {
         let Some(khwa) = world.get::<KingdomHasWarsAttacking>(kingdom_e) else {
             continue;
         };
@@ -203,7 +203,7 @@ fn demand_rows(world: &World, actor: &str, war_id: &str) -> Vec<DemandRowData> {
     let actor_kingdoms: std::collections::HashSet<bevy::ecs::entity::Entity> = world
         .resource::<Registry>()
         .get(actor)
-        .map(|actor_e| character_ruled_kingdoms(world, actor_e).into_iter().collect())
+        .map(|actor_e| get_character_ruled_kingdoms(world, actor_e).into_iter().collect())
         .unwrap_or_default();
     let mut out = Vec::new();
     for (idx, demand) in wd.0.iter().enumerate() {
@@ -252,7 +252,7 @@ fn enforce(world: &mut World, actor: &str, war_id: &str, demand_idx: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return error(world, "cannot enforce: unknown actor".into());
     };
-    let actor_kingdoms = character_ruled_kingdoms(world, actor_e);
+    let actor_kingdoms = get_character_ruled_kingdoms(world, actor_e);
     if actor_kingdoms.is_empty() {
         return error(world, "cannot enforce: you rule no kingdom".into());
     };
@@ -301,7 +301,7 @@ fn enforce_take(
     let army_kingdom = world
         .get::<ArmyBelongsToKingdom>(controlling_army)
         .map(|army_belongs_to_kingdom| army_belongs_to_kingdom.0);
-    let actor_kingdoms = character_ruled_kingdoms(world, actor_e);
+    let actor_kingdoms = get_character_ruled_kingdoms(world, actor_e);
     if !actor_kingdoms.contains(&army_kingdom.unwrap_or(bevy::ecs::entity::Entity::PLACEHOLDER)) {
         error(world, "cannot enforce Take: target land is not controlled by your army".into());
         return None;

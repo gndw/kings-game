@@ -10,7 +10,7 @@ use crate::ecs::land::{Land, LandBorders};
 use crate::ecs::{
     CharacterHasCourtiers, CourtierOfKingdom, CourtierType, KingdomHold, Registry, StringId,
 };
-use crate::helper::kingdom_helper::character_ruled_kingdoms_q;
+use crate::helper::kingdom_helper::get_character_ruled_kingdoms_q;
 use bevy::color::Srgba;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
@@ -53,7 +53,7 @@ pub fn update(
         .and_then(|id| registry.get(id))
         .map(|pe| {
             let mut out = HashSet::new();
-            for kingdom_e in character_ruled_kingdoms_q(
+            for kingdom_e in get_character_ruled_kingdoms_q(
                 &character_has_courtiers,
                 &courtier_types,
                 &courtier_of_kingdoms,

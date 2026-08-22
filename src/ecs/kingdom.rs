@@ -2,7 +2,7 @@
 //!
 //! The leader is defined by a `Courtier` of [`CourtierType::Ruler`](super::courtier::CourtierType::Ruler)
 //! serving the kingdom; lookups go through
-//! [`crate::helper::kingdom_helper::kingdom_ruler`]. There is no Bevy
+//! [`crate::helper::kingdom_helper::get_kingdom_ruler`]. There is no Bevy
 //! relationship between kingdom and leader — the courtier IS the link.
 
 use super::army::ArmyBelongsToKingdom;

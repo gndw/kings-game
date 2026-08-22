@@ -16,7 +16,7 @@ use crate::resources::{calendar::Calendar, date::Date};
 /// "the same year, minus one" isn't portable. The result is accurate to within
 /// a year; sub-year granularity is not displayed anywhere, and adding it back
 /// in later would still route through this helper.
-pub fn age(dob: &Date, today: &Date, calendar: &Calendar) -> u32 {
+pub fn get_age(dob: &Date, today: &Date, calendar: &Calendar) -> u32 {
     let delta = today.ordinal(calendar) - dob.ordinal(calendar);
     if delta <= 0 {
         return 0;

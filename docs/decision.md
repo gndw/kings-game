@@ -232,7 +232,7 @@ code touches.
     (`yielding::on_building_updated`, `building_releasing::*`,
     `court_releasing::*`).
   - Pure helpers keep a name that describes what the call computes —
-    `aging::age` derives an age, `marching::road_days` returns a
+    `age_helper::get_age` derives an age, `marching::road_days` returns a
     duration. They have no schedule; naming them after one would lie.
 - **Scope is `src/game/` only.** Other layers hold nouns by design
   (entities, commands, resources). The gerund rule is a fit for

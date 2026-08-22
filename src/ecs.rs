@@ -26,7 +26,7 @@
 //! - **Kingdom** entities: [`StringId`], [`Kingdom`], [`KingdomHold`]
 //!   (its single held land). The ruler is a [`Courtier`] of
 //!   [`super::courtier::CourtierType::Ruler`]; lookup goes through
-//!   [`crate::helper::kingdom_helper::kingdom_ruler`].
+//!   [`crate::helper::kingdom_helper::get_kingdom_ruler`].
 //! - **Building** entities: [`StringId`], [`Building`], [`BuildingOf`] (a
 //!   definition id into the [`BuildingDefs`](crate::resources::buildings::BuildingDefs)
 //!   roster), [`BuildingOnLand`] (whose reverse [`LandHasBuildings`] sits on

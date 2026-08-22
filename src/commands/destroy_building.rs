@@ -8,7 +8,7 @@ use crate::ecs::{
     BuildingConstructionDate, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand,
     BuildingStatus, LandHasBuildings, LandHeldBy, Registry, StringId,
 };
-use crate::helper::kingdom_helper::character_ruled_kingdoms;
+use crate::helper::kingdom_helper::get_character_ruled_kingdoms;
 use crate::observers::{BuildingUpdateKind, OnBuildingUpdated};
 use crate::resources::buildings::BuildingDefs;
 use crate::app::Game;
@@ -204,7 +204,7 @@ fn destroy(world: &mut World, actor: &str, land_id: &str, building_id: &str) {
         return error(world, format!("cannot destroy on {land_id}: no such land"));
     };
 
-    let actor_kingdoms = character_ruled_kingdoms(world, actor_e);
+    let actor_kingdoms = get_character_ruled_kingdoms(world, actor_e);
     let land_kingdom = world
         .get::<LandHeldBy>(land_e)
         .map(|land_held_by| land_held_by.kingdom());

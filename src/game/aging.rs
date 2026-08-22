@@ -13,7 +13,7 @@ use crate::ecs::{
     CharacterDateOfBirth, CharacterDateOfDeath, CharacterIsAlive, CharacterNextDeathEventDate,
 };
 use crate::observers::OnCharacterDied;
-use crate::helper::age_helper::age;
+use crate::helper::age_helper::get_age;
 use crate::resources::{calendar::Calendar, date::Date};
 use bevy::prelude::*;
 use rand::TryRng;
@@ -52,7 +52,7 @@ pub fn on_day(world: &mut World) {
             if roll < DEATH_ROLL_PROBABILITY {
                 actions.push((e, Action::Die));
             } else {
-                let current_age = age(&dob.0, &today, &calendar);
+                let current_age = get_age(&dob.0, &today, &calendar);
                 let days = random_horizon_days(current_age, &mut rng);
                 actions.push((e, Action::Reschedule(days)));
             }

@@ -11,7 +11,7 @@ use crate::ecs::{
     Building, BuildingConstructionDate, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand,
     BuildingStatus, CharacterGold, LandHeldBy, Registry, StringId,
 };
-use crate::helper::kingdom_helper::character_ruled_kingdoms;
+use crate::helper::kingdom_helper::get_character_ruled_kingdoms;
 use crate::resources::calendar::Calendar;
 use crate::observers::{BuildingUpdateKind, OnBuildingUpdated};
 use bevy::ecs::entity::Entity;
@@ -165,7 +165,7 @@ fn validate(world: &World, actor: &str, land_id: &str, def_id: &str) -> Result<G
     let actor_e = registry.get(actor).ok_or_else(|| format!("unknown actor `{actor}`"))?;
     let land_e = registry.get(land_id).ok_or_else(|| format!("no land `{land_id}`"))?;
 
-    let actor_k = character_ruled_kingdoms(world, actor_e);
+    let actor_k = get_character_ruled_kingdoms(world, actor_e);
     let land_k = world.get::<LandHeldBy>(land_e).map(|land_held_by| land_held_by.kingdom());
     match (actor_k, land_k) {
         (ks, Some(lk)) if ks.contains(&lk) => {}

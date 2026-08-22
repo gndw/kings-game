@@ -11,9 +11,9 @@ use crate::ecs::character::{
 use crate::ecs::house::HouseName;
 use crate::ecs::kingdom::KingdomName;
 use crate::ecs::{Registry, StringId};
-use crate::helper::age_helper::age;
-use crate::helper::kingdom_helper::{character_ruled_kingdoms, kingdom_ruler};
-use crate::helper::opinion_helper::opinion_of_via_world;
+use crate::helper::age_helper::get_age;
+use crate::helper::kingdom_helper::{get_character_ruled_kingdoms, get_kingdom_ruler};
+use crate::helper::opinion_helper::get_opinion_of;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
 use crate::resources::input_layer::InputLayer;
@@ -93,7 +93,7 @@ fn open_ruler(world: &mut World) {
     let Some(kingdom_e) = world.resource::<Registry>().get(&kingdom_id) else {
         return;
     };
-    let Some(ruler_e) = kingdom_ruler(world, kingdom_e) else {
+    let Some(ruler_e) = get_kingdom_ruler(world, kingdom_e) else {
         return;
     };
     let Some(char_id) = world.get::<StringId>(ruler_e).map(|s| s.0.clone()) else {
@@ -191,7 +191,7 @@ fn render_character_spans(
 ) -> Vec<(String, Color)> {
     // Snapshot every value we need from the character entity first; this
     // drops the immutable borrow of `world` so we can later call
-    // `opinion_of_via_world` (which needs `&mut World`) without a conflict.
+    // `get_opinion_of` (which needs `&mut World`) without a conflict.
     let (name, house, gender, char_age, kingdom_name, gold, gold_yield, levy, skills) = {
         let ent = world.entity(char_e);
         let Some(name) = ent.get::<CharacterName>().map(|n| n.0.clone()) else {
@@ -208,8 +208,8 @@ fn render_character_spans(
             .and_then(|cof| world.entity(cof.0).get::<HouseName>())
             .map(|hn| hn.0.clone())
             .unwrap_or_default();
-        let char_age = age(&dob.0, world.resource::<Date>(), world.resource::<Calendar>());
-        let kingdom_name = character_ruled_kingdoms(world, char_e)
+        let char_age = get_age(&dob.0, world.resource::<Date>(), world.resource::<Calendar>());
+        let kingdom_name = get_character_ruled_kingdoms(world, char_e)
             .first()
             .copied()
             .and_then(|k_e| world.entity(k_e).get::<KingdomName>())
@@ -228,11 +228,11 @@ fn render_character_spans(
         (name, house, gender, char_age, kingdom_name, gold, gold_yield, levy, skills)
     };
 
-    // Opinion needs &mut World (opinion_of_via_world does); compute after
+    // Opinion needs &mut World (get_opinion_of does); compute after
     // the immutable borrow of `world.entity(char_e)` is dropped.
     let opinion = player_e.filter(|p| *p != char_e).map(|player| {
         let date = world.resource::<Date>().clone();
-        opinion_of_via_world(world, char_e, player, &date)
+        get_opinion_of(world, char_e, player, &date)
     });
 
     let mut spans: Vec<(String, Color)> = Vec::new();

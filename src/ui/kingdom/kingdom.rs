@@ -4,7 +4,7 @@
 
 use crate::app::Game;
 use crate::ecs::{KingdomHold, KingdomName, LandHeldBy, Registry, StringId};
-use crate::helper::kingdom_helper::kingdom_ruler;
+use crate::helper::kingdom_helper::get_kingdom_ruler;
 use crate::resources::input_layer::InputLayer;
 use bevy::prelude::*;
 
@@ -160,7 +160,7 @@ pub fn update(world: &mut World) {
         let ent = world.entity(kingdom_e);
         let n = ent.get::<KingdomName>().map(|c| c.0.clone());
         let h = ent.get::<KingdomHold>().map(|c| c.0);
-        (n, kingdom_ruler(world, kingdom_e), h)
+        (n, get_kingdom_ruler(world, kingdom_e), h)
     };
     let Some(kingdom_name) = kingdom_name else {
         world.entity_mut(body_e).despawn_children();

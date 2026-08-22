@@ -1,13 +1,13 @@
 //! Release the court of a kingdom that has just been taken over via a
-//! `Take` demand — despawn every courtier entity serving the target
-//! kingdom.
+//! `Take` demand — despawn every non-Ruler courtier entity serving the
+//! target kingdom.
 //!
 //! When the player enforces `Take` on a war, the target kingdom's
-//! leader flips to the player (see
+//! Ruler flips to the player (see
 //! [`enforce_take`](crate::commands::enforce_demands::enforce_take));
-//! this observer evicts every courtier serving that kingdom so the
-//! new regime starts with a clean court (the previous ruler's people
-//! are "released" rather than carrying over).
+//! this observer evicts every *other* courtier serving that kingdom so
+//! the new regime starts with a clean court (the previous ruler's
+//! people are "released" rather than carrying over).
 //!
 //! Bevy's relationship hook on
 //! [`CourtierOfKingdom`](crate::ecs::CourtierOfKingdom) prunes the
@@ -27,21 +27,23 @@
 //! ponytail: one observer, two passes — snapshot `(entity, string_id)`
 //! pairs so we can deregister, then despawn + remove from `Registry`.
 //! Courtier count per kingdom is small (a handful at most).
-use crate::ecs::{KingdomHasCourtiers, Registry, StringId, WarDemandType};
+use crate::ecs::{CourtierType, KingdomHasCourtiers, Registry, StringId, WarDemandType};
 use crate::observers::OnDemandEnforced;
 use bevy::prelude::*;
 
 /// Observer for [`OnDemandEnforced`] on
 /// [`Take`](crate::ecs::WarDemandType::Take). Despawns every
-/// courtier entity serving the target kingdom and removes their ids
-/// from the [`Registry`]. Bevy's relationship hooks prune the
-/// courtier out of the kingdom's `KingdomHasCourtiers` and the
-/// served character's `CharacterHasCourtiers` as part of the
-/// despawn.
+/// courtier entity serving the target kingdom — except the new
+/// Ruler, which `enforce_take` swaps before firing this trigger so
+/// the freshly-spawned one survives the sweep. Removes ids from the
+/// [`Registry`]. Bevy's relationship hooks prune the courtier out of
+/// the kingdom's `KingdomHasCourtiers` and the served character's
+/// `CharacterHasCourtiers` as part of the despawn.
 pub fn on_demand_enforced(
     trigger: On<OnDemandEnforced>,
     kingdom_has_courtiers: Query<&KingdomHasCourtiers>,
     string_ids: Query<&StringId>,
+    courtier_types: Query<&CourtierType>,
     mut commands: Commands,
     mut registry: ResMut<Registry>,
 ) {
@@ -53,12 +55,14 @@ pub fn on_demand_enforced(
 
     // Snapshot (entity, string id) pairs up front — despawning while
     // iterating `KingdomHasCourtiers` would mutate the same Vec, and
-    // we need the id to deregister.
+    // we need the id to deregister. Skip `type: Ruler` so the new
+    // ruler that `enforce_take` just spawned survives.
     let Ok(kingdom_has_courtiers) = kingdom_has_courtiers.get(target_kingdom) else {
         return;
     };
     let to_release: Vec<(Entity, String)> = kingdom_has_courtiers
         .iter()
+        .filter(|c: &Entity| !matches!(courtier_types.get(*c), Ok(CourtierType::Ruler)))
         .filter_map(|e| string_ids.get(e).ok().map(|s| (e, s.0.clone())))
         .collect();
 

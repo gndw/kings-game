@@ -16,9 +16,13 @@ use serde::Deserialize;
 pub struct Courtier;
 
 /// Court role. Add variants as roles become playable.
-#[derive(Component, Debug, Clone, Copy, Deserialize)]
+#[derive(Component, Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
 pub enum CourtierType {
     Courtier,
+    /// The character who rules the kingdom they serve — defines
+    /// "who leads this kingdom" at the data layer. Looked up via
+    /// [`crate::helper::kingdom_helper::kingdom_ruler`].
+    Ruler,
 }
 
 #[derive(Component, Debug, Clone, Copy)]

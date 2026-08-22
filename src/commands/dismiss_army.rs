@@ -12,7 +12,8 @@ use super::core::{
 use crate::app::Game;
 use crate::ecs::army::{ArmyBelongsToKingdom, ArmyHasMarching, ArmyLevy, ArmyName, ArmyOnLand};
 use crate::ecs::kingdom::KingdomHold;
-use crate::ecs::{CharacterLeads, KingdomHasArmies, LandName, Registry, StringId};
+use crate::ecs::{KingdomHasArmies, LandName, Registry, StringId};
+use crate::helper::kingdom_helper::character_ruled_kingdoms;
 use crate::observers::{BuildingUpdateKind, OnArmyDismiss, OnBuildingUpdated};
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
@@ -85,14 +86,11 @@ fn armies_under(
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return Vec::new();
     };
-    let Some(character_leads) = world.get::<CharacterLeads>(actor_e) else {
-        return Vec::new();
-    };
     let calendar = world.resource::<Calendar>();
     let date = world.resource::<Date>();
     let mut out = Vec::new();
-    for kingdom_e in character_leads.kingdoms() {
-        let Some(kingdom_has_armies) = world.get::<KingdomHasArmies>(*kingdom_e) else {
+    for kingdom_e in character_ruled_kingdoms(world, actor_e) {
+        let Some(kingdom_has_armies) = world.get::<KingdomHasArmies>(kingdom_e) else {
             continue;
         };
         for army_e in kingdom_has_armies.iter() {
@@ -120,14 +118,12 @@ fn dismiss(world: &mut World, actor: &str, army_id: &str) {
     let Some(army_e) = world.resource::<Registry>().get(army_id) else {
         return error(world, format!("cannot dismiss `{army_id}`: no such army"));
     };
-    let actor_kingdoms = world
-        .get::<CharacterLeads>(actor_e)
-        .map(|character_leads| character_leads.kingdoms().iter().copied().collect::<Vec<_>>());
+    let actor_kingdoms = character_ruled_kingdoms(world, actor_e);
     let army_kingdom = world
         .get::<ArmyBelongsToKingdom>(army_e)
         .map(|army_belongs_to_kingdom| army_belongs_to_kingdom.0);
     let kingdom_e = match (actor_kingdoms, army_kingdom) {
-        (Some(aks), Some(ak)) if aks.contains(&ak) => ak,
+        (aks, Some(ak)) if aks.contains(&ak) => ak,
         _ => {
             return error(world, format!(
                 "cannot dismiss `{army_id}`: that army does not belong to your kingdom"

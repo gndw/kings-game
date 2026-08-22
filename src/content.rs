@@ -324,11 +324,14 @@ pub struct Building {
 }
 
 /// A realm: a ruler and the single land it holds. Wholly state.
+///
+/// The ruler is defined by a `Courtier` with `type: Ruler` serving this
+/// kingdom — see [`crate::ecs::courtier::CourtierType::Ruler`] and
+/// [`crate::helper::kingdom_helper`]. State files carry no leader id here.
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Kingdom {
     pub id: String,
-    pub leader_character_id: String,
     pub land_id: String,
     /// Display name. Defaults to `"Kingdom of <land name>"` at populate
     /// time when the state file leaves it blank — see `ecs::populate`.

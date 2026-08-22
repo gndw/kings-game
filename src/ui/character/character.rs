@@ -5,13 +5,14 @@
 use crate::app::Game;
 use crate::ecs::character::{
     CharacterDateOfBirth, CharacterFaith, CharacterGender, CharacterGold, CharacterGoldYield,
-    CharacterIntrigue, CharacterLeads, CharacterLevy, CharacterMartial, CharacterName,
+    CharacterIntrigue, CharacterLevy, CharacterMartial, CharacterName,
     CharacterOfHouse, CharacterProwess, CharacterPrudence, CharacterTreasury,
 };
 use crate::ecs::house::HouseName;
-use crate::ecs::kingdom::{KingdomLedBy, KingdomName};
+use crate::ecs::kingdom::KingdomName;
 use crate::ecs::{Registry, StringId};
 use crate::helper::age_helper::age;
+use crate::helper::kingdom_helper::{character_ruled_kingdoms, kingdom_ruler};
 use crate::helper::opinion_helper::opinion_of_via_world;
 use crate::resources::calendar::Calendar;
 use crate::resources::date::Date;
@@ -92,7 +93,7 @@ fn open_ruler(world: &mut World) {
     let Some(kingdom_e) = world.resource::<Registry>().get(&kingdom_id) else {
         return;
     };
-    let Some(ruler_e) = world.get::<KingdomLedBy>(kingdom_e).map(|k| k.0) else {
+    let Some(ruler_e) = kingdom_ruler(world, kingdom_e) else {
         return;
     };
     let Some(char_id) = world.get::<StringId>(ruler_e).map(|s| s.0.clone()) else {
@@ -208,9 +209,9 @@ fn render_character_spans(
             .map(|hn| hn.0.clone())
             .unwrap_or_default();
         let char_age = age(&dob.0, world.resource::<Date>(), world.resource::<Calendar>());
-        let kingdom_name = ent
-            .get::<CharacterLeads>()
-            .and_then(|led| led.kingdoms().first().copied())
+        let kingdom_name = character_ruled_kingdoms(world, char_e)
+            .first()
+            .copied()
             .and_then(|k_e| world.entity(k_e).get::<KingdomName>())
             .map(|kn| kn.0.clone());
         let gold = ent.get::<CharacterGold>().copied().unwrap_or_default().0;

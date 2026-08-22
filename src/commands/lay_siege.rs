@@ -8,12 +8,12 @@
 use super::core::{error, picker_row, set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR,
     STAT_DIM};
 use crate::app::Game;
-use crate::ecs::kingdom::KingdomLedBy;
 use crate::ecs::{
-    ArmyBelongsToKingdom, ArmyLevy, ArmyName, ArmyOnLand, ArmyStatus, CharacterLeads,
+    ArmyBelongsToKingdom, ArmyLevy, ArmyName, ArmyOnLand, ArmyStatus,
     CharacterName, CharacterOfHouse, HouseName, KingdomHasArmies, LandHeldBy, LandName, Registry,
     Siege, SiegeAttackerArmy, SiegeDefenderLand, SiegeNextEventDate, SiegeProgress, StringId,
 };
+use crate::helper::kingdom_helper::{character_ruled_kingdoms, kingdom_ruler};
 use crate::observers::OnSiegeLaid;
 use crate::ui::command_menu::CommandMenuUiContext;
 use bevy::ecs::entity::Entity;
@@ -105,13 +105,11 @@ fn foreign_army_rows(world: &World, actor: &str) -> Vec<SiegeArmyRow> {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return Vec::new();
     };
-    let Some(character_leads) = world.get::<CharacterLeads>(actor_e) else {
-        return Vec::new();
-    };
-    let actor_kingdoms: std::collections::HashSet<Entity> = character_leads.kingdoms().iter().copied().collect();
+    let actor_kingdoms = character_ruled_kingdoms(world, actor_e);
+    let actor_kingdoms_set: std::collections::HashSet<Entity> = actor_kingdoms.iter().copied().collect();
     let mut out = Vec::new();
-    for kingdom_e in character_leads.kingdoms() {
-        let Some(kha) = world.get::<KingdomHasArmies>(*kingdom_e) else { continue };
+    for kingdom_e in actor_kingdoms {
+        let Some(kha) = world.get::<KingdomHasArmies>(kingdom_e) else { continue };
         for army_e in kha.iter() {
             let (Some(army_id), Some(aol), Some(army_name)) = (
                 world.get::<StringId>(army_e).map(|s| s.0.clone()),
@@ -120,26 +118,26 @@ fn foreign_army_rows(world: &World, actor: &str) -> Vec<SiegeArmyRow> {
             ) else { continue };
             let is_foreign = world
                 .get::<LandHeldBy>(aol)
-                .map(|lhb| !actor_kingdoms.contains(&lhb.kingdom()))
+                .map(|lhb| !actor_kingdoms_set.contains(&lhb.kingdom()))
                 .unwrap_or(false);
             if !is_foreign { continue };
             let levy = world.get::<ArmyLevy>(army_e).map(|x| x.0).unwrap_or(0);
             let land_label = world.get::<LandName>(aol).map(|ln| ln.0.clone()).unwrap_or_else(|| "?".into());
             let target_text = world
                 .get::<LandHeldBy>(aol)
-                .and_then(|lhb| world.get::<KingdomLedBy>(lhb.kingdom()))
-                .map(|kingdom_led_by| {
-                    let leader = world
-                        .get::<CharacterName>(kingdom_led_by.0)
+                .and_then(|lhb| kingdom_ruler(world, lhb.kingdom()))
+                .map(|leader| {
+                    let leader_name = world
+                        .get::<CharacterName>(leader)
                         .map(|character_name| character_name.0.clone())
                         .unwrap_or_else(|| "?".into());
                     let house = world
-                        .get::<CharacterOfHouse>(kingdom_led_by.0)
+                        .get::<CharacterOfHouse>(leader)
                         .and_then(|coh| world.get::<HouseName>(coh.0))
                         .map(|house_name| house_name.0.clone());
                     match house {
-                        Some(h) => format!("{land_label}, {leader} {h}"),
-                        None => format!("{land_label}, {leader}"),
+                        Some(h) => format!("{land_label}, {leader_name} {h}"),
+                        None => format!("{land_label}, {leader_name}"),
                     }
                 })
                 .unwrap_or_else(|| land_label.clone());
@@ -166,10 +164,8 @@ fn begin_siege(world: &mut World, actor: &str, army_id: &str) {
     };
 
     let (actor_kingdoms, army_land_e, is_foreign) = {
-        let actor_kingdoms: std::collections::HashSet<Entity> = world
-            .get::<CharacterLeads>(actor_e)
-            .map(|cl| cl.kingdoms().iter().copied().collect())
-            .unwrap_or_default();
+        let actor_kingdoms: std::collections::HashSet<Entity> =
+            character_ruled_kingdoms(world, actor_e).into_iter().collect();
         let Some(army_on_land) = world.get::<ArmyOnLand>(army_e) else { return };
         let is_foreign = world
             .get::<LandHeldBy>(army_on_land.0)

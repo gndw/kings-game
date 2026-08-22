@@ -63,12 +63,14 @@ filename is human organisation, not schema. `IMPLICIT_SOME` so modders
 write `border: (...)` not `border: Some(...)`.
 
 The two halves share one struct per kind so `populate` reads everything
-off one place. `Kingdom` is state-only; alive `Character`s are
-state-only (inserted by `merge_state`); dead `Character`s are
-definition-only (because nothing about them ever changes). `Family`
-entries split the same way: a family that references any alive
-character lives in state (the alive char is state-only), and a family
-that only references dead characters lives in `families.ron`.
+off one place. `Kingdom` is state-only and now carries no leader id
+— the ruler is a [`Courtier`] of `type: Ruler` in the state file's
+`courtiers` section. Alive `Character`s are state-only (inserted by
+`merge_state`); dead `Character`s are definition-only (because nothing
+about them ever changes). `Family` entries split the same way: a family
+that references any alive character lives in state (the alive char is
+state-only), and a family that only references dead characters lives in
+`families.ron`.
 
 ## The ECS world
 
@@ -81,10 +83,21 @@ that only references dead characters lives in `families.ron`.
   `i32` 0..=20) alongside the family / wealth components; they are the
   medieval-genuine ruler stat set and replace no existing component.
 - **Bevy-native relationships** (`#[relationship]` / `#[relationship_target]`)
-  for every link. Naming convention: `<On-entity><Verb-or-preposition><Target>`
-  so the component name tells you which entity it sits on. Set the
-  single-`Entity` side; never hand-edit the reverse — Bevy's hook keeps it
-  in sync.
+  for every link except the kingdom→leader. Naming convention:
+  `<On-entity><Verb-or-preposition><Target>` so the component name tells
+  you which entity it sits on. Set the single-`Entity` side; never
+  hand-edit the reverse — Bevy's hook keeps it in sync.
+- **The kingdom→leader link is a Ruler courtier**, not a Bevy
+  relationship. The leader is the `Courtier` of `type: Ruler` serving
+  the kingdom; `KingdomHasCourtiers` (auto-maintained from
+  `CourtierOfKingdom`) gives the court, and
+  [`crate::helper::kingdom_helper`] scans it for the Ruler. This puts
+  the leader definition in the data layer (one entry per kingdom in
+  the state file) and removes a separate cache that would otherwise
+  need to stay in sync with the courtier at every mutation site.
+  Only two mutation sites change leaders (succession and Take); both
+  go through [`set_ruler`](crate::helper::kingdom_helper::set_ruler),
+  which despawns the old Ruler and spawns a new one in one place.
 - **Reverse Vecs are queues/collections where insertion order matters**
   (e.g. the army's marching queue). Otherwise the relationship is single
   `Entity` with a public accessor.

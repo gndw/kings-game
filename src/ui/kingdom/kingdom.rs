@@ -3,7 +3,8 @@
 //! own submodule; this file owns the orchestrator (`render_kingdom_spans`).
 
 use crate::app::Game;
-use crate::ecs::{KingdomHold, KingdomLedBy, KingdomName, LandHeldBy, Registry, StringId};
+use crate::ecs::{KingdomHold, KingdomName, LandHeldBy, Registry, StringId};
+use crate::helper::kingdom_helper::kingdom_ruler;
 use crate::resources::input_layer::InputLayer;
 use bevy::prelude::*;
 
@@ -155,12 +156,11 @@ pub fn update(world: &mut World) {
     };
 
     // Pull the kingdom's metadata up front; everything below takes &World.
-    let (kingdom_name, kingdom_led_by, kingdom_hold) = {
+    let (kingdom_name, ruler_e, kingdom_hold) = {
         let ent = world.entity(kingdom_e);
         let n = ent.get::<KingdomName>().map(|c| c.0.clone());
-        let l = ent.get::<KingdomLedBy>().map(|c| c.0);
         let h = ent.get::<KingdomHold>().map(|c| c.0);
-        (n, l, h)
+        (n, kingdom_ruler(world, kingdom_e), h)
     };
     let Some(kingdom_name) = kingdom_name else {
         world.entity_mut(body_e).despawn_children();
@@ -176,7 +176,7 @@ pub fn update(world: &mut World) {
             .and_then(|id| registry.get(id))
     };
 
-    let spans = render_kingdom_spans(world, kingdom_name, kingdom_hold, kingdom_led_by, kingdom_e, player_e);
+    let spans = render_kingdom_spans(world, kingdom_name, kingdom_hold, ruler_e, kingdom_e, player_e);
 
     world.entity_mut(body_e).despawn_children();
     world.commands().entity(body_e).with_children(|p| {

@@ -23,12 +23,12 @@
 // characters simply start where their own mod says they do.
 (
     kingdoms: [
-        (id: "kingdom-westmarch",  leader_character_id: "char-aldric", land_id: "land-2", name: "Kingdom of Westmarch"),
-        (id: "kingdom-goldharbour",leader_character_id: "char-tybalt", land_id: "land-3", name: "Kingdom of Goldharbour"),
-        (id: "kingdom-hawkrest",   leader_character_id: "char-jorell", land_id: "land-5", name: "Kingdom of Hawkrest"),
-        (id: "kingdom-riversmeet", leader_character_id: "char-maren",  land_id: "land-1", name: "Kingdom of Aldgate"),
-        (id: "kingdom-greenfields",leader_character_id: "char-olwen",  land_id: "land-4", name: "Kingdom of Crossford"),
-        (id: "kingdom-sunend",     leader_character_id: "char-dorian", land_id: "land-6", name: "Kingdom of Sun's End"),
+        (id: "kingdom-westmarch",  land_id: "land-2", name: "Kingdom of Westmarch"),
+        (id: "kingdom-goldharbour",land_id: "land-3", name: "Kingdom of Goldharbour"),
+        (id: "kingdom-hawkrest",   land_id: "land-5", name: "Kingdom of Hawkrest"),
+        (id: "kingdom-riversmeet", land_id: "land-1", name: "Kingdom of Aldgate"),
+        (id: "kingdom-greenfields",land_id: "land-4", name: "Kingdom of Crossford"),
+        (id: "kingdom-sunend",     land_id: "land-6", name: "Kingdom of Sun's End"),
     ],
     // Each built building is its own instance: a unique `id`, the `def_id` of
     // the building kind it is (an entry in building_definitions.ron), and the
@@ -73,6 +73,15 @@
         (id: "b-6-5", def_id: "building-castle",        land_id: "land-6", status: Active),
     ],
     courtiers: [
+        // Each realm's ruler — the single Ruler courtier per kingdom defines
+        // who leads it. Runtime succession and Take swap this courtier.
+        (id: "courtier-aldric-ruler",    kingdom_id: "kingdom-westmarch",   character_id: "char-aldric",    type: Ruler),
+        (id: "courtier-tybalt-ruler",    kingdom_id: "kingdom-goldharbour", character_id: "char-tybalt",    type: Ruler),
+        (id: "courtier-jorell-ruler",    kingdom_id: "kingdom-hawkrest",    character_id: "char-jorell",    type: Ruler),
+        (id: "courtier-maren-ruler",     kingdom_id: "kingdom-riversmeet",  character_id: "char-maren",     type: Ruler),
+        (id: "courtier-olwen-ruler",     kingdom_id: "kingdom-greenfields", character_id: "char-olwen",     type: Ruler),
+        (id: "courtier-dorian-ruler",    kingdom_id: "kingdom-sunend",      character_id: "char-dorian",    type: Ruler),
+
         // kingdom-westmarch — Aldric Cresswell: wife + children
         (id: "courtier-mara",     kingdom_id: "kingdom-westmarch",   character_id: "char-mara",     type: Courtier),
         (id: "courtier-bors",     kingdom_id: "kingdom-westmarch",   character_id: "char-bors",     type: Courtier),

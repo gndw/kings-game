@@ -2,17 +2,17 @@
 //!
 //! Two steps: pick a war (from `KingdomHasWarsAttacking`), pick a demand.
 //! `Take` only succeeds when the target kingdom's held land is controlled by one
-//! of the player's armies; on success the target kingdom's `KingdomLedBy` is
-//! set to the player.
+//! of the player's armies; on success the target kingdom's Ruler courtier is
+//! swapped to the player via [`set_ruler`].
 
 use super::core::{error, picker_row, set_row_selected, BaseCommand, NAME_COLOR, STAT_COLOR,
     STAT_DIM};
 use crate::ecs::{
-    ArmyBelongsToKingdom, CharacterLeads, KingdomHasWarsAttacking, KingdomHold,
+    ArmyBelongsToKingdom, KingdomHasWarsAttacking, KingdomHold,
     LandControlledByArmy, LandName, Registry, WarBeginDate, WarDefenderKingdom, WarDemandType,
     WarDemands, WarName,
 };
-use crate::ecs::kingdom::KingdomLedBy;
+use crate::helper::kingdom_helper::{character_ruled_kingdoms, set_ruler};
 use crate::observers::{OnDemandEnforced, OnWarEnded};
 use crate::app::Game;
 use crate::ui::command_menu::CommandMenuUiContext;
@@ -143,12 +143,9 @@ fn player_war_rows(
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return Vec::new();
     };
-    let Some(character_leads) = world.get::<CharacterLeads>(actor_e) else {
-        return Vec::new();
-    };
     let mut out = Vec::new();
-    for kingdom_e in character_leads.kingdoms() {
-        let Some(khwa) = world.get::<KingdomHasWarsAttacking>(*kingdom_e) else {
+    for kingdom_e in character_ruled_kingdoms(world, actor_e) {
+        let Some(khwa) = world.get::<KingdomHasWarsAttacking>(kingdom_e) else {
             continue;
         };
         for war_e in khwa.iter() {
@@ -206,8 +203,7 @@ fn demand_rows(world: &World, actor: &str, war_id: &str) -> Vec<DemandRowData> {
     let actor_kingdoms: std::collections::HashSet<bevy::ecs::entity::Entity> = world
         .resource::<Registry>()
         .get(actor)
-        .and_then(|actor_e| world.get::<CharacterLeads>(actor_e))
-        .map(|character_leads| character_leads.kingdoms().iter().copied().collect())
+        .map(|actor_e| character_ruled_kingdoms(world, actor_e).into_iter().collect())
         .unwrap_or_default();
     let mut out = Vec::new();
     for (idx, demand) in wd.0.iter().enumerate() {
@@ -256,10 +252,8 @@ fn enforce(world: &mut World, actor: &str, war_id: &str, demand_idx: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return error(world, "cannot enforce: unknown actor".into());
     };
-    let Some(_actor_kingdoms) = world
-        .get::<CharacterLeads>(actor_e)
-        .map(|character_leads| character_leads.kingdoms().iter().copied().collect::<Vec<_>>())
-    else {
+    let actor_kingdoms = character_ruled_kingdoms(world, actor_e);
+    if actor_kingdoms.is_empty() {
         return error(world, "cannot enforce: you rule no kingdom".into());
     };
     let Some(war_e) = world.resource::<Registry>().get(war_id) else {
@@ -307,20 +301,21 @@ fn enforce_take(
     let army_kingdom = world
         .get::<ArmyBelongsToKingdom>(controlling_army)
         .map(|army_belongs_to_kingdom| army_belongs_to_kingdom.0);
-    let actor_kingdoms = world
-        .get::<CharacterLeads>(actor_e)
-        .map(|character_leads| character_leads.kingdoms().iter().copied().collect::<Vec<_>>())
-        .unwrap_or_default();
+    let actor_kingdoms = character_ruled_kingdoms(world, actor_e);
     if !actor_kingdoms.contains(&army_kingdom.unwrap_or(bevy::ecs::entity::Entity::PLACEHOLDER)) {
         error(world, "cannot enforce Take: target land is not controlled by your army".into());
         return None;
     }
 
-    world.entity_mut(target_kingdom_e).insert(KingdomLedBy(actor_e));
+    // Swap the Ruler first so the observers triggered below (`building_releasing`)
+    // see the new leader. `court_releasing` skips `type: Ruler` courtiers so the
+    // freshly-spawned one survives the sweep.
+    set_ruler(world, target_kingdom_e, Some(actor_e));
 
     world.trigger(OnDemandEnforced {
         demand_type: crate::ecs::WarDemandType::Take,
         target: target_kingdom_e,
     });
+
     Some(crate::ecs::WarDemandType::Take)
 }

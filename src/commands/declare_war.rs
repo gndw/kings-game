@@ -7,11 +7,12 @@
 use super::core::{error, next_id, picker_row, set_row_selected, BaseCommand, NAME_COLOR,
     STAT_COLOR};
 use crate::ecs::{
-    ArmyLevy, CharacterLeads, CharacterName, CharacterOfHouse, HouseName, Kingdom,
-    KingdomHasArmies, KingdomHold, KingdomLedBy, LandName, Registry, StringId, War,
+    ArmyLevy, CharacterName, CharacterOfHouse, HouseName, Kingdom,
+    KingdomHasArmies, KingdomHold, LandName, Registry, StringId, War,
     WarAttackerKingdom, WarBeginDate, WarCasusBelliType, WarDefenderKingdom, WarDemand,
     WarDemandType, WarDemands, WarName,
 };
+use crate::helper::kingdom_helper::{character_ruled_kingdoms, kingdom_ruler};
 use crate::app::Game;
 use crate::observers::OnWarDeclared;
 use crate::resources::date::Date;
@@ -119,9 +120,10 @@ fn defender_rows(world: &World, actor: &str) -> Vec<DefenderRowData> {
     let own_kingdoms: std::collections::HashSet<bevy::ecs::entity::Entity> = world
         .resource::<Registry>()
         .get(actor)
-        .and_then(|actor_e| world.get::<CharacterLeads>(actor_e))
-        .map(|character_leads| character_leads.kingdoms().iter().copied().collect())
-        .unwrap_or_default();
+        .map(|actor_e| character_ruled_kingdoms(world, actor_e))
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
 
     let mut result = Vec::new();
     for entity_ref in world.iter_entities() {
@@ -139,17 +141,16 @@ fn defender_rows(world: &World, actor: &str) -> Vec<DefenderRowData> {
             .map(|land_name| land_name.0.clone())
             .unwrap_or_else(|| string_id.0.clone());
 
-        let ruler = entity_ref
-            .get::<KingdomLedBy>()
-            .and_then(|kingdom_led_by| world.get::<CharacterName>(kingdom_led_by.0))
+        let ruler_e = kingdom_ruler(world, kingdom_e);
+        let ruler = ruler_e
+            .and_then(|e| world.get::<CharacterName>(e))
             .map(|character_name| character_name.0.clone())
             .unwrap_or_default();
         let ruler_with_house = if ruler.is_empty() {
             String::new()
         } else {
-            let house = entity_ref
-                .get::<KingdomLedBy>()
-                .and_then(|kingdom_led_by| world.get::<CharacterOfHouse>(kingdom_led_by.0))
+            let house = ruler_e
+                .and_then(|e| world.get::<CharacterOfHouse>(e))
                 .and_then(|character_of_house| world.get::<HouseName>(character_of_house.0))
                 .map(|house_name| house_name.0.clone());
             match house {
@@ -209,9 +210,7 @@ fn declare(world: &mut World, actor: &str, defender_id: &str, cb_id: &str) {
     let Some(actor_e) = world.resource::<Registry>().get(actor) else {
         return error(world, "cannot declare war: unknown actor".into());
     };
-    let Some(attacker_kingdom_e) = world
-        .get::<CharacterLeads>(actor_e)
-        .and_then(|character_leads| character_leads.kingdoms().first().copied())
+    let Some(attacker_kingdom_e) = character_ruled_kingdoms(world, actor_e).first().copied()
     else {
         return error(world, "cannot declare war: you rule no kingdom".into());
     };

@@ -1,7 +1,6 @@
 //! Character entities: the people of the world.
 
 use super::courtier::CourtierOfCharacter;
-use super::kingdom::KingdomLedBy;
 use crate::resources::date::Date;
 use bevy::ecs::entity::Entity;
 use bevy::prelude::Component;
@@ -91,18 +90,6 @@ pub struct CharacterIntrigue(pub i32);
 /// monthly Church favor drift, legitimacy drift, and event-tier unlocks.
 #[derive(Component, Debug, Clone, Copy, Default)]
 pub struct CharacterFaith(pub i32);
-
-/// The kingdoms a character leads — the auto-maintained reverse of `KingdomLedBy`.
-/// Many-to-many: a character can lead several kingdoms simultaneously.
-#[derive(Component, Debug, Default)]
-#[relationship_target(relationship = KingdomLedBy)]
-pub struct CharacterLeads(Vec<Entity>);
-
-impl CharacterLeads {
-    pub fn kingdoms(&self) -> &[Entity] {
-        &self.0
-    }
-}
 
 /// The courtiers serving a character — the auto-maintained reverse of `CourtierOfCharacter`.
 #[derive(Component, Debug, Default)]

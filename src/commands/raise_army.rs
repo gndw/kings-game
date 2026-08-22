@@ -15,9 +15,10 @@ use crate::ecs::army::{
 };
 use crate::ecs::building::{BuildingIsRaised, BuildingStatus};
 use crate::ecs::{
-    CharacterLeads, CharacterOfHouse, HouseName, LandHasArmies, LandHeldBy, LandHasBuildings,
+    CharacterOfHouse, HouseName, LandHasArmies, LandHeldBy, LandHasBuildings,
     Registry, StringId,
 };
+use crate::helper::kingdom_helper::character_ruled_kingdoms;
 use crate::observers::OnArmyRaised;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
@@ -103,14 +104,12 @@ fn raise(world: &mut World, actor: &str, land_id: &str) {
         return error(world, format!("cannot raise on {land_id}: no such land"));
     };
 
-    let actor_kingdoms = world
-        .get::<CharacterLeads>(actor_e)
-        .map(|character_leads| character_leads.kingdoms().iter().copied().collect::<Vec<_>>());
+    let actor_kingdoms = character_ruled_kingdoms(world, actor_e);
     let land_kingdom = world
         .get::<LandHeldBy>(land_e)
         .map(|land_held_by| land_held_by.kingdom());
     let kingdom_e = match (actor_kingdoms, land_kingdom) {
-        (Some(ks), Some(lk)) if ks.contains(&lk) => lk,
+        (ks, Some(lk)) if ks.contains(&lk) => lk,
         _ => {
             return error(world, format!("cannot raise on {land_id}: you don't rule that land"));
         }

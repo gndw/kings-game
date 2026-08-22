@@ -7,7 +7,10 @@
 use super::common::{fill, UIWithLand};
 use crate::app::Game;
 use crate::ecs::land::{Land, LandBorders};
-use crate::ecs::{CharacterLeads, KingdomHold, Registry, StringId};
+use crate::ecs::{
+    CharacterHasCourtiers, CourtierOfKingdom, CourtierType, KingdomHold, Registry, StringId,
+};
+use crate::helper::kingdom_helper::character_ruled_kingdoms_q;
 use bevy::color::Srgba;
 use bevy::color::palettes::css;
 use bevy::prelude::*;
@@ -37,7 +40,9 @@ pub fn update(
     mut gizmos: Gizmos,
     game: Res<Game>,
     registry: Res<Registry>,
-    character_leads: Query<&CharacterLeads>,
+    character_has_courtiers: Query<&CharacterHasCourtiers>,
+    courtier_types: Query<&CourtierType>,
+    courtier_of_kingdoms: Query<&CourtierOfKingdom>,
     kingdom_holds: Query<&KingdomHold>,
 ) {
     let sel = game.ctx.selected_land_id.as_deref();
@@ -46,11 +51,15 @@ pub fn update(
         .player_character_id
         .as_deref()
         .and_then(|id| registry.get(id))
-        .and_then(|pe| character_leads.get(pe).ok())
-        .map(|character_leads| {
+        .map(|pe| {
             let mut out = HashSet::new();
-            for kingdom_e in character_leads.kingdoms() {
-                let Ok(kingdom_hold) = kingdom_holds.get(*kingdom_e) else { continue };
+            for kingdom_e in character_ruled_kingdoms_q(
+                &character_has_courtiers,
+                &courtier_types,
+                &courtier_of_kingdoms,
+                pe,
+            ) {
+                let Ok(kingdom_hold) = kingdom_holds.get(kingdom_e) else { continue };
                 if let Ok(string_id) = lands_id.get(kingdom_hold.0) {
                     out.insert(string_id.0.clone());
                 }

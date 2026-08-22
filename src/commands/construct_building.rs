@@ -9,8 +9,9 @@ use crate::app::Game;
 use crate::resources::buildings::BuildingDefs;
 use crate::ecs::{
     Building, BuildingConstructionDate, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand,
-    BuildingStatus, CharacterGold, CharacterLeads, LandHeldBy, Registry, StringId,
+    BuildingStatus, CharacterGold, LandHeldBy, Registry, StringId,
 };
+use crate::helper::kingdom_helper::character_ruled_kingdoms;
 use crate::resources::calendar::Calendar;
 use crate::observers::{BuildingUpdateKind, OnBuildingUpdated};
 use bevy::ecs::entity::Entity;
@@ -164,12 +165,10 @@ fn validate(world: &World, actor: &str, land_id: &str, def_id: &str) -> Result<G
     let actor_e = registry.get(actor).ok_or_else(|| format!("unknown actor `{actor}`"))?;
     let land_e = registry.get(land_id).ok_or_else(|| format!("no land `{land_id}`"))?;
 
-    let actor_k = world
-        .get::<CharacterLeads>(actor_e)
-        .map(|character_leads| character_leads.kingdoms().iter().copied().collect::<Vec<_>>());
+    let actor_k = character_ruled_kingdoms(world, actor_e);
     let land_k = world.get::<LandHeldBy>(land_e).map(|land_held_by| land_held_by.kingdom());
     match (actor_k, land_k) {
-        (Some(ks), Some(lk)) if ks.contains(&lk) => {}
+        (ks, Some(lk)) if ks.contains(&lk) => {}
         _ => return Err("you don't rule that land".into()),
     }
 

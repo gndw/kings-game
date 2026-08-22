@@ -114,13 +114,6 @@ pub fn reconcile(content: &mut Content) -> Vec<String> {
     });
 
     content.kingdoms.retain(|id, k| {
-        if !known_chars.contains(k.leader_character_id.as_str()) {
-            notes.push(format!(
-                "dropped kingdom `{id}`: unknown leader `{}`",
-                k.leader_character_id
-            ));
-            return false;
-        }
         if !known_lands.contains(k.land_id.as_str()) {
             notes.push(format!(
                 "dropped kingdom `{id}`: unknown land `{}`",

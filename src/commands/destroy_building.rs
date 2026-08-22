@@ -6,8 +6,9 @@ use super::core::{
 };
 use crate::ecs::{
     BuildingConstructionDate, BuildingIsRaised, BuildingLevy, BuildingOf, BuildingOnLand,
-    BuildingStatus, CharacterLeads, LandHasBuildings, LandHeldBy, Registry, StringId,
+    BuildingStatus, LandHasBuildings, LandHeldBy, Registry, StringId,
 };
+use crate::helper::kingdom_helper::character_ruled_kingdoms;
 use crate::observers::{BuildingUpdateKind, OnBuildingUpdated};
 use crate::resources::buildings::BuildingDefs;
 use crate::app::Game;
@@ -203,14 +204,12 @@ fn destroy(world: &mut World, actor: &str, land_id: &str, building_id: &str) {
         return error(world, format!("cannot destroy on {land_id}: no such land"));
     };
 
-    let actor_kingdoms = world
-        .get::<CharacterLeads>(actor_e)
-        .map(|character_leads| character_leads.kingdoms().iter().copied().collect::<Vec<_>>());
+    let actor_kingdoms = character_ruled_kingdoms(world, actor_e);
     let land_kingdom = world
         .get::<LandHeldBy>(land_e)
         .map(|land_held_by| land_held_by.kingdom());
     match (actor_kingdoms, land_kingdom) {
-        (Some(ks), Some(lk)) if ks.contains(&lk) => {}
+        (ks, Some(lk)) if ks.contains(&lk) => {}
         _ => {
             return error(world, format!("cannot destroy on {land_id}: you don't rule that land"));
         }

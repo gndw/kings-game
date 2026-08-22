@@ -1,7 +1,11 @@
 //! Kingdom entities: realms held by a leader character over a single land.
+//!
+//! The leader is defined by a `Courtier` of [`CourtierType::Ruler`](super::courtier::CourtierType::Ruler)
+//! serving the kingdom; lookups go through
+//! [`crate::helper::kingdom_helper::kingdom_ruler`]. There is no Bevy
+//! relationship between kingdom and leader — the courtier IS the link.
 
 use super::army::ArmyBelongsToKingdom;
-use super::character::CharacterLeads;
 use super::courtier::CourtierOfKingdom;
 use super::war::{WarAttackerKingdom, WarDefenderKingdom};
 use bevy::ecs::entity::Entity;
@@ -15,11 +19,6 @@ pub struct Kingdom;
 /// a `"Kingdom of <land>"` fallback) and rendered by the info panel.
 #[derive(Component, Debug, Clone)]
 pub struct KingdomName(pub String);
-
-/// The character who rules a kingdom. Bevy relationship; auto-maintains `CharacterLeads`.
-#[derive(Component, Debug, Clone, Copy)]
-#[relationship(relationship_target = CharacterLeads)]
-pub struct KingdomLedBy(pub Entity);
 
 /// The land a kingdom holds. One-to-one: a kingdom holds at most one land (its capital).
 #[derive(Component, Debug, Clone, Copy)]
@@ -57,9 +56,3 @@ impl KingdomHasWarsDefending {
         &self.0
     }
 }
-
-/// Marks a kingdom with no current ruler. Sits alongside the absence of
-/// [`KingdomLedBy`] — the absence already encodes it, but the marker lets
-/// systems and UI query the condition cleanly without scanning every kingdom.
-#[derive(Component, Debug, Clone, Copy, Default)]
-pub struct KingdomLeaderless;

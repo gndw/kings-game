@@ -2,7 +2,11 @@
 //! that isn't an entity. The chronicle log is its own resource.
 
 use crate::app::Game;
-use crate::ecs::{CharacterLeads, KingdomHold, LandHolding, Registry, StringId};
+use crate::ecs::{
+    CharacterHasCourtiers, CourtierOfKingdom, CourtierType, KingdomHold, LandHolding,
+    Registry, StringId,
+};
+use crate::helper::kingdom_helper::character_ruled_kingdoms_q;
 use crate::rng::SimRng;
 use bevy::ecs::entity::Entity;
 use bevy::ecs::world::World;
@@ -39,7 +43,9 @@ impl Ctx {
     pub fn startup(
         mut game: ResMut<Game>,
         registry: Res<Registry>,
-        character_leads: Query<&CharacterLeads>,
+        character_has_courtiers: Query<&CharacterHasCourtiers>,
+        courtier_types: Query<&CourtierType>,
+        courtier_of_kingdoms: Query<&CourtierOfKingdom>,
         kingdom_holds: Query<&KingdomHold>,
         string_ids: Query<&StringId>,
     ) {
@@ -49,14 +55,18 @@ impl Ctx {
         let Some(player_e) = registry.get(player_id) else {
             return;
         };
-        game.ctx.selected_land_id = character_leads
-            .get(player_e)
-            .ok()
-            .and_then(|character_leads| character_leads.kingdoms().first().copied())
-            .and_then(|kingdom_e| kingdom_holds.get(kingdom_e).ok())
-            .map(|kingdom_hold| kingdom_hold.0)
-            .and_then(|land_e| string_ids.get(land_e).ok())
-            .map(|string_id| string_id.0.clone());
+        game.ctx.selected_land_id = character_ruled_kingdoms_q(
+            &character_has_courtiers,
+            &courtier_types,
+            &courtier_of_kingdoms,
+            player_e,
+        )
+        .first()
+        .copied()
+        .and_then(|kingdom_e| kingdom_holds.get(kingdom_e).ok())
+        .map(|kingdom_hold| kingdom_hold.0)
+        .and_then(|land_e| string_ids.get(land_e).ok())
+        .map(|string_id| string_id.0.clone());
     }
 }
 

@@ -164,18 +164,14 @@ impl ScriptCtx {
 
     /// Whether the player is leading any kingdom currently at war.
     pub fn player_is_at_war(&self) -> bool {
-        use crate::ecs::character::CharacterLeads;
         use crate::ecs::kingdom::KingdomHasWarsAttacking;
+        use crate::helper::kingdom_helper::character_ruled_kingdoms;
         let world = self.world();
         let player_e = match player_entity(world) {
             Some(e) => e,
             None => return false,
         };
-        let leads = match world.get::<CharacterLeads>(player_e) {
-            Some(cl) => cl,
-            None => return false,
-        };
-        leads.kingdoms().iter().any(|k| {
+        character_ruled_kingdoms(world, player_e).iter().any(|k| {
             world
                 .get::<KingdomHasWarsAttacking>(*k)
                 .map(|w| !w.wars().is_empty())

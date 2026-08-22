@@ -5,9 +5,13 @@
 use super::common::UIWithKingdom;
 use super::super::FONT_SIZE;
 use crate::app::Game;
+use crate::ecs::building::{BuildingOf, BuildingStatus};
 use crate::ecs::kingdom::{Kingdom, KingdomHold};
 use crate::ecs::land::{Land, LandHasBuildings, LandHeldBy, LandHolding, LandName};
-use crate::ecs::{BuildingOf, BuildingStatus, CharacterLeads, Registry};
+use crate::ecs::{
+    CharacterHasCourtiers, CourtierOfKingdom, CourtierType, Registry,
+};
+use crate::helper::kingdom_helper::character_ruled_kingdoms_q;
 use crate::resources::buildings::BuildingDefs;
 use bevy::color::Srgba;
 use bevy::color::palettes::css;
@@ -155,12 +159,14 @@ pub fn update(
     land_held_by: Query<&LandHeldBy, With<Land>>,
     game: Res<Game>,
     registry: Res<Registry>,
-    character_leads: Query<&CharacterLeads>,
-    defs: Res<BuildingDefs>,
+    character_has_courtiers: Query<&CharacterHasCourtiers>,
+    courtier_types: Query<&CourtierType>,
+    courtier_of_kingdoms: Query<&CourtierOfKingdom>,
+    land_names: Query<&LandName>,
     land_has_buildings: Query<&LandHasBuildings>,
     building_of: Query<&BuildingOf>,
     building_status: Query<&BuildingStatus>,
-    land_names: Query<&LandName>,
+    defs: Res<BuildingDefs>,
     mut labels: Query<(&LandLabel, &mut Text2d)>,
     mut gizmos: Gizmos,
 ) {
@@ -175,8 +181,16 @@ pub fn update(
         .player_character_id
         .as_deref()
         .and_then(|id| registry.get(id))
-        .and_then(|pe| character_leads.get(pe).ok())
-        .map(|cl| cl.kingdoms().iter().copied().collect())
+        .map(|pe| {
+            character_ruled_kingdoms_q(
+                &character_has_courtiers,
+                &courtier_types,
+                &courtier_of_kingdoms,
+                pe,
+            )
+            .into_iter()
+            .collect()
+        })
         .unwrap_or_default();
 
     for (ui_with_kingdom, mut transform) in &mut icons {
@@ -208,7 +222,7 @@ pub fn update(
             .map(|land_held_by| player_kingdoms.contains(&land_held_by.kingdom()))
             .unwrap_or(false);
         if is_own {
-            let (gold, levy) = crate::game::yielding::sum_land_yield(
+            let (gold, levy) = crate::game::yielding::sum_land_yield_q(
                 label.0,
                 &land_has_buildings,
                 &building_of,

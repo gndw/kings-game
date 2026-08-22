@@ -7,8 +7,9 @@
 //! conquered but not yet yours" state. The buildings stay `Inactive`
 //! until the player enforces the [`Take`](crate::ecs::WarDemandType::Take)
 //! demand on the war the conquered land sits in
-//! ([`crate::commands::enforce_demands::EnforceDemands`]), which transfers
-//! [`KingdomLedBy`](crate::ecs::KingdomLedBy) to the player. At that
+//! ([`crate::commands::enforce_demands::EnforceDemands`]), which swaps
+//! the kingdom's Ruler courtier to the player via
+//! [`set_ruler`](crate::helper::kingdom_helper::set_ruler). At that
 //! moment this observer checks whether an enemy army is still controlling
 //! the land; if not, every building flips back to `Active` so the new
 //! owner actually owns a working realm.
@@ -26,9 +27,10 @@
 //! The existing siege tick doesn't fire it either when flipping to
 //! `Inactive`, so staying consistent.
 use crate::ecs::{
-    ArmyBelongsToKingdom, Building, BuildingStatus, KingdomHold, KingdomLedBy,
+    ArmyBelongsToKingdom, Building, BuildingStatus, KingdomHold,
     LandControlledByArmy, LandHasBuildings, WarDemandType,
 };
+use crate::helper::kingdom_helper::kingdom_ruler;
 use crate::observers::OnDemandEnforced;
 use bevy::ecs::entity::Entity;
 use bevy::prelude::*;
@@ -40,70 +42,59 @@ use bevy::prelude::*;
 /// contested and the buildings stay `Inactive`).
 pub fn on_demand_enforced(
     trigger: On<OnDemandEnforced>,
-    kingdom_holds: Query<&KingdomHold>,
-    kingdom_led_by: Query<&KingdomLedBy>,
-    land_controlled_by_army: Query<&LandControlledByArmy>,
-    army_belongs_to_kingdom: Query<&ArmyBelongsToKingdom>,
-    land_has_buildings: Query<&LandHasBuildings>,
-    buildings: Query<&Building>,
-    mut building_statuses: Query<&mut BuildingStatus>,
+    mut commands: Commands,
 ) {
     let event = trigger.event();
-    if !matches!(event.demand_type, WarDemandType::Take) {
-        return;
-    }
+    let demand_type = event.demand_type;
     let target_kingdom = event.target;
-
-    // The new leader of the target kingdom — `enforce_take` just
-    // inserted `KingdomLedBy(actor)` so the player is here. A missing
-    // leader means the kingdom is torn (the Take path also failed),
-    // so the release can't safely identify "us" — bail.
-    let Ok(KingdomLedBy(player_e)) = kingdom_led_by.get(target_kingdom) else {
-        return;
-    };
-    // The target land is the kingdom's held land. `Take`'s gate
-    // already required this to resolve; defensive check.
-    let Ok(KingdomHold(target_land)) = kingdom_holds.get(target_kingdom) else {
-        return;
-    };
-    let target_land = *target_land;
-
-    // Enemy check: if the controlling army (if any) belongs to a
-    // kingdom NOT led by the player, the land is still contested —
-    // skip. The player's other kingdoms count as friendly
-    // (`ArmyBelongsToKingdom` → `KingdomLedBy == player_e`). Missing
-    // controller is treated as "no enemy", which lets the release
-    // through; the building panel will still read `Inactive` until
-    // this observer flips it.
-    let enemy_holds = land_controlled_by_army
-        .get(target_land)
-        .ok()
-        .and_then(|lca| army_belongs_to_kingdom.get(lca.army()).ok())
-        .map(|abtk| {
-            kingdom_led_by
-                .get(abtk.0)
-                .ok()
-                .map(|KingdomLedBy(leader)| leader != player_e)
-                .unwrap_or(true)
-        })
-        .unwrap_or(false);
-    if enemy_holds {
-        return;
-    }
-
-    // Snapshot the building entities, drop the borrow, then flip each
-    // status. Two passes dodge "mut during iter" pain on
-    // `BuildingStatus`.
-    let Ok(land_has_buildings) = land_has_buildings.get(target_land) else {
-        return;
-    };
-    let building_entities: Vec<Entity> = land_has_buildings.iter().collect();
-    for b_e in building_entities {
-        if buildings.get(b_e).is_err() {
-            continue;
+    commands.queue(move |world: &mut World| {
+        if !matches!(demand_type, WarDemandType::Take) {
+            return;
         }
-        if let Ok(mut status) = building_statuses.get_mut(b_e) {
-            *status = BuildingStatus::Active;
+
+        // The new leader of the target kingdom — `enforce_take` swaps the
+        // Ruler courtier via `set_ruler` BEFORE firing `OnDemandEnforced`,
+        // so the new ruler is already in place when this observer runs.
+        let Some(player_e) = kingdom_ruler(world, target_kingdom) else {
+            return;
+        };
+        let Some(KingdomHold(target_land)) = world.get::<KingdomHold>(target_kingdom).copied() else {
+            return;
+        };
+
+        // Enemy check: if the controlling army (if any) belongs to a
+        // kingdom NOT led by the new ruler, the land is still contested —
+        // skip. The new ruler's other kingdoms count as friendly
+        // (`ArmyBelongsToKingdom` → `kingdom_ruler == player_e`).
+        let enemy_holds = world
+            .get::<LandControlledByArmy>(target_land)
+            .and_then(|lca| world.get::<ArmyBelongsToKingdom>(lca.army()))
+            .map(|abtk| abtk.0)
+            .map(|army_kingdom| {
+                kingdom_ruler(world, army_kingdom)
+                    .map(|leader| leader != player_e)
+                    .unwrap_or(true)
+            })
+            .unwrap_or(false);
+        if enemy_holds {
+            return;
         }
-    }
+
+        // Snapshot the building entities, drop the borrow, then flip each
+        // status. Two passes dodge "mut during iter" pain on
+        // `BuildingStatus`.
+        let Some(land_has_buildings) = world.get::<LandHasBuildings>(target_land) else {
+            return;
+        };
+        let building_entities: Vec<Entity> = land_has_buildings.iter().collect();
+        let mut building_statuses = world.query::<&mut BuildingStatus>();
+        for b_e in building_entities {
+            if world.get::<Building>(b_e).is_none() {
+                continue;
+            }
+            if let Ok(mut status) = building_statuses.get_mut(world, b_e) {
+                *status = BuildingStatus::Active;
+            }
+        }
+    });
 }
